@@ -1,0 +1,749 @@
+/* ==============================================================================
+   PROFESSIONAL CASINO SHUFFLE & 3D CARD DEALING ANIMATION
+   ============================================================================== */
+
+.dealing-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: radial-gradient(circle at 50% 35%, rgba(13, 62, 38, 0.95) 0%, rgba(5, 26, 16, 0.98) 70%, rgba(2, 12, 7, 0.99) 100%);
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1rem 1.5rem;
+  overflow: hidden;
+  user-select: none;
+  animation: dealingOverlayFadeIn 0.3s ease-out forwards;
+}
+
+.dealing-fullscreen-overlay.fade-out {
+  animation: dealingOverlayFadeOut 0.4s ease-in forwards;
+}
+
+@keyframes dealingOverlayFadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes dealingOverlayFadeOut {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(1.02); }
+}
+
+/* Skip Button */
+.btn-skip-dealing {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  z-index: 1100;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #fbbf24;
+  padding: 0.45rem 0.9rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  transition: all 0.2s ease;
+}
+
+.btn-skip-dealing:hover {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: #fbbf24;
+  transform: translateY(-1px);
+}
+
+/* Seat Pods (Top, Left, Right) */
+.dealing-seat-pod {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  border-radius: 9999px;
+  padding: 0.4rem 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #f8fafc;
+  backdrop-filter: blur(6px);
+  z-index: 50;
+}
+
+.seat-pod-avatar {
+  font-size: 1.4rem;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+}
+
+.seat-pod-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.seat-pod-name {
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  line-height: 1.1;
+}
+
+.seat-pod-count {
+  font-size: 0.725rem;
+  color: #fbbf24;
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+}
+
+.seat-pod-top {
+  margin-top: 0.5rem;
+}
+
+/* Middle Arena (Left Seat + Center Hub + Right Seat) */
+.dealing-middle-arena {
+  width: 100%;
+  max-width: 1000px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem;
+  position: relative;
+  min-height: 200px;
+}
+
+/* Center Stage */
+.dealing-center-stage {
+  position: relative;
+  width: 220px;
+  height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ==============================================================================
+   PHASE 1: SHUFFLE RIFFLE ANIMATION
+   ============================================================================== */
+.shuffle-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.riffle-packet {
+  position: absolute;
+  width: 64px;
+  height: 92px;
+}
+
+.packet-card {
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+  border: 2px solid #fbbf24;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+}
+
+.riffle-left {
+  animation: packetRiffleLeft 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.riffle-right {
+  animation: packetRiffleRight 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes packetRiffleLeft {
+  0% { transform: translateX(0) rotate(0deg); }
+  25% { transform: translateX(-60px) rotate(-16deg) translateY(-8px); }
+  50% { transform: translateX(-30px) rotate(-8deg) translateY(4px); }
+  75% { transform: translateX(-10px) rotate(-2deg); }
+  100% { transform: translateX(0) rotate(0deg); }
+}
+
+@keyframes packetRiffleRight {
+  0% { transform: translateX(0) rotate(0deg); }
+  25% { transform: translateX(60px) rotate(16deg) translateY(-8px); }
+  50% { transform: translateX(30px) rotate(8deg) translateY(4px); }
+  75% { transform: translateX(10px) rotate(2deg); }
+  100% { transform: translateX(0) rotate(0deg); }
+}
+
+.center-deck-core {
+  position: relative;
+  z-index: 10;
+  width: 72px;
+  height: 102px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #172554, #1e3a8a);
+  border: 2px solid #fbbf24;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(251, 191, 36, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  animation: deckPulseGlow 0.55s ease-in-out infinite alternate;
+}
+
+@keyframes deckPulseGlow {
+  from { transform: scale(0.98); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7), 0 0 15px rgba(251, 191, 36, 0.3); }
+  to { transform: scale(1.04); box-shadow: 0 14px 35px rgba(0, 0, 0, 0.8), 0 0 25px rgba(251, 191, 36, 0.6); }
+}
+
+.shuffle-sparkle-icon {
+  color: #fbbf24;
+  animation: rotateSparkle 3s linear infinite;
+}
+
+@keyframes rotateSparkle {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.deck-thickness-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #fbbf24;
+  letter-spacing: 0.05em;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* ==============================================================================
+   PHASE 2: SEQUENTIAL DEALING HUB & FLYING CARD
+   ============================================================================== */
+.dealing-hub {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hub-deck-stack {
+  position: relative;
+  width: 66px;
+  height: 94px;
+}
+
+.stack-layer {
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #1e1b4b, #312e81);
+  border: 1.5px solid #d97706;
+}
+
+.layer-3 {
+  transform: translate(6px, 6px);
+  background: #0f172a;
+  border-color: #78350f;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.8);
+}
+
+.layer-2 {
+  transform: translate(3px, 3px);
+  background: #1e1b4b;
+}
+
+.layer-1 {
+  transform: translate(0, 0);
+  background: linear-gradient(135deg, #1e1b4b 0%, #3730a3 100%);
+  border: 2px solid #fbbf24;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.hub-card-icon {
+  color: #fbbf24;
+  font-size: 1.5rem;
+  font-weight: 900;
+}
+
+.hub-card-count {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #fde68a;
+  font-family: var(--font-mono, monospace);
+  margin-top: -2px;
+}
+
+/* Fast Flying Card Animation */
+.flying-card-shot {
+  position: absolute;
+  width: 54px;
+  height: 78px;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.flying-card-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #1e1b4b, #3730a3);
+  border: 2px solid #fbbf24;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fbbf24;
+  font-weight: 900;
+  font-size: 1.25rem;
+}
+
+.flight-to-bottom {
+  animation: cardFlightBottom 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+
+.flight-to-left {
+  animation: cardFlightLeft 0.26s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+
+.flight-to-top {
+  animation: cardFlightTop 0.26s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+
+.flight-to-right {
+  animation: cardFlightRight 0.26s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+
+@keyframes cardFlightBottom {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0, 200px) scale(0.9) rotate(4deg);
+    opacity: 0.1;
+  }
+}
+
+@keyframes cardFlightLeft {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-260px, -20px) scale(0.8) rotate(-22deg);
+    opacity: 0.1;
+  }
+}
+
+@keyframes cardFlightTop {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0, -180px) scale(0.8) rotate(0deg);
+    opacity: 0.1;
+  }
+}
+
+@keyframes cardFlightRight {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(260px, -20px) scale(0.8) rotate(22deg);
+    opacity: 0.1;
+  }
+}
+
+/* Status Banner */
+.dealing-status-banner {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  padding: 0.5rem 1.25rem;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.5rem 0;
+  backdrop-filter: blur(8px);
+  z-index: 60;
+}
+
+.status-pulse-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #fbbf24;
+  box-shadow: 0 0 10px #fbbf24;
+  animation: dotPulse 0.6s infinite alternate;
+}
+
+@keyframes dotPulse {
+  from { opacity: 0.3; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1.3); }
+}
+
+.status-text {
+  color: #fbbf24;
+  font-weight: 700;
+  font-size: 0.875rem;
+  letter-spacing: 0.02em;
+}
+
+/* ==============================================================================
+   PHASE 3: BOTTOM PLAYER TRAY & 3D CARD FLIP REVEAL
+   ============================================================================== */
+.dealing-bottom-tray-area {
+  width: 100%;
+  max-width: 980px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  position: relative;
+  z-index: 70;
+}
+
+.bottom-tray-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+}
+
+.tray-player-name {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.tray-card-counter {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fbbf24;
+  font-family: var(--font-mono, monospace);
+}
+
+/* Hand Row with 13 cards overlapping fan */
+.dealing-hand-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  padding: 0.5rem 0;
+  min-height: 110px;
+}
+
+/* Card 3D Perspective Pod */
+.card-flip-pod {
+  perspective: 1200px;
+  width: 68px;
+  height: 98px;
+  margin: 0 -11px; /* Overlap cards cleanly */
+  position: relative;
+  transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.2s ease;
+}
+
+.card-flip-pod.is-hidden {
+  opacity: 0;
+  transform: translateY(35px) scale(0.65);
+  pointer-events: none;
+}
+
+.card-flip-pod.is-delivered {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* Hover slightly up */
+.card-flip-pod.is-revealed:hover {
+  transform: translateY(-8px) scale(1.05);
+  z-index: 99 !important;
+}
+
+/* 3D Inner Card Element */
+.card-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.65);
+  border-radius: 8px;
+}
+
+/* When flipped -> reveals face-up authentic card */
+.card-flip-inner.flipped {
+  transform: rotateY(180deg);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.75), 0 0 15px rgba(251, 191, 36, 0.4);
+}
+
+/* Shared Face Styles */
+.card-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  overflow: hidden;
+}
+
+/* FACE 1: FRONT (Face-Down / Tertutup Casino Back) */
+.card-face-down {
+  transform: rotateY(0deg);
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%);
+  border: 2px solid #fbbf24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.face-down-pattern {
+  position: absolute;
+  inset: 3px;
+  border: 1px dashed rgba(251, 191, 36, 0.6);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.12) 0%, transparent 70%);
+}
+
+.face-down-border {
+  width: 32px;
+  height: 48px;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.face-down-emblem {
+  color: #fbbf24;
+  font-size: 1.3rem;
+  font-weight: 900;
+  filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.6));
+}
+
+/* FACE 2: BACK (Face-Up / Terbuka Authentic Playing Card) */
+.card-face-up {
+  transform: rotateY(180deg);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 2px solid #cbd5e1;
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* Corner Indexes (Rank + Mini Suit) */
+.card-corner-index {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+
+.card-corner-index.top-left {
+  top: 4px;
+  left: 5px;
+}
+
+.card-corner-index.bottom-right {
+  bottom: 4px;
+  right: 5px;
+  transform: rotate(180deg);
+}
+
+.idx-rank {
+  font-size: 0.85rem;
+  font-weight: 900;
+  font-family: var(--font-display, sans-serif);
+}
+
+.idx-suit {
+  font-size: 0.7rem;
+  margin-top: -1px;
+}
+
+/* Center Giant Emblem */
+.card-center-symbol {
+  font-size: 2rem;
+  line-height: 1;
+  font-weight: 900;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.12));
+}
+
+/* Shimmer Light Bar Effect when revealed */
+.card-reveal-shimmer {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.85) 50%, transparent 100%);
+  transform: skewX(-25deg);
+  animation: shimmerSweep 0.6s ease-out 0.2s forwards;
+  pointer-events: none;
+}
+
+@keyframes shimmerSweep {
+  from { left: -100%; }
+  to { left: 200%; }
+}
+
+/* ==============================================================================
+   RESPONSIVE DESIGN (MOBILE & TABLET)
+   ============================================================================== */
+@media (max-width: 768px) {
+  .dealing-fullscreen-overlay {
+    padding: 1rem 0.5rem 1rem;
+  }
+
+  .btn-skip-dealing {
+    top: 12px;
+    right: 12px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  .dealing-middle-arena {
+    min-height: 170px;
+    padding: 0 0.5rem;
+  }
+
+  .dealing-seat-pod {
+    padding: 0.3rem 0.65rem;
+  }
+
+  .seat-pod-avatar {
+    font-size: 1.1rem;
+  }
+
+  .seat-pod-name {
+    font-size: 0.725rem;
+    max-width: 80px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .seat-pod-count {
+    font-size: 0.65rem;
+  }
+
+  .dealing-center-stage {
+    width: 160px;
+    height: 140px;
+  }
+
+  .hub-deck-stack {
+    width: 52px;
+    height: 76px;
+  }
+
+  .hub-card-icon {
+    font-size: 1.25rem;
+  }
+
+  .hub-card-count {
+    font-size: 0.65rem;
+  }
+
+  .flying-card-shot {
+    width: 44px;
+    height: 64px;
+  }
+
+  @keyframes cardFlightBottom {
+    0% { transform: translate(0, 0) scale(1); opacity: 1; }
+    100% { transform: translate(0, 140px) scale(0.85); opacity: 0.1; }
+  }
+
+  @keyframes cardFlightLeft {
+    0% { transform: translate(0, 0) scale(1); opacity: 1; }
+    100% { transform: translate(-130px, -15px) scale(0.75); opacity: 0.1; }
+  }
+
+  @keyframes cardFlightTop {
+    0% { transform: translate(0, 0) scale(1); opacity: 1; }
+    100% { transform: translate(0, -120px) scale(0.75); opacity: 0.1; }
+  }
+
+  @keyframes cardFlightRight {
+    0% { transform: translate(0, 0) scale(1); opacity: 1; }
+    100% { transform: translate(130px, -15px) scale(0.75); opacity: 0.1; }
+  }
+
+  .dealing-status-banner {
+    padding: 0.4rem 0.9rem;
+    font-size: 0.775rem;
+    max-width: 92%;
+    text-align: center;
+  }
+
+  .status-text {
+    font-size: 0.75rem;
+  }
+
+  /* Compact overlapping hand cards on mobile */
+  .dealing-hand-row {
+    min-height: 82px;
+  }
+
+  .card-flip-pod {
+    width: 46px;
+    height: 68px;
+    margin: 0 -11px; /* tight overlap for 13 cards */
+  }
+
+  .idx-rank {
+    font-size: 0.65rem;
+  }
+
+  .idx-suit {
+    font-size: 0.55rem;
+  }
+
+  .card-center-symbol {
+    font-size: 1.35rem;
+  }
+
+  .face-down-emblem {
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 440px) {
+  .card-flip-pod {
+    width: 40px;
+    height: 60px;
+    margin: 0 -11px;
+  }
+
+  .seat-pod-name {
+    max-width: 65px;
+  }
+
+  .card-center-symbol {
+    font-size: 1.15rem;
+  }
+}
