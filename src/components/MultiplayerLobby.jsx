@@ -13,6 +13,7 @@ import {
   Gamepad2,
   Share2,
   Link2,
+  ArrowLeft,
 } from 'lucide-react';
 
 /**
@@ -63,6 +64,7 @@ export default function MultiplayerLobby({
   onCreateRoom,
   onJoinRoom,
   onSwitchToLocal,
+  onBackToMenu,
   isSupabaseConfigured,
   inviteRoomCode = null,
 }) {
@@ -320,11 +322,17 @@ export default function MultiplayerLobby({
             </div>
           </div>
 
-          {/* Switch to Local Mode */}
-          <div className="local-mode-footer">
+          {/* Switch to Local Mode or Back to Menu */}
+          <div className="local-mode-footer" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            {onBackToMenu && (
+              <button className="btn-text-mode" onClick={onBackToMenu}>
+                <ArrowLeft size={16} />
+                <span>Pilihan Mode Permainan</span>
+              </button>
+            )}
             <button className="btn-text-mode" onClick={onSwitchToLocal}>
               <Gamepad2 size={16} />
-              <span>Beralih ke Mode Simulasi Lokal (Pass-and-Play)</span>
+              <span>Main Offline (Lokal)</span>
             </button>
           </div>
         </div>

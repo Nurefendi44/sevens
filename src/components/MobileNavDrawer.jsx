@@ -14,6 +14,7 @@ import {
   Volume2,
   VolumeX,
   Users,
+  Layers,
 } from 'lucide-react';
 
 export default function MobileNavDrawer({
@@ -34,6 +35,7 @@ export default function MobileNavDrawer({
   isHost,
   onLeaveRoom,
   onSwitchMode,
+  onBackToMenu,
 }) {
   if (!isOpen) return null;
 
@@ -124,6 +126,25 @@ export default function MobileNavDrawer({
 
         {/* Navigation Action Buttons List */}
         <div className="mobile-drawer-menu-list">
+          {/* Back to Mode Selection (Home) */}
+          {onBackToMenu && (
+            <button
+              className="mobile-menu-item"
+              onClick={() => {
+                onBackToMenu();
+                onClose();
+              }}
+            >
+              <div className="menu-item-icon">
+                <Layers size={18} />
+              </div>
+              <div className="menu-item-text">
+                <span>Pilihan Mode (Online / Offline)</span>
+                <small>Kembali ke halaman pemilihan mode</small>
+              </div>
+            </button>
+          )}
+
           {/* Switch Mode Button */}
           <button
             className="mobile-menu-item"

@@ -31,6 +31,7 @@ import AceClosureChoiceModal from './components/AceClosureChoiceModal.jsx';
 import MultiplayerLobby from './components/MultiplayerLobby.jsx';
 import MobileNavDrawer from './components/MobileNavDrawer.jsx';
 import ShuffleDealingAnimation from './components/ShuffleDealingAnimation.jsx';
+import ModeSelectionScreen from './components/ModeSelectionScreen.jsx';
 
 import './styles/multiplayer.css';
 
@@ -50,6 +51,7 @@ import {
   Share2,
   Menu,
   X,
+  Layers,
 } from 'lucide-react';
 
 export default function App() {
@@ -65,14 +67,14 @@ export default function App() {
     return null;
   });
 
-  // Mode: 'local' (Simulasi 4 Pemain 1 Browser) atau 'multiplayer' (Online via Supabase)
+  // Mode: null (Landing Screen 2 Kartu) | 'local' (Offline) | 'multiplayer' (Online)
   const [gameMode, setGameMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       if (params.get('room')) return 'multiplayer';
     }
     const session = getActiveSession();
-    return session.roomCode ? 'multiplayer' : 'local';
+    return session.roomCode ? 'multiplayer' : null;
   });
 
   // Multiplayer Room & Identity State
@@ -452,6 +454,61 @@ export default function App() {
   const currentTurnPlayer = gameState.players.find((p) => p.id === gameState.currentPlayer);
   const currentTurnPlayerName = currentTurnPlayer?.name || 'Pemain Lain';
 
+  // Return to Mode Selection Screen (Home)
+  const handleBackToModeSelect = () => {
+    if (isMultiplayerMode && currentRoom) {
+      if (confirm('Keluar dari room online dan kembali ke menu pemilihan mode?')) {
+        handleLeaveRoom();
+        setGameMode(null);
+      }
+    } else {
+      setGameMode(null);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // RENDER: LANDING SCREEN (When gameMode is null / 2 Cards Mode Selection)
+  // ---------------------------------------------------------------------------
+  if (!gameMode) {
+    return (
+      <div className="app-container">
+        {toastMessage && (
+          <div
+            style={{
+              position: 'fixed',
+              top: '70px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(15, 23, 42, 0.95)',
+              color: '#38bdf8',
+              border: '1px solid rgba(56, 189, 248, 0.4)',
+              padding: '0.6rem 1.25rem',
+              borderRadius: '10px',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              zIndex: 9999,
+              boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <span>✨</span>
+            <span>{toastMessage}</span>
+          </div>
+        )}
+
+        <ModeSelectionScreen
+          onSelectMode={(mode) => setGameMode(mode)}
+          onOpenRules={() => setShowRulesModal(true)}
+        />
+
+        {/* Rules Guide Modal */}
+        {showRulesModal && <RulesGuideModal onClose={() => setShowRulesModal(false)} />}
+      </div>
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // RENDER: MULTIPLAYER LOBBY (When in multiplayer and no room or in lobby)
   // ---------------------------------------------------------------------------
@@ -584,6 +641,16 @@ export default function App() {
 
         {/* DESKTOP NAV ACTIONS (> 768px) */}
         <div className="nav-actions nav-actions-desktop">
+          {/* Back to Mode Selection (Home) */}
+          <button
+            className="btn-header"
+            onClick={handleBackToModeSelect}
+            title="Kembali ke Pilihan Mode Permainan (Online / Offline)"
+          >
+            <Layers size={15} />
+            <span>Pilihan Mode</span>
+          </button>
+
           {/* Mode Switcher Button */}
           {isMultiplayerMode ? (
             <button
@@ -799,6 +866,7 @@ export default function App() {
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
           onSwitchToLocal={() => setGameMode('local')}
+          onBackToMenu={handleBackToModeSelect}
           isSupabaseConfigured={isSupabaseConfigured}
           inviteRoomCode={inviteRoomCode}
         />
@@ -822,6 +890,7 @@ export default function App() {
         onRestart={() => handleRestart()}
         isHost={isHost}
         onLeaveRoom={handleLeaveRoom}
+        onBackToMenu={handleBackToModeSelect}
         onSwitchMode={() => {
           if (isMultiplayerMode) {
             if (currentRoom) {
