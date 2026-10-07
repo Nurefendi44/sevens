@@ -15,6 +15,44 @@ import {
   Link2,
 } from 'lucide-react';
 
+/**
+ * Intelligent parser to extract pure 6-character room code from:
+ * - Direct codes (e.g., "3C5RZP")
+ * - Full invite URLs (e.g., "https://domain.com/?room=3C5RZP")
+ * - Shared chat messages (e.g., "3C5RZP Ayo gabung main kartu Sevens di Room 3C5RZP!...")
+ */
+export function extractCleanRoomCode(rawText) {
+  if (!rawText || typeof rawText !== 'string') return '';
+  const text = rawText.trim();
+
+  // 1. Check if URL contains query param ?room=CODE or &room=CODE
+  const roomParamMatch = text.match(/[?&]room=([A-Za-z0-9]{4,8})/i);
+  if (roomParamMatch) {
+    return roomParamMatch[1].toUpperCase();
+  }
+
+  // 2. Check for explicit "Room CODE" or "Kode CODE" pattern
+  const roomWordMatch = text.match(/(?:room|kode)\s*[:#-]?\s*([A-Za-z0-9]{4,8})/i);
+  if (roomWordMatch) {
+    return roomWordMatch[1].toUpperCase();
+  }
+
+  // 3. If starts with 6-character alphanumeric code followed by space/text
+  const startCodeMatch = text.match(/^([A-Za-z0-9]{6})\b/i);
+  if (startCodeMatch) {
+    return startCodeMatch[1].toUpperCase();
+  }
+
+  // 4. Any standalone 6-character alphanumeric word in text
+  const standaloneMatch = text.match(/\b([A-Za-z0-9]{6})\b/i);
+  if (standaloneMatch) {
+    return standaloneMatch[1].toUpperCase();
+  }
+
+  // 5. Direct typing / clean alphanumeric characters (max 6 chars)
+  return text.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase();
+}
+
 export default function MultiplayerLobby({
   room,
   myPlayerId,
@@ -31,18 +69,18 @@ export default function MultiplayerLobby({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
-  const [roomCodeInput, setRoomCodeInput] = useState(inviteRoomCode || '');
+  const [roomCodeInput, setRoomCodeInput] = useState(() => extractCleanRoomCode(inviteRoomCode || ''));
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   // Sync inviteRoomCode if changed
   useEffect(() => {
     if (inviteRoomCode) {
-      setRoomCodeInput(inviteRoomCode);
+      setRoomCodeInput(extractCleanRoomCode(inviteRoomCode));
     }
   }, [inviteRoomCode]);
 
-  // Generate invite share link
+  // Generate invite share link (Clean URL)
   const getInviteUrl = () => {
     const origin = window.location.origin;
     const pathname = window.location.pathname;
@@ -70,8 +108,7 @@ export default function MultiplayerLobby({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'Ayo main Sevens (Tujuh Sekop)!',
-          text: `Ayo gabung main kartu Sevens di Room ${room.code}! Klik link ini untuk langsung bergabung:`,
+          title: `Room Sevens: ${room.code}`,
           url: shareUrl,
         });
         return;
@@ -124,13 +161,14 @@ export default function MultiplayerLobby({
       setErrorMsg('Silakan masukkan nama pemain terlebih dahulu!');
       return;
     }
-    if (!roomCodeInput.trim()) {
+    const cleanCode = extractCleanRoomCode(roomCodeInput);
+    if (!cleanCode) {
       setErrorMsg('Silakan masukkan kode room (6 karakter)!');
       return;
     }
     setErrorMsg('');
     setIsLoading(true);
-    const res = await onJoinRoom(roomCodeInput.trim(), usernameInput.trim());
+    const res = await onJoinRoom(cleanCode, usernameInput.trim());
     setIsLoading(false);
     if (!res.success) {
       if (
@@ -237,9 +275,21 @@ export default function MultiplayerLobby({
                 <input
                   type="text"
                   placeholder="KODE ROOM"
-                  maxLength={10}
+                  maxLength={6}
                   value={roomCodeInput}
-                  onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const pasted = e.clipboardData.getData('text');
+                    setRoomCodeInput(extractCleanRoomCode(pasted));
+                  }}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val.length > 6 || /[\s?&=:#-]/.test(val)) {
+                      setRoomCodeInput(extractCleanRoomCode(val));
+                    } else {
+                      setRoomCodeInput(val.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase());
+                    }
+                  }}
                   onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
                   className="text-input code-input"
                 />

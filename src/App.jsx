@@ -209,8 +209,7 @@ export default function App() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'Ayo main Sevens (Tujuh Sekop)!',
-          text: `Ayo gabung main kartu Sevens di Room ${currentRoom.code}! Klik link ini:`,
+          title: `Room Sevens: ${currentRoom.code}`,
           url,
         });
         return;

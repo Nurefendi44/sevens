@@ -118,7 +118,10 @@ export const multiplayerAdapter = {
    */
   async getRoom(roomCode) {
     if (!supabase) return { error: 'Supabase belum terkonfigurasi.' };
-    const code = roomCode.trim().toUpperCase();
+    const match = (roomCode || '').match(/[?&]room=([A-Za-z0-9]{4,8})/i) ||
+                  (roomCode || '').match(/(?:room|kode)\s*[:#-]?\s*([A-Za-z0-9]{4,8})/i) ||
+                  (roomCode || '').match(/\b([A-Za-z0-9]{6})\b/i);
+    const code = match ? match[1].toUpperCase() : (roomCode || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase();
     const { data, error } = await supabase
       .from('rooms')
       .select('*')
@@ -179,7 +182,10 @@ export const multiplayerAdapter = {
       return { success: false, error: 'Supabase belum terkonfigurasi pada .env file.' };
     }
 
-    const code = roomCode.trim().toUpperCase();
+    const match = (roomCode || '').match(/[?&]room=([A-Za-z0-9]{4,8})/i) ||
+                  (roomCode || '').match(/(?:room|kode)\s*[:#-]?\s*([A-Za-z0-9]{4,8})/i) ||
+                  (roomCode || '').match(/\b([A-Za-z0-9]{6})\b/i);
+    const code = match ? match[1].toUpperCase() : (roomCode || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase();
     const name = playerName.trim() || 'Pemain';
     const playerId = getLocalPlayerId();
 
