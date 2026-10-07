@@ -19,12 +19,22 @@ export default function RulesGuideModal({ onClose }) {
           {/* Deck & Players */}
           <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '10px 14px', borderRadius: '8px' }}>
             <h4 style={{ color: '#fbbf24', fontWeight: 700, marginBottom: '4px' }}>
-              Deck & Pembagian Kartu
+              Deck & Pembagian Kartu (4, 5, atau 6 Pemain)
             </h4>
-            <p>
-              Menggunakan deck standar 52 kartu (♠ Sekop, ♥ Hati, ♦ Wajik, ♣ Keriting).
-              Dimainkan oleh 4 pemain lokal, masing-masing mendapatkan tepat 13 kartu.
+            <p style={{ margin: 0 }}>
+              Menggunakan deck standar 52 kartu (♠ Sekop, ♥ Hati, ♦ Wajik, ♣ Keriting) dengan variasi jumlah pemain:
             </p>
+            <ul style={{ paddingLeft: '1.25rem', margin: '6px 0 0 0', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <li>
+                <strong>4 Pemain:</strong> Semua 52 kartu dibagikan merata (13 kartu/orang). Meja mulai dari kosong, dan pemegang <strong>7 Sekop (7♠)</strong> wajib memulai.
+              </li>
+              <li>
+                <strong>5 Pemain:</strong> Kartu <strong>7 Sekop (7♠)</strong> dan <strong>7 Hati (7♥)</strong> otomatis tertata di meja oleh sistem. Sisa 50 kartu dibagikan merata (<strong>10 kartu per orang</strong>).
+              </li>
+              <li>
+                <strong>6 Pemain:</strong> <strong>Semua 4 kartu angka 7</strong> (7♠, 7♥, 7♦, 7♣) otomatis tertata di meja oleh sistem. Sisa 48 kartu dibagikan merata (<strong>8 kartu per orang</strong>).
+              </li>
+            </ul>
           </div>
 
           {/* Rule 1 */}

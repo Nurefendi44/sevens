@@ -68,6 +68,7 @@ export default function MultiplayerLobby({
   isSupabaseConfigured,
   inviteRoomCode = null,
 }) {
+  const [selectedPlayerCount, setSelectedPlayerCount] = useState(4);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
@@ -138,7 +139,7 @@ export default function MultiplayerLobby({
     }
     setErrorMsg('');
     setIsLoading(true);
-    const res = await onCreateRoom(usernameInput.trim());
+    const res = await onCreateRoom(usernameInput.trim(), selectedPlayerCount);
     setIsLoading(false);
     if (!res.success) {
       if (
@@ -201,7 +202,7 @@ export default function MultiplayerLobby({
               <Users size={32} />
             </div>
             <h2>SEVENS ONLINE MULTIPLAYER</h2>
-            <p>Mainkan kartu Tujuh Sekop bersama teman secara realtime (4 Pemain)</p>
+            <p>Mainkan kartu Tujuh Sekop bersama teman secara realtime (4, 5, atau 6 Pemain)</p>
           </div>
 
           {!isSupabaseConfigured && (
@@ -311,13 +312,34 @@ export default function MultiplayerLobby({
                 <Sparkles size={22} />
               </div>
               <h3>Buat Room Baru</h3>
-              <p>Mulai room baru sebagai Host dan bagikan Kode atau Link.</p>
+              <p>Mulai room baru sebagai Host dan tentukan kapasitas pemain:</p>
+
+              {/* Player Count Picker */}
+              <div className="lobby-count-picker">
+                <span className="picker-title">Kapasitas Pemain:</span>
+                <div className="lobby-count-options">
+                  {[4, 5, 6].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      className={`btn-lobby-count ${selectedPlayerCount === num ? 'active' : ''}`}
+                      onClick={() => setSelectedPlayerCount(num)}
+                    >
+                      <span style={{ fontWeight: 800 }}>{num} Orang</span>
+                      <small>
+                        {num === 4 ? '13 kartu/orang' : num === 5 ? '10 kartu • ♠7,♥7 meja' : '8 kartu • semua 7 meja'}
+                      </small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <button
                 className="btn-secondary btn-block"
                 onClick={handleCreate}
                 disabled={isLoading}
               >
-                {isLoading ? 'Membuat...' : 'Buat Room (Host)'}
+                {isLoading ? 'Membuat...' : `Buat Room ${selectedPlayerCount} Pemain (Host)`}
               </button>
             </div>
           </div>
@@ -346,10 +368,11 @@ export default function MultiplayerLobby({
   const players = room.players || [];
   const myPlayer = players.find((p) => p.id === myPlayerId) || {};
   const isReady = Boolean(myPlayer.isReady);
-  const canStart = players.length === 4;
+  const targetPlayerCount = room.game_state?.config?.playerCount || 4;
+  const canStart = players.length === targetPlayerCount;
 
-  // Fill up to 4 slots
-  const slots = [0, 1, 2, 3].map((idx) => players[idx] || null);
+  // Fill up to targetPlayerCount slots (4, 5, or 6)
+  const slots = Array.from({ length: targetPlayerCount }).map((_, idx) => players[idx] || null);
 
   return (
     <div className="multiplayer-screen-overlay">
@@ -408,7 +431,7 @@ export default function MultiplayerLobby({
         </div>
 
         <p className="lobby-helper-text">
-          Ajak teman bergabung dengan <strong>Kode Room: {room.code}</strong> atau klik tombol <strong>Bagikan Link</strong> di atas. Permainan siap dimulai jika 4 pemain telah berkumpul.
+          Ajak teman bergabung dengan <strong>Kode Room: {room.code}</strong> atau klik tombol <strong>Bagikan Link</strong> di atas. Mode <strong>{targetPlayerCount} Pemain</strong> ({targetPlayerCount === 4 ? '13 kartu/orang' : targetPlayerCount === 5 ? '10 kartu/orang • ♠7 & ♥7 otomatis di meja' : '8 kartu/orang • Semua 7 otomatis di meja'}). Permainan siap dimulai jika {targetPlayerCount} pemain telah berkumpul.
         </p>
 
         {errorMsg && (
@@ -418,7 +441,7 @@ export default function MultiplayerLobby({
           </div>
         )}
 
-        {/* 4 Player Slots */}
+        {/* Player Slots Grid */}
         <div className="lobby-players-grid">
           {slots.map((slotPlayer, idx) => {
             if (slotPlayer) {
@@ -492,7 +515,7 @@ export default function MultiplayerLobby({
                 <span>
                   {canStart
                     ? 'Mulai Permainan (Start Game)'
-                    : `Menunggu ${4 - players.length} Pemain Lagi (${players.length}/4)`}
+                    : `Menunggu ${targetPlayerCount - players.length} Pemain Lagi (${players.length}/${targetPlayerCount})`}
                 </span>
               </button>
             )}

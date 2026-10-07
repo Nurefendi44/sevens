@@ -6,6 +6,12 @@
 import { SUITS } from './constants.js';
 
 export const DEFAULT_CONFIG = {
+  // Jumlah Pemain: 4, 5, atau 6
+  // - 4 pemain: 13 kartu per pemain, meja mulai kosong
+  // - 5 pemain: 10 kartu per pemain, ♠7 & ♥7 otomatis tertata di meja
+  // - 6 pemain: 8 kartu per pemain, semua kartu 7 otomatis tertata di meja
+  playerCount: 4,
+
   // RULE 1: Starter card requirement
   starterCard: {
     suit: SUITS.SPADES,

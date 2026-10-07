@@ -15,6 +15,10 @@ import {
   VolumeX,
   Users,
   Layers,
+  Eye,
+  EyeOff,
+  Columns3,
+  Rows3,
 } from 'lucide-react';
 
 export default function MobileNavDrawer({
@@ -26,6 +30,10 @@ export default function MobileNavDrawer({
   onShareRoomLink,
   copiedRoomCode,
   gameState,
+  showOpponents,
+  onToggleShowOpponents,
+  boardLayout,
+  onToggleBoardLayout,
   onOpenRules,
   onOpenConfig,
   onOpenHistory,
@@ -110,6 +118,11 @@ export default function MobileNavDrawer({
           </div>
 
           <div className="drawer-status-row">
+            <span className="drawer-label">Jumlah Pemain:</span>
+            <span className="drawer-value">{gameState.players?.length || 4} Orang</span>
+          </div>
+
+          <div className="drawer-status-row">
             <span className="drawer-label">Babak Turn:</span>
             <span className="drawer-value">Turn #{gameState.turnNumber}</span>
           </div>
@@ -126,6 +139,42 @@ export default function MobileNavDrawer({
 
         {/* Navigation Action Buttons List */}
         <div className="mobile-drawer-menu-list">
+          {/* Toggle Show / Hide Opponents (Focus Mode) */}
+          {onToggleShowOpponents && (
+            <button
+              className="mobile-menu-item"
+              onClick={() => {
+                onToggleShowOpponents();
+              }}
+            >
+              <div className="menu-item-icon">
+                {showOpponents ? <EyeOff size={18} /> : <Eye size={18} />}
+              </div>
+              <div className="menu-item-text">
+                <span>{showOpponents ? 'Fokus Meja (Sembunyikan Kursi)' : 'Tampilkan Kursi Pemain'}</span>
+                <small>{showOpponents ? 'Sembunyikan kursi pemain lain agar meja luas' : 'Tampilkan kembali kotak kursi pemain'}</small>
+              </div>
+            </button>
+          )}
+
+          {/* Toggle Board Layout (Horizontal vs Vertical) */}
+          {onToggleBoardLayout && (
+            <button
+              className="mobile-menu-item"
+              onClick={() => {
+                onToggleBoardLayout(boardLayout === 'horizontal' ? 'vertical' : 'horizontal');
+              }}
+            >
+              <div className="menu-item-icon">
+                {boardLayout === 'horizontal' ? <Columns3 size={18} /> : <Rows3 size={18} />}
+              </div>
+              <div className="menu-item-text">
+                <span>Susunan Meja: {boardLayout === 'horizontal' ? 'Baris (↔)' : 'Kolom (↕)'}</span>
+                <small>{boardLayout === 'horizontal' ? 'Klik untuk ubah ke Kolom Vertikal' : 'Klik untuk ubah ke Baris Horizontal'}</small>
+              </div>
+            </button>
+          )}
+
           {/* Back to Mode Selection (Home) */}
           {onBackToMenu && (
             <button

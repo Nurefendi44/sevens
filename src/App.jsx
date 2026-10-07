@@ -52,11 +52,37 @@ import {
   Menu,
   X,
   Layers,
+  Eye,
+  EyeOff,
+  Columns3,
+  Rows3,
 } from 'lucide-react';
 
 export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDealingAnimationActive, setIsDealingAnimationActive] = useState(false);
+
+  // Table View & Mobile Focus Settings (Persistent)
+  const [showOpponents, setShowOpponents] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('sevens_show_opponents');
+      if (saved !== null) return saved === 'true';
+    }
+    // Default to false on mobile (clean table focus), true on desktop
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      return false;
+    }
+    return true;
+  });
+
+  const [boardLayout, setBoardLayout] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('sevens_board_layout');
+      if (saved === 'vertical' || saved === 'horizontal') return saved;
+    }
+    return 'horizontal';
+  });
+
   // Extract invite room code from URL query (?room=XYZ)
   const [inviteRoomCode, setInviteRoomCode] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -230,16 +256,19 @@ export default function App() {
   // ---------------------------------------------------------------------------
   // MULTIPLAYER HANDLERS
   // ---------------------------------------------------------------------------
-  const handleCreateRoom = async (username) => {
-    const res = await multiplayerAdapter.createRoom(username);
+  const handleCreateRoom = async (username, maxPlayers = 4) => {
+    const res = await multiplayerAdapter.createRoom(username, maxPlayers);
     if (res.success) {
       setCurrentRoom(res.room);
       setMyPlayerId(res.player.id);
+      if (res.room.game_state) {
+        setGameState(res.room.game_state);
+      }
       if (typeof window !== 'undefined' && window.history) {
         window.history.replaceState({}, document.title, window.location.pathname);
       }
       setInviteRoomCode(null);
-      showToast(`Room ${res.room.code} berhasil dibuat!`);
+      showToast(`Room ${res.room.code} (${res.room.game_state?.config?.playerCount || maxPlayers} Pemain) berhasil dibuat!`);
     }
     return res;
   };
@@ -308,8 +337,9 @@ export default function App() {
         showToast('Permainan baru dimulai!');
       }
     } else {
-      // Local Mode
-      const nextState = resetGame(nextCfg);
+      // Local Mode: preserve selected player count
+      const count = gameState.players?.length || nextCfg.playerCount || 4;
+      const nextState = resetGame({ ...nextCfg, playerCount: count });
       setGameState(nextState);
       setSelectedCard(null);
       setActiveFault(null);
@@ -352,15 +382,29 @@ export default function App() {
 
   // Seating around the poker table
   // In multiplayer: relative rotation so user is ALWAYS at the bottom!
-  // In local mode: standard bottom, left, top, right
+  // In local mode: relative rotation to whoever's turn it is (pass-and-play perspective)
   const seats = isMultiplayerMode
     ? getRelativeSeats(gameState.players, myPlayerId)
-    : {
-        bottom: gameState.players[0] || null,
-        left: gameState.players[1] || null,
-        top: gameState.players[2] || null,
-        right: gameState.players[3] || null,
-      };
+    : getRelativeSeats(gameState.players, trayPlayer?.id);
+
+  const opponentPlayers = gameState.players.filter((p) => p.id !== trayPlayer?.id);
+
+  const handleToggleShowOpponents = () => {
+    setShowOpponents((prev) => {
+      const next = !prev;
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('sevens_show_opponents', String(next));
+      }
+      return next;
+    });
+  };
+
+  const handleToggleBoardLayout = (newLayout) => {
+    setBoardLayout(newLayout);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('sevens_board_layout', newLayout);
+    }
+  };
 
   // ---------------------------------------------------------------------------
   // GAMEPLAY ACTIONS (PLAY CARD & CLOSE CARD)
@@ -499,7 +543,17 @@ export default function App() {
         )}
 
         <ModeSelectionScreen
-          onSelectMode={(mode) => setGameMode(mode)}
+          onSelectMode={(mode, playerCount) => {
+            if (mode === 'local') {
+              const count = playerCount || 4;
+              const nextCfg = { ...gameConfig, playerCount: count };
+              setGameConfig(nextCfg);
+              setGameState(initGame(nextCfg));
+              setGameMode('local');
+            } else {
+              setGameMode(mode);
+            }
+          }}
           onOpenRules={() => setShowRulesModal(true)}
         />
 
@@ -552,7 +606,7 @@ export default function App() {
             <span>SEVENS</span>
           </div>
 
-          <span className="brand-tag desktop-only">Tujuh Sekop • 4 Pemain</span>
+          <span className="brand-tag desktop-only">Tujuh Sekop • {gameState.players?.length || 4} Pemain</span>
 
           {/* Mode Indicator / Badge */}
           {isMultiplayerMode ? (
@@ -788,32 +842,124 @@ export default function App() {
               seats={seats}
             />
 
-            {/* 4 Seats & Board Layout */}
-            <div className="table-seats-container">
-              {/* TOP: Opposite player */}
-              {seats.top && (
-                <div className="seat-top-wrapper">
-                  <PlayerSeat
-                    player={seats.top}
-                    isTurn={gameState.currentPlayer === seats.top.id}
-                    cardCount={gameState.hands[seats.top.id]?.length || 0}
-                    closedCount={gameState.closedCards[seats.top.id]?.length || 0}
-                    faultCount={gameState.faults[seats.top.id]?.length || 0}
-                  />
-                </div>
-              )}
+            {/* Table View Toolbar: Focus Toggle & Layout Switcher */}
+            <div className="table-view-toolbar">
+              <button
+                type="button"
+                className={`btn-table-control ${!showOpponents ? 'btn-active-focus' : ''}`}
+                onClick={handleToggleShowOpponents}
+                title={
+                  showOpponents
+                    ? 'Sembunyikan kursi pemain lain agar meja lebih luas dan fokus pada kartu'
+                    : 'Tampilkan kembali kursi pemain lain'
+                }
+              >
+                {showOpponents ? <EyeOff size={13} /> : <Eye size={13} />}
+                <span>{showOpponents ? 'Fokus Meja (Sembunyikan Kursi)' : 'Tampilkan Kursi'}</span>
+              </button>
 
-              {/* LEFT: Next clockwise player */}
-              {seats.left && (
-                <div className="seat-left-wrapper">
-                  <PlayerSeat
-                    player={seats.left}
-                    isTurn={gameState.currentPlayer === seats.left.id}
-                    cardCount={gameState.hands[seats.left.id]?.length || 0}
-                    closedCount={gameState.closedCards[seats.left.id]?.length || 0}
-                    faultCount={gameState.faults[seats.left.id]?.length || 0}
-                  />
-                </div>
+              <div className="board-layout-switcher">
+                <button
+                  type="button"
+                  className={`btn-layout-chip ${boardLayout === 'horizontal' ? 'active' : ''}`}
+                  onClick={() => handleToggleBoardLayout('horizontal')}
+                  title="Susunan kartu horizontal (4 baris suit)"
+                >
+                  <Rows3 size={12} />
+                  <span>Horizontal</span>
+                </button>
+                <button
+                  type="button"
+                  className={`btn-layout-chip ${boardLayout === 'vertical' ? 'active' : ''}`}
+                  onClick={() => handleToggleBoardLayout('vertical')}
+                  title="Susunan kartu vertikal (4 kolom suit, scroll horizontal)"
+                >
+                  <Columns3 size={12} />
+                  <span>Vertikal</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Mini Opponents Strip (Visible when opponent seats are hidden) */}
+            {!showOpponents && opponentPlayers.length > 0 && (
+              <div className="mini-opponents-strip">
+                {opponentPlayers.map((p) => {
+                  const isTurn = gameState.currentPlayer === p.id;
+                  const cardCount = gameState.hands[p.id]?.length || 0;
+                  const closedCount = gameState.closedCards[p.id]?.length || 0;
+                  const faultCount = gameState.faults[p.id]?.length || 0;
+
+                  return (
+                    <div
+                      key={p.id}
+                      className={`mini-player-chip ${isTurn ? 'chip-active-turn' : ''}`}
+                      title={`${p.name} • ${cardCount} kartu • ${closedCount} tutup • ${faultCount} fault`}
+                    >
+                      <span className="chip-avatar">{p.avatar}</span>
+                      <span className="chip-name">{p.name}</span>
+                      <span className="chip-stat" title="Jumlah sisa kartu">
+                        {cardCount} 🂠
+                      </span>
+                      {closedCount > 0 && (
+                        <span className="chip-stat chip-closed" title="Kartu ditutup">
+                          {closedCount} 🔒
+                        </span>
+                      )}
+                      {faultCount > 0 && (
+                        <span className="chip-stat chip-fault" title="Fault">
+                          {faultCount} ⚠️
+                        </span>
+                      )}
+                      {isTurn && <span className="chip-turn-dot" />}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Table Seats & Board Layout (Supports 4, 5, or 6 players) */}
+            <div className={`table-seats-container ${!showOpponents ? 'focus-mode' : ''}`}>
+              {showOpponents && (
+                <>
+                  {/* TOP: Opposite player(s) - 1, 2, or 3 players */}
+                  {seats.topPlayers && seats.topPlayers.length > 0 ? (
+                    <div className="seat-top-wrapper">
+                      {seats.topPlayers.map((p) => (
+                        <PlayerSeat
+                          key={p.id}
+                          player={p}
+                          isTurn={gameState.currentPlayer === p.id}
+                          cardCount={gameState.hands[p.id]?.length || 0}
+                          closedCount={gameState.closedCards[p.id]?.length || 0}
+                          faultCount={gameState.faults[p.id]?.length || 0}
+                        />
+                      ))}
+                    </div>
+                  ) : seats.top ? (
+                    <div className="seat-top-wrapper">
+                      <PlayerSeat
+                        player={seats.top}
+                        isTurn={gameState.currentPlayer === seats.top.id}
+                        cardCount={gameState.hands[seats.top.id]?.length || 0}
+                        closedCount={gameState.closedCards[seats.top.id]?.length || 0}
+                        faultCount={gameState.faults[seats.top.id]?.length || 0}
+                      />
+                    </div>
+                  ) : null}
+
+                  {/* LEFT: Next clockwise player */}
+                  {seats.left && (
+                    <div className="seat-left-wrapper">
+                      <PlayerSeat
+                        player={seats.left}
+                        isTurn={gameState.currentPlayer === seats.left.id}
+                        cardCount={gameState.hands[seats.left.id]?.length || 0}
+                        closedCount={gameState.closedCards[seats.left.id]?.length || 0}
+                        faultCount={gameState.faults[seats.left.id]?.length || 0}
+                      />
+                    </div>
+                  )}
+                </>
               )}
 
               {/* CENTER: 4-Suit Board Tableau */}
@@ -821,11 +967,12 @@ export default function App() {
                 <Board
                   board={gameState.board}
                   globalAceDirection={gameState.globalAceDirection}
+                  layout={boardLayout}
                 />
               </div>
 
               {/* RIGHT: Previous player */}
-              {seats.right && (
+              {showOpponents && seats.right && (
                 <div className="seat-right-wrapper">
                   <PlayerSeat
                     player={seats.right}
@@ -882,6 +1029,10 @@ export default function App() {
         onShareRoomLink={handleShareTopBarLink}
         copiedRoomCode={copiedRoomCode}
         gameState={gameState}
+        showOpponents={showOpponents}
+        onToggleShowOpponents={handleToggleShowOpponents}
+        boardLayout={boardLayout}
+        onToggleBoardLayout={handleToggleBoardLayout}
         onOpenRules={() => setShowRulesModal(true)}
         onOpenConfig={() => setShowConfigModal(true)}
         onOpenHistory={() => setShowHistoryModal(true)}

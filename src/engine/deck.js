@@ -156,8 +156,8 @@ export function shuffleDeck(deck) {
  * @returns {Object} { [playerId]: Card[] }
  */
 export function dealCards(deck, playerIds = ['player_1', 'player_2', 'player_3', 'player_4']) {
-  if (deck.length !== 52) {
-    throw new Error(`Deck must contain 52 cards to deal, found ${deck.length}`);
+  if (deck.length % playerIds.length !== 0) {
+    throw new Error(`Deck containing ${deck.length} cards cannot be dealt evenly to ${playerIds.length} players`);
   }
 
   const hands = {};

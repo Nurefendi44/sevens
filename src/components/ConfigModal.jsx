@@ -55,6 +55,30 @@ export default function ConfigModal({ currentConfig, onSaveConfig, onClose }) {
 
           {/* Form Controls */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {/* Player Count Selection */}
+            <div>
+              <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f8fafc', display: 'block', marginBottom: '4px' }}>
+                Jumlah Pemain (Player Count)
+              </label>
+              <select
+                value={config.playerCount || 4}
+                onChange={(e) => handleChange('playerCount', parseInt(e.target.value, 10))}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  background: 'rgba(0,0,0,0.4)',
+                  border: '1px solid var(--border-subtle)',
+                  color: '#fbbf24',
+                  fontWeight: 700,
+                }}
+              >
+                <option value={4}>4 Pemain (13 kartu/orang, meja mulai kosong)</option>
+                <option value={5}>5 Pemain (10 kartu/orang, ♠7 & ♥7 otomatis di meja)</option>
+                <option value={6}>6 Pemain (8 kartu/orang, semua kartu 7 otomatis di meja)</option>
+              </select>
+            </div>
+
             {/* Penalty 6 & 8 values */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.85rem' }}>
               <div>

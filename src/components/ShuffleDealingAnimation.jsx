@@ -31,10 +31,19 @@ export default function ShuffleDealingAnimation({
   const dealIntervalRef = useRef(null);
   const revealIntervalRef = useRef(null);
 
-  // 13 Hand cards to display for user
+  // Dynamic hand size based on active game (8 for 6p, 10 for 5p, 13 for 4p)
+  const cardsPerHand = playerHand && playerHand.length > 0
+    ? playerHand.length
+    : (seats.topPlayers?.length === 3 ? 8 : seats.topPlayers?.length === 2 ? 10 : 13);
+  const playerCount = seats.topPlayers && seats.topPlayers.length > 0
+    ? seats.topPlayers.length + 3
+    : 4;
+  const totalCards = cardsPerHand * playerCount;
+
+  // Hand cards to display for user
   const displayHand = playerHand && playerHand.length > 0
-    ? playerHand.slice(0, 13)
-    : Array.from({ length: 13 }, (_, i) => ({
+    ? playerHand
+    : Array.from({ length: cardsPerHand }, (_, i) => ({
         id: `mock-${i}`,
         rank: ((i % 13) + 1),
         suit: ['spades', 'hearts', 'diamonds', 'clubs'][i % 4],
@@ -83,49 +92,51 @@ export default function ShuffleDealingAnimation({
     timerRef.current = setTimeout(() => {
       // =======================================================================
       // STEP 2: DEALING ONE-BY-ONE FACE-DOWN (1100ms - ~3600ms)
-      // 52 cards dealt sequentially: Bottom -> Left -> Top -> Right (13 rounds)
+      // Cards dealt sequentially around the table
       // =======================================================================
       setPhase('dealing');
       let currentCardIndex = 0;
-      const targets = ['bottom', 'left', 'top', 'right'];
+      const targets = seats.topPlayers && seats.topPlayers.length > 1
+        ? ['bottom', 'left', ...seats.topPlayers.map((_, i) => `top_${i}`), 'right']
+        : ['bottom', 'left', 'top', 'right'];
 
       dealIntervalRef.current = setInterval(() => {
-        if (currentCardIndex >= 52) {
+        if (currentCardIndex >= totalCards) {
           if (dealIntervalRef.current) clearInterval(dealIntervalRef.current);
           setFlyingCard(null);
 
-          // All 52 cards are dealt! Transition to REVEAL PHASE
+          // All cards are dealt! Transition to REVEAL PHASE
           timerRef.current = setTimeout(() => {
             startRevealPhase();
           }, 350);
           return;
         }
 
-        const target = targets[currentCardIndex % 4];
+        const target = targets[currentCardIndex % targets.length];
         currentCardIndex++;
         const currentNum = currentCardIndex;
 
         setTotalDealt(currentNum);
-        setFlyingCard({ id: currentNum, target });
+        setFlyingCard({ id: currentNum, target: target.startsWith('top') ? 'top' : target });
         audio.dealCardSound();
 
         // Increment seat counters as card arrives
         if (target === 'bottom') {
-          setBottomDealtCount((prev) => Math.min(prev + 1, 13));
+          setBottomDealtCount((prev) => Math.min(prev + 1, cardsPerHand));
         } else if (target === 'left') {
-          setLeftDealtCount((prev) => Math.min(prev + 1, 13));
-        } else if (target === 'top') {
-          setTopDealtCount((prev) => Math.min(prev + 1, 13));
+          setLeftDealtCount((prev) => Math.min(prev + 1, cardsPerHand));
+        } else if (target.startsWith('top')) {
+          setTopDealtCount((prev) => Math.min(prev + 1, cardsPerHand));
         } else if (target === 'right') {
-          setRightDealtCount((prev) => Math.min(prev + 1, 13));
+          setRightDealtCount((prev) => Math.min(prev + 1, cardsPerHand));
         }
-      }, 48); // 48ms per card = 52 cards in ~2.5s
+      }, 48);
     }, 1100);
 
     return () => {
       clearAllTimers();
     };
-  }, [isActive]);
+  }, [isActive, totalCards, cardsPerHand]);
 
   // ===========================================================================
   // STEP 3: REVEAL PHASE - FLIPPING FACE-DOWN CARDS TO FACE-UP 3D
@@ -135,7 +146,7 @@ export default function ShuffleDealingAnimation({
     let cardIdx = 0;
 
     revealIntervalRef.current = setInterval(() => {
-      if (cardIdx >= 13) {
+      if (cardIdx >= cardsPerHand) {
         if (revealIntervalRef.current) clearInterval(revealIntervalRef.current);
 
         // All cards revealed! Play celebration fanfare and finish
@@ -169,7 +180,7 @@ export default function ShuffleDealingAnimation({
 
   if (!isActive || phase === 'done') return null;
 
-  const currentRound = Math.min(Math.floor(totalDealt / 4) + 1, 13);
+  const currentRound = Math.min(Math.floor(totalDealt / playerCount) + 1, cardsPerHand);
 
   return (
     <div className={`dealing-fullscreen-overlay ${isFadingOut ? 'fade-out' : ''}`}>
@@ -181,11 +192,19 @@ export default function ShuffleDealingAnimation({
 
       {/* TOP: Seat Pod */}
       <div className="dealing-seat-pod seat-pod-top">
-        <div className="seat-pod-avatar">{seats.top?.avatar || '👤'}</div>
+        <div className="seat-pod-avatar">
+          {seats.topPlayers && seats.topPlayers.length > 1
+            ? seats.topPlayers.map((p) => p.avatar).join(' ')
+            : seats.top?.avatar || '👤'}
+        </div>
         <div className="seat-pod-meta">
-          <span className="seat-pod-name">{seats.top?.name || 'Pemain Atas'}</span>
+          <span className="seat-pod-name">
+            {seats.topPlayers && seats.topPlayers.length > 1
+              ? seats.topPlayers.map((p) => p.name).join(' & ')
+              : seats.top?.name || 'Pemain Atas'}
+          </span>
           <span className="seat-pod-count">
-            🂠 {topDealtCount}/13 kartu tertutup
+            🂠 {topDealtCount}/{cardsPerHand} kartu tertutup
           </span>
         </div>
       </div>
@@ -198,7 +217,7 @@ export default function ShuffleDealingAnimation({
           <div className="seat-pod-meta">
             <span className="seat-pod-name">{seats.left?.name || 'Pemain Kiri'}</span>
             <span className="seat-pod-count">
-              🂠 {leftDealtCount}/13
+              🂠 {leftDealtCount}/{cardsPerHand}
             </span>
           </div>
         </div>
@@ -217,7 +236,7 @@ export default function ShuffleDealingAnimation({
               {/* Center Deck Core */}
               <div className="center-deck-core">
                 <Sparkles size={28} className="shuffle-sparkle-icon" />
-                <span className="deck-thickness-badge">52 KARTU</span>
+                <span className="deck-thickness-badge">{totalCards} KARTU</span>
               </div>
 
               {/* Right Packet riffle */}
@@ -238,7 +257,7 @@ export default function ShuffleDealingAnimation({
                 <div className="stack-layer layer-1">
                   <span className="hub-card-icon">♠</span>
                   <small className="hub-card-count">
-                    {Math.max(52 - totalDealt, 0)}
+                    {Math.max(totalCards - totalDealt, 0)}
                   </small>
                 </div>
               </div>
@@ -262,7 +281,7 @@ export default function ShuffleDealingAnimation({
           <div className="seat-pod-meta">
             <span className="seat-pod-name">{seats.right?.name || 'Pemain Kanan'}</span>
             <span className="seat-pod-count">
-              🂠 {rightDealtCount}/13
+              🂠 {rightDealtCount}/{cardsPerHand}
             </span>
           </div>
         </div>
@@ -272,22 +291,22 @@ export default function ShuffleDealingAnimation({
       <div className="dealing-status-banner">
         <span className="status-pulse-dot" />
         <span className="status-text">
-          {phase === 'shuffle' && 'Dealer mengocok 52 kartu remi secara acak...'}
+          {phase === 'shuffle' && `Dealer mengocok ${totalCards} kartu remi secara acak...`}
           {phase === 'dealing' &&
-            `Membagikan kartu tertutup satu per satu... Putaran ${currentRound}/13 (${totalDealt}/52)`}
+            `Membagikan kartu tertutup satu per satu... Putaran ${currentRound}/${cardsPerHand} (${totalDealt}/${totalCards})`}
           {phase === 'revealing' &&
             'Semua kartu tertutup terbagi! Membuka kartu tangan Anda...'}
         </span>
       </div>
 
-      {/* BOTTOM: Player Hand Tray with 13 Flip Cards */}
+      {/* BOTTOM: Player Hand Tray with Flip Cards */}
       <div className="dealing-bottom-tray-area">
         <div className="bottom-tray-label">
           <span className="tray-player-name">{seats.bottom?.name || 'Kartu Tangan Anda'}</span>
           <span className="tray-card-counter">
             {phase === 'revealing'
               ? '✨ Terbuka & Tersusun'
-              : `(${bottomDealtCount}/13 kartu tertutup)`}
+              : `(${bottomDealtCount}/${cardsPerHand} kartu tertutup)`}
           </span>
         </div>
 

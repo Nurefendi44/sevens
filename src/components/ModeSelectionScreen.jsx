@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Globe,
   Gamepad2,
@@ -10,6 +10,8 @@ import {
 import '../styles/modeSelection.css';
 
 export default function ModeSelectionScreen({ onSelectMode, onOpenRules }) {
+  const [offlinePlayerCount, setOfflinePlayerCount] = useState(4);
+
   return (
     <div className="mode-selection-overlay">
       {/* Ambient Floating Playing Card Suits */}
@@ -23,17 +25,12 @@ export default function ModeSelectionScreen({ onSelectMode, onOpenRules }) {
       <div className="mode-selection-container">
         {/* Brand Header */}
         <header className="mode-selection-header">
-          <div className="mode-brand-badge">
-            <span>♠</span>
-            <span>Permainan Kartu Klasik Nusantara</span>
-          </div>
-
           <h1 className="mode-main-title">
             SEVENS <span className="mode-title-gold">TUJUH SEKOP</span>
           </h1>
 
           <p className="mode-main-subtitle">
-            Selamat datang di meja kartu Sevens. Silakan pilih mode permainan di bawah untuk memulai!
+            Selamat datang di meja kartu Sevens. Silakan pilih mode permainan (4, 5, atau 6 pemain) untuk memulai!
           </p>
         </header>
 
@@ -56,7 +53,7 @@ export default function ModeSelectionScreen({ onSelectMode, onOpenRules }) {
               <div className="mode-card-header-row">
                 <span className="mode-card-badge badge-online">
                   <Wifi size={13} />
-                  <span>Realtime Supabase</span>
+                  <span>Realtime</span>
                 </span>
               </div>
 
@@ -74,21 +71,21 @@ export default function ModeSelectionScreen({ onSelectMode, onOpenRules }) {
               <div className="mode-feature-list">
                 <div className="mode-feature-item">
                   <span className="feature-dot feature-dot-online" />
-                  <span>4 Pemain di perangkat masing-masing</span>
+                  <span>Bisa 4, 5, atau 6 pemain (dipilih Host saat buat room)</span>
                 </div>
                 <div className="mode-feature-item">
                   <span className="feature-dot feature-dot-online" />
-                  <span>Bisa via Kode Room atau Bagikan Link</span>
+                  <span>Sistem otomatis menata kartu 7 di meja jika 5 / 6 pemain</span>
                 </div>
                 <div className="mode-feature-item">
                   <span className="feature-dot feature-dot-online" />
-                  <span>Sinkronisasi realtime & fair play anti-hint</span>
+                  <span>Bisa via Kode Room atau Bagikan Link undangan</span>
                 </div>
               </div>
             </div>
 
             <button className="btn-select-mode btn-mode-online">
-              <span>Pilih Mode Online</span>
+              <span>Masuk Lobby Online</span>
               <ArrowRight size={18} />
             </button>
           </div>
@@ -96,15 +93,8 @@ export default function ModeSelectionScreen({ onSelectMode, onOpenRules }) {
           {/* CARD 2: MAIN OFFLINE (LOKAL) */}
           <div
             className="mode-card mode-card-offline"
-            onClick={() => onSelectMode('local')}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onSelectMode('local');
-              }
-            }}
+            role="region"
+            aria-label="Mode Main Offline"
           >
             <div className="mode-card-top">
               <div className="mode-card-header-row">
@@ -119,30 +109,61 @@ export default function ModeSelectionScreen({ onSelectMode, onOpenRules }) {
               </div>
 
               <div className="mode-card-title-group">
-                <h2 className="mode-card-title">Main Offline (Lokal)</h2>
+                <h2 className="mode-card-title">Main Offline</h2>
                 <p className="mode-card-desc">
                   Main santai dalam 1 perangkat secara bergantian (Pass-and-play). Sangat cocok saat kumpul bareng teman tanpa butuh kuota internet.
                 </p>
               </div>
 
+              {/* Player Count Selector for Offline */}
+              <div className="player-count-picker">
+                <span className="picker-label">Pilih Jumlah Pemain Offline:</span>
+                <div className="picker-buttons">
+                  {[4, 5, 6].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      className={`btn-count-chip ${offlinePlayerCount === num ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOfflinePlayerCount(num);
+                      }}
+                    >
+                      {num} Orang
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="mode-feature-list">
                 <div className="mode-feature-item">
                   <span className="feature-dot feature-dot-offline" />
-                  <span>1 HP / Komputer bergantian 4 pemain</span>
+                  {offlinePlayerCount === 4 && (
+                    <span><strong>4 Pemain:</strong> 13 kartu per pemain (meja mulai kosong)</span>
+                  )}
+                  {offlinePlayerCount === 5 && (
+                    <span><strong>5 Pemain:</strong> 10 kartu/orang (♠7 & ♥7 otomatis di meja)</span>
+                  )}
+                  {offlinePlayerCount === 6 && (
+                    <span><strong>6 Pemain:</strong> 8 kartu/orang (semua 7 otomatis di meja)</span>
+                  )}
                 </div>
                 <div className="mode-feature-item">
                   <span className="feature-dot feature-dot-offline" />
-                  <span>100% Offline tanpa internet & tanpa login</span>
+                  <span>1 HP / Komputer bergantian secara pass-and-play</span>
                 </div>
                 <div className="mode-feature-item">
                   <span className="feature-dot feature-dot-offline" />
-                  <span>Simulasi lengkap dengan aturan resmi</span>
+                  <span>100% Offline tanpa kuota & tanpa login</span>
                 </div>
               </div>
             </div>
 
-            <button className="btn-select-mode btn-mode-offline">
-              <span>Pilih Mode Offline</span>
+            <button
+              className="btn-select-mode btn-mode-offline"
+              onClick={() => onSelectMode('local', offlinePlayerCount)}
+            >
+              <span>Mulai Main Offline ({offlinePlayerCount} Orang)</span>
               <ArrowRight size={18} />
             </button>
           </div>

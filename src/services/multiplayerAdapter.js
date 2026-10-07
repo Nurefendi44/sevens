@@ -8,8 +8,8 @@ import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 import { initGame } from '../engine/gameEngine.js';
 import { GAME_STATUS } from '../engine/constants.js';
 
-export const AVATARS = ['👤', '🦊', '🐼', '🦁'];
-export const SEAT_POSITIONS = ['bottom', 'left', 'top', 'right'];
+export const AVATARS = ['👤', '🦊', '🐼', '🦁', '🐯', '🐨'];
+export const SEAT_POSITIONS = ['bottom', 'left', 'top', 'right', 'top_left', 'top_right'];
 
 // Local storage session keys
 const STORAGE_PLAYER_ID = 'sevens_player_id';
@@ -83,28 +83,51 @@ export function getActiveSession() {
 
 /**
  * Computes clockwise relative seats so viewer is always at 'bottom'
+ * Supports 4, 5, or 6 players with responsive seating around the table.
  */
 export function getRelativeSeats(players = [], viewerPlayerId) {
   if (!players || players.length === 0) {
-    return { bottom: null, left: null, top: null, right: null };
+    return { bottom: null, left: null, top: null, right: null, topPlayers: [] };
   }
 
   const myIndex = players.findIndex((p) => p.id === viewerPlayerId);
-  if (myIndex === -1) {
+  const safeIdx = myIndex !== -1 ? myIndex : 0;
+  const count = players.length;
+
+  if (count <= 4) {
+    const topPlayer = players[(safeIdx + 2) % count] || null;
     return {
-      bottom: players[0] || null,
-      left: players[1] || null,
-      top: players[2] || null,
-      right: players[3] || null,
+      bottom: players[safeIdx],
+      left: players[(safeIdx + 1) % count] || null,
+      top: topPlayer,
+      topPlayers: topPlayer ? [topPlayer] : [],
+      right: players[(safeIdx + 3) % count] || null,
     };
   }
 
-  const count = players.length;
+  // 5 Players: Left (1), Top (2), Right (1)
+  if (count === 5) {
+    const top1 = players[(safeIdx + 2) % count];
+    const top2 = players[(safeIdx + 3) % count];
+    return {
+      bottom: players[safeIdx],
+      left: players[(safeIdx + 1) % count] || null,
+      top: top1,
+      topPlayers: [top1, top2],
+      right: players[(safeIdx + 4) % count] || null,
+    };
+  }
+
+  // 6 Players: Left (1), Top (3), Right (1)
+  const top1 = players[(safeIdx + 2) % count];
+  const top2 = players[(safeIdx + 3) % count];
+  const top3 = players[(safeIdx + 4) % count];
   return {
-    bottom: players[myIndex],
-    left: players[(myIndex + 1) % count] || null,
-    top: players[(myIndex + 2) % count] || null,
-    right: players[(myIndex + 3) % count] || null,
+    bottom: players[safeIdx],
+    left: players[(safeIdx + 1) % count] || null,
+    top: top2,
+    topPlayers: [top1, top2, top3],
+    right: players[(safeIdx + 5) % count] || null,
   };
 }
 
@@ -133,9 +156,9 @@ export const multiplayerAdapter = {
   },
 
   /**
-   * Creates a new room as Host
+   * Creates a new room as Host with configurable player count (4, 5, or 6)
    */
-  async createRoom(hostName) {
+  async createRoom(hostName, maxPlayers = 4) {
     if (!supabase) {
       return { success: false, error: 'Supabase belum terkonfigurasi pada .env file.' };
     }
@@ -143,6 +166,7 @@ export const multiplayerAdapter = {
     const name = hostName.trim() || 'Host';
     const code = generateRoomCode();
     const playerId = getLocalPlayerId();
+    const targetMax = [4, 5, 6].includes(Number(maxPlayers)) ? Number(maxPlayers) : 4;
 
     const hostPlayer = {
       id: playerId,
@@ -161,7 +185,7 @@ export const multiplayerAdapter = {
         host_id: playerId,
         status: 'lobby',
         players: [hostPlayer],
-        game_state: null,
+        game_state: { config: { playerCount: targetMax } },
       })
       .select()
       .single();
@@ -203,6 +227,7 @@ export const multiplayerAdapter = {
     }
 
     const players = room.players || [];
+    const maxPlayers = room.game_state?.config?.playerCount || 4;
 
     // Check if player already in room (reconnect scenario)
     const existingPlayer = players.find(
@@ -225,8 +250,8 @@ export const multiplayerAdapter = {
       return { success: false, error: 'Permainan di room ini sudah berlangsung.' };
     }
 
-    if (players.length >= 4) {
-      return { success: false, error: 'Room sudah penuh (maksimal 4 pemain).' };
+    if (players.length >= maxPlayers) {
+      return { success: false, error: `Room sudah penuh (maksimal ${maxPlayers} pemain).` };
     }
 
     const seatIdx = players.length;
@@ -299,8 +324,12 @@ export const multiplayerAdapter = {
     }
 
     const players = room.players || [];
-    if (players.length !== 4) {
-      return { success: false, error: 'Permainan membutuhkan tepat 4 pemain untuk dimulai!' };
+    const maxPlayers = room.game_state?.config?.playerCount || configOverrides?.playerCount || 4;
+    if (players.length !== maxPlayers) {
+      return {
+        success: false,
+        error: `Permainan membutuhkan tepat ${maxPlayers} pemain untuk dimulai (saat ini ${players.length}/${maxPlayers})!`,
+      };
     }
 
     // Format players into Engine structure
@@ -313,8 +342,8 @@ export const multiplayerAdapter = {
       isHost: p.isHost,
     }));
 
-    // Initialize state from decoupled Game Engine
-    const gameState = initGame(configOverrides, formattedPlayers);
+    // Initialize state from decoupled Game Engine with correct player count
+    const gameState = initGame({ ...configOverrides, playerCount: maxPlayers }, formattedPlayers);
 
     const { data: updatedRoom, error: updateErr } = await supabase
       .from('rooms')
@@ -377,7 +406,8 @@ export const multiplayerAdapter = {
       isHost: p.isHost,
     }));
 
-    const nextGameState = initGame(configOverrides, formattedPlayers);
+    const maxPlayers = formattedPlayers.length;
+    const nextGameState = initGame({ ...configOverrides, playerCount: maxPlayers }, formattedPlayers);
 
     await supabase
       .from('rooms')
