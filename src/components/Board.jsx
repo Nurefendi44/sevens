@@ -124,7 +124,7 @@ function resolveSlotState(slot, suitBoard, playedMap, globalAceDirection, suitNa
   };
 }
 
-export default function Board({ board, globalAceDirection, layout = 'horizontal' }) {
+export default function Board({ board = {}, globalAceDirection, layout = 'horizontal' }) {
   const suitList = [SUITS.SPADES, SUITS.HEARTS, SUITS.DIAMONDS, SUITS.CLUBS];
 
   const suitNames = {
