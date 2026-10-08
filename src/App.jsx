@@ -367,27 +367,29 @@ export default function App() {
   // Determine which player's cards to show in the bottom tray
   // In multiplayer: Always the user's cards (myPlayerId)
   // In local mode: The player whose turn it currently is (pass-and-play)
-  const trayPlayer = isMultiplayerMode
-    ? gameState.players.find((p) => p.id === myPlayerId) || gameState.players[0]
-    : gameState.players.find((p) => p.id === gameState.currentPlayer) || gameState.players[0];
+  const playersList = gameState?.players || [];
 
-  const currentHandRaw = gameState.hands[trayPlayer.id] || [];
+  const trayPlayer = isMultiplayerMode
+    ? playersList.find((p) => p.id === myPlayerId) || playersList[0] || {}
+    : playersList.find((p) => p.id === gameState?.currentPlayer) || playersList[0] || {};
+
+  const currentHandRaw = gameState?.hands?.[trayPlayer.id] || [];
   const currentHand = useMemo(() => {
     return sortHand(currentHandRaw, handSortBy);
   }, [currentHandRaw, handSortBy]);
 
   const isMyTurn = isMultiplayerMode
-    ? gameState.currentPlayer === myPlayerId
+    ? gameState?.currentPlayer === myPlayerId
     : true; // In local mode, active player has turn
 
   // Seating around the poker table
   // In multiplayer: relative rotation so user is ALWAYS at the bottom!
   // In local mode: relative rotation to whoever's turn it is (pass-and-play perspective)
   const seats = isMultiplayerMode
-    ? getRelativeSeats(gameState.players, myPlayerId)
-    : getRelativeSeats(gameState.players, trayPlayer?.id);
+    ? getRelativeSeats(playersList, myPlayerId)
+    : getRelativeSeats(playersList, trayPlayer?.id);
 
-  const opponentPlayers = gameState.players.filter((p) => p.id !== trayPlayer?.id);
+  const opponentPlayers = playersList.filter((p) => p.id !== trayPlayer?.id);
 
   const handleToggleShowOpponents = () => {
     setShowOpponents((prev) => {
@@ -495,7 +497,7 @@ export default function App() {
   };
 
   // Find active turn player's name
-  const currentTurnPlayer = gameState.players.find((p) => p.id === gameState.currentPlayer);
+  const currentTurnPlayer = playersList.find((p) => p.id === gameState?.currentPlayer);
   const currentTurnPlayerName = currentTurnPlayer?.name || 'Pemain Lain';
 
   // Return to Mode Selection Screen (Home)

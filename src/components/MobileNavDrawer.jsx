@@ -47,8 +47,9 @@ export default function MobileNavDrawer({
 }) {
   if (!isOpen) return null;
 
-  const currentTurnPlayer = gameState.players.find(
-    (p) => p.id === gameState.currentPlayer
+  const playersList = gameState?.players || [];
+  const currentTurnPlayer = playersList.find(
+    (p) => p.id === gameState?.currentPlayer
   );
 
   return (
