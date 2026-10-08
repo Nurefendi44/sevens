@@ -417,7 +417,7 @@ export default function ShuffleDealingAnimation({
             <span className="status-text">
               {phase === 'shuffle' && (
                 shuffleSubStage === 'wash'
-                  ? `Tahap 1/4: Dealer mengacak seluruh ${totalCards} kartu di meja (Casino Scramble Wash)...`
+                  ? `Tahap 1/4: Mengacak seluruh ${totalCards} kartu di meja (Scramble Wash)...`
                   : shuffleSubStage === 'riffle1'
                   ? `Tahap 2/4: Riffle Shuffle & Arch Bridge — Menyisipkan kartu secara bersilang...`
                   : shuffleSubStage === 'cut'

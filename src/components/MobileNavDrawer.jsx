@@ -44,6 +44,7 @@ export default function MobileNavDrawer({
   onLeaveRoom,
   onSwitchMode,
   onBackToMenu,
+  activeGameType = 'sevens',
 }) {
   if (!isOpen) return null;
 
@@ -58,8 +59,10 @@ export default function MobileNavDrawer({
         {/* Drawer Header */}
         <div className="mobile-drawer-header">
           <div className="mobile-drawer-brand">
-            <span style={{ color: '#fbbf24', fontSize: '1.25rem' }}>♠</span>
-            <span>MENU SEVENS</span>
+            <span style={{ color: '#fbbf24', fontSize: '1.25rem' }}>
+              {activeGameType === 'game41' ? '🃏' : '♠'}
+            </span>
+            <span>{activeGameType === 'game41' ? 'MENU REMI 41' : 'MENU SEVENS'}</span>
           </div>
           <button
             className="mobile-drawer-close-btn"
@@ -105,18 +108,20 @@ export default function MobileNavDrawer({
             </div>
           )}
 
-          <div className="drawer-status-row">
-            <span className="drawer-label">Arah Rangkai As:</span>
-            {gameState.globalAceDirection === 'bottom' && (
-              <span className="drawer-tag tag-green">⬇️ BAWAH (A=-1)</span>
-            )}
-            {gameState.globalAceDirection === 'top' && (
-              <span className="drawer-tag tag-gold">⬆️ ATAS (A=-11)</span>
-            )}
-            {!gameState.globalAceDirection && (
-              <span className="drawer-tag tag-neutral">Terbuka</span>
-            )}
-          </div>
+          {activeGameType === 'sevens' && (
+            <div className="drawer-status-row">
+              <span className="drawer-label">Arah Rangkai As:</span>
+              {gameState.globalAceDirection === 'bottom' && (
+                <span className="drawer-tag tag-green">⬇️ BAWAH (A=-1)</span>
+              )}
+              {gameState.globalAceDirection === 'top' && (
+                <span className="drawer-tag tag-gold">⬆️ ATAS (A=-11)</span>
+              )}
+              {!gameState.globalAceDirection && (
+                <span className="drawer-tag tag-neutral">Terbuka</span>
+              )}
+            </div>
+          )}
 
           <div className="drawer-status-row">
             <span className="drawer-label">Jumlah Pemain:</span>
@@ -140,8 +145,8 @@ export default function MobileNavDrawer({
 
         {/* Navigation Action Buttons List */}
         <div className="mobile-drawer-menu-list">
-          {/* Toggle Show / Hide Opponents (Focus Mode) */}
-          {onToggleShowOpponents && (
+          {/* Toggle Show / Hide Opponents (Focus Mode) - Sevens Only */}
+          {activeGameType === 'sevens' && onToggleShowOpponents && (
             <button
               className="mobile-menu-item"
               onClick={() => {
@@ -158,8 +163,8 @@ export default function MobileNavDrawer({
             </button>
           )}
 
-          {/* Toggle Board Layout (Horizontal vs Vertical) */}
-          {onToggleBoardLayout && (
+          {/* Toggle Board Layout (Horizontal vs Vertical) - Sevens Only */}
+          {activeGameType === 'sevens' && onToggleBoardLayout && (
             <button
               className="mobile-menu-item"
               onClick={() => {
@@ -225,12 +230,12 @@ export default function MobileNavDrawer({
             </div>
             <div className="menu-item-text">
               <span>Buku Aturan Permainan</span>
-              <small>Penjelasan Rule 1 - 6 & Kartu As</small>
+              <small>{activeGameType === 'game41' ? 'Penjelasan aturan & strategi Remi 41' : 'Penjelasan Rule 1 - 6 & Kartu As'}</small>
             </div>
           </button>
 
-          {/* Settings & Config (Exclusive to Host / Local mode) */}
-          {(!isMultiplayerMode || isHost) && (
+          {/* Settings & Config (Exclusive to Sevens Host / Local mode) */}
+          {activeGameType === 'sevens' && (!isMultiplayerMode || isHost) && (
             <button
               className="mobile-menu-item"
               onClick={() => {
@@ -248,22 +253,24 @@ export default function MobileNavDrawer({
             </button>
           )}
 
-          {/* Match History */}
-          <button
-            className="mobile-menu-item"
-            onClick={() => {
-              onOpenHistory();
-              onClose();
-            }}
-          >
-            <div className="menu-item-icon">
-              <History size={18} />
-            </div>
-            <div className="menu-item-text">
-              <span>Riwayat Pertandingan</span>
-              <small>Log aksi giliran dan pelanggaran</small>
-            </div>
-          </button>
+          {/* Match History (Sevens Only) */}
+          {activeGameType === 'sevens' && (
+            <button
+              className="mobile-menu-item"
+              onClick={() => {
+                onOpenHistory();
+                onClose();
+              }}
+            >
+              <div className="menu-item-icon">
+                <History size={18} />
+              </div>
+              <div className="menu-item-text">
+                <span>Riwayat Pertandingan</span>
+                <small>Log aksi giliran dan pelanggaran</small>
+              </div>
+            </button>
+          )}
 
           {/* Sound Toggle */}
           <button className="mobile-menu-item" onClick={onToggleSound}>

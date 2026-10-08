@@ -1,0 +1,361 @@
+/* ==============================================================================
+   GAME KARTU 41 (REMI 41) - LUXURY CASINO FELT STYLES
+   ============================================================================== */
+
+.game41-table-felt {
+  position: relative;
+  width: 100%;
+  min-height: 520px;
+  background: radial-gradient(circle at 50% 45%, #0f3d26 0%, #082617 65%, #04140c 100%);
+  border: 4px solid #1e293b;
+  border-radius: 28px;
+  box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.7), 0 12px 35px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1.25rem 1rem;
+  overflow: hidden;
+}
+
+.game41-watermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 7rem;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.03);
+  letter-spacing: 0.2em;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Center Arena: Draw Pile & Discard Pile */
+.game41-center-arena {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin: auto 0;
+  z-index: 10;
+}
+
+.piles-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2.5rem;
+}
+
+/* 3D Stack / Card Pile */
+.card-pile-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.card-pile-wrapper.clickable:hover {
+  transform: translateY(-4px) scale(1.03);
+}
+
+.card-pile-wrapper.clickable.pulse-glow .pile-card-box {
+  border-color: #fbbf24;
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.6), 0 8px 25px rgba(0, 0, 0, 0.8);
+  animation: pilePulseGlow 1.2s infinite alternate;
+}
+
+@keyframes pilePulseGlow {
+  from { transform: scale(1); box-shadow: 0 0 15px rgba(251, 191, 36, 0.4); }
+  to { transform: scale(1.04); box-shadow: 0 0 25px rgba(251, 191, 36, 0.8); }
+}
+
+.pile-card-box {
+  position: relative;
+  width: 74px;
+  height: 104px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+/* Draw Pile (Back of card face-down) */
+.draw-pile-box {
+  background: linear-gradient(135deg, #1e1b4b, #312e81);
+  border: 2px solid #d97706;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #fbbf24;
+}
+
+.draw-pile-box::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: 9px;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  pointer-events: none;
+}
+
+.pile-thickness-layer {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: #0f172a;
+  border: 1.5px solid #78350f;
+  transform: translate(4px, 4px);
+  z-index: -1;
+}
+
+.pile-remaining-badge {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #fbbf24;
+  margin-top: 2px;
+}
+
+/* Discard Pile */
+.discard-pile-box {
+  background: rgba(15, 23, 42, 0.6);
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.discard-empty-placeholder {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.pile-label-tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 2px 8px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Turn Action Banner */
+.game41-action-status-banner {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  padding: 0.45rem 1.25rem;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #fbbf24;
+  font-size: 0.825rem;
+  font-weight: 700;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+}
+
+/* Player Hand Tray */
+.game41-tray {
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 0.9rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  margin-top: 1rem;
+}
+
+.game41-tray-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.game41-hand-analyzer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 0.3rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.775rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.game41-hand-analyzer.is-41 {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: #fbbf24;
+  color: #fef08a;
+  box-shadow: 0 0 15px rgba(251, 191, 36, 0.5);
+  animation: goldScorePulse 1s infinite alternate;
+}
+
+@keyframes goldScorePulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.05); }
+}
+
+.analyzer-score-badge {
+  font-family: var(--font-mono, monospace);
+  color: #fbbf24;
+  font-weight: 800;
+}
+
+/* Hand Cards Area */
+.game41-cards-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0.5rem 0;
+  min-height: 125px;
+}
+
+/* Action Controls Bar */
+.game41-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.game41-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.btn-game41 {
+  padding: 0.55rem 1.1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.btn-game41-draw {
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+}
+
+.btn-game41-draw:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  transform: translateY(-2px);
+}
+
+.btn-game41-discard {
+  background: linear-gradient(135deg, #b91c1c, #dc2626);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+}
+
+.btn-game41-discard:hover:not(:disabled) {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+  transform: translateY(-2px);
+}
+
+.btn-game41:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Opponent Seats in Game 41 */
+.game41-opponents-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  width: 100%;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.game41-seat-pod {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  padding: 0.35rem 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #e2e8f0;
+  font-size: 0.775rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(6px);
+}
+
+.game41-seat-pod.active-turn {
+  border-color: #fbbf24;
+  box-shadow: 0 0 14px rgba(251, 191, 36, 0.4);
+  background: rgba(245, 158, 11, 0.15);
+}
+
+.seat-cards-mini-fan {
+  display: flex;
+  align-items: center;
+  gap: -6px;
+}
+
+.mini-card-back {
+  width: 14px;
+  height: 20px;
+  border-radius: 3px;
+  background: #312e81;
+  border: 1px solid #fbbf24;
+}
+
+/* Passed Discard Targeted Indicator */
+.passed-badge-targeted {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 900;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.5);
+  animation: pulseGlow 1.5s infinite alternate;
+  z-index: 10;
+}
+
+.passed-direction-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+  padding: 0.25rem 0.8rem;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  color: #e2e8f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+

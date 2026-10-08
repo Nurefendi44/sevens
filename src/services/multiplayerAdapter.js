@@ -7,6 +7,7 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 import { initGame } from '../engine/gameEngine.js';
 import { GAME_STATUS } from '../engine/constants.js';
+import { initGame41 } from '../games/game41/engine/engine41.js';
 
 export const AVATARS = ['👤', '🦊', '🐼', '🦁', '🐯', '🐨'];
 export const SEAT_POSITIONS = ['bottom', 'left', 'top', 'right', 'top_left', 'top_right'];
@@ -157,9 +158,9 @@ export const multiplayerAdapter = {
   },
 
   /**
-   * Creates a new room as Host with configurable player count (4, 5, or 6)
+   * Creates a new room as Host with configurable player count (4, 5, or 6) and gameType
    */
-  async createRoom(hostName, maxPlayers = 4) {
+  async createRoom(hostName, maxPlayers = 4, gameType = 'sevens') {
     if (!supabase) {
       return { success: false, error: 'Supabase belum terkonfigurasi pada .env file.' };
     }
@@ -186,7 +187,7 @@ export const multiplayerAdapter = {
         host_id: playerId,
         status: 'lobby',
         players: [hostPlayer],
-        game_state: { config: { playerCount: targetMax } },
+        game_state: { config: { playerCount: targetMax }, gameType },
       })
       .select()
       .single();
@@ -343,8 +344,14 @@ export const multiplayerAdapter = {
       isHost: p.isHost,
     }));
 
-    // Initialize state from decoupled Game Engine with correct player count
-    const gameState = initGame({ ...configOverrides, playerCount: maxPlayers }, formattedPlayers);
+    // Initialize state from decoupled Game Engine with correct player count & gameType
+    const determinedGameType = configOverrides?.gameType || room.game_state?.gameType || 'sevens';
+    let gameState;
+    if (determinedGameType === 'game41') {
+      gameState = initGame41({ ...configOverrides, playerCount: maxPlayers }, formattedPlayers);
+    } else {
+      gameState = initGame({ ...configOverrides, playerCount: maxPlayers }, formattedPlayers);
+    }
 
     const { data: updatedRoom, error: updateErr } = await supabase
       .from('rooms')
@@ -408,7 +415,13 @@ export const multiplayerAdapter = {
     }));
 
     const maxPlayers = formattedPlayers.length;
-    const nextGameState = initGame({ ...configOverrides, playerCount: maxPlayers }, formattedPlayers);
+    const determinedGameType = configOverrides?.gameType || room.game_state?.gameType || 'sevens';
+    let nextGameState;
+    if (determinedGameType === 'game41') {
+      nextGameState = initGame41({ ...configOverrides, playerCount: maxPlayers }, formattedPlayers);
+    } else {
+      nextGameState = initGame({ ...configOverrides, playerCount: maxPlayers }, formattedPlayers);
+    }
 
     await supabase
       .from('rooms')

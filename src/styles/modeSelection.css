@@ -60,6 +60,58 @@
   animation-delay: -8s;
 }
 
+/* Multi-Game Portal Switcher Tabs */
+.game-portal-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+  background: rgba(15, 23, 42, 0.7);
+  padding: 5px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.portal-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 1.1rem;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.portal-tab-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.portal-tab-btn.active {
+  background: linear-gradient(135deg, #d97706, #fbbf24);
+  color: #000;
+  box-shadow: 0 4px 15px rgba(251, 191, 36, 0.4);
+}
+
+.tab-new-tag {
+  background: #dc2626;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 2px;
+}
+
 @keyframes decorFloat {
   0% { transform: translateY(0) rotate(0deg) scale(1); }
   50% { transform: translateY(-25px) rotate(8deg) scale(1.08); }
@@ -483,3 +535,278 @@
     font-size: 5rem;
   }
 }
+
+/* ==============================================================================
+   3-CARD GAME CATALOG STYLES
+   ============================================================================== */
+.catalog-top-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.9rem;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #fbbf24;
+  margin-bottom: 0.8rem;
+  text-transform: uppercase;
+}
+
+.game-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 1080px;
+  margin: 1.5rem auto 2rem;
+  perspective: 1000px;
+}
+
+.game-catalog-card {
+  position: relative;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 1.75rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+}
+
+.game-catalog-card.active-card {
+  cursor: pointer;
+}
+
+.game-catalog-card.active-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.55);
+}
+
+.game-catalog-card.card-sevens:hover {
+  border-color: rgba(251, 191, 36, 0.6);
+  box-shadow: 0 20px 45px rgba(217, 119, 6, 0.25);
+}
+
+.game-catalog-card.card-game41:hover {
+  border-color: rgba(16, 185, 129, 0.6);
+  box-shadow: 0 20px 45px rgba(16, 185, 129, 0.25);
+}
+
+.game-catalog-card.disabled-card {
+  opacity: 0.6;
+  filter: grayscale(0.2);
+  cursor: not-allowed;
+  border-style: dashed;
+  border-color: rgba(168, 85, 247, 0.35);
+}
+
+.catalog-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.catalog-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
+}
+
+.badge-gold {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+}
+
+.badge-emerald {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.badge-purple {
+  background: rgba(168, 85, 247, 0.18);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+}
+
+.catalog-suit-symbol {
+  font-size: 1.6rem;
+  opacity: 0.25;
+  font-family: var(--font-display, serif);
+}
+
+.catalog-icon-wrapper {
+  margin: 0.5rem 0 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.catalog-hero-icon {
+  font-size: 2.2rem;
+}
+
+.catalog-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.catalog-card-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #f8fafc;
+  margin-bottom: 0.2rem;
+}
+
+.catalog-card-subtitle {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+}
+
+.catalog-card-desc {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
+  flex: 1;
+}
+
+.catalog-features-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1.5rem;
+}
+
+.feature-pill {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.55rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.catalog-card-footer {
+  margin-top: auto;
+}
+
+.btn-catalog-play {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1.25rem;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.92rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-catalog-play.btn-gold {
+  background: linear-gradient(135deg, #d97706, #fbbf24);
+  color: #0b130e;
+  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.35);
+}
+
+.btn-catalog-play.btn-gold:hover {
+  background: linear-gradient(135deg, #f59e0b, #fde68a);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(217, 119, 6, 0.45);
+}
+
+.btn-catalog-play.btn-emerald {
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+
+.btn-catalog-play.btn-emerald:hover {
+  background: linear-gradient(135deg, #10b981, #34d399);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.45);
+}
+
+.btn-catalog-play.btn-disabled {
+  background: rgba(255, 255, 255, 0.05);
+  color: #64748b;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: not-allowed;
+}
+
+/* Mode Back Navigation */
+.mode-back-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 960px;
+  margin-bottom: 1rem;
+}
+
+.btn-back-to-catalog {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 1rem;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+  color: #e2e8f0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-back-to-catalog:hover {
+  background: rgba(30, 41, 59, 0.95);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
+.game-active-indicator-tag {
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.4rem 0.9rem;
+  border-radius: 9999px;
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+/* Responsive Catalog Grid */
+@media (max-width: 900px) {
+  .game-catalog-grid {
+    grid-template-columns: 1fr;
+    max-width: 440px;
+    gap: 1.25rem;
+  }
+}
+

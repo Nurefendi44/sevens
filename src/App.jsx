@@ -33,7 +33,13 @@ import MobileNavDrawer from './components/MobileNavDrawer.jsx';
 import ShuffleDealingAnimation from './components/ShuffleDealingAnimation.jsx';
 import ModeSelectionScreen from './components/ModeSelectionScreen.jsx';
 
+import Table41 from './games/game41/components/Table41.jsx';
+import GameOver41Modal from './games/game41/components/GameOver41Modal.jsx';
+import RulesGuide41Modal from './games/game41/components/RulesGuide41Modal.jsx';
+import { initGame41, drawCard41, discardCard41 } from './games/game41/engine/engine41.js';
+
 import './styles/multiplayer.css';
+
 
 import {
   Volume2,
@@ -183,6 +189,7 @@ export default function App() {
   // Local UI State
   const [handSortBy, setHandSortBy] = useState('suit');
   const [selectedCard, setSelectedCard] = useState(null);
+  const [pendingAceChoiceCard, setPendingAceChoiceCard] = useState(null);
   const [activeFault, setActiveFault] = useState(null);
   const [isMuted, setIsMuted] = useState(false);
 
@@ -190,7 +197,23 @@ export default function App() {
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [pendingAceChoiceCard, setPendingAceChoiceCard] = useState(null);
+  // Active Card Game: 'sevens' | 'game41'
+  const [activeGameType, setActiveGameType] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem('sevens_active_game_type') || 'sevens';
+    }
+    return 'sevens';
+  });
+
+  // Game 41 State (4-6 players)
+  const [gameState41, setGameState41] = useState(() => initGame41({ playerCount: 4 }));
+  const [showRules41Modal, setShowRules41Modal] = useState(false);
+
+  useEffect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('sevens_active_game_type', activeGameType);
+    }
+  }, [activeGameType]);
 
   const prevTurnNumberRef = useRef(gameState.turnNumber);
 
@@ -209,7 +232,13 @@ export default function App() {
             setMyPlayerId(session.playerId);
           }
           if (room.game_state) {
-            setGameState(room.game_state);
+            if (room.game_state.gameType === 'game41') {
+              setActiveGameType('game41');
+              setGameState41(room.game_state);
+            } else {
+              setActiveGameType('sevens');
+              setGameState(room.game_state);
+            }
           }
           // Only show toast if user reconnected cleanly
           showToast(`Terhubung ke Room ${room.code}`);
@@ -236,6 +265,22 @@ export default function App() {
 
       if (updatedRoom.game_state) {
         const nextState = updatedRoom.game_state;
+
+        if (nextState.gameType === 'game41') {
+          setActiveGameType('game41');
+          if (nextState.turnNumber !== prevTurnNumberRef.current && nextState.lastAction) {
+            const action = nextState.lastAction;
+            if (action.type === 'DRAW') {
+              audio.playCardSound();
+            } else if (action.type === 'DISCARD') {
+              if (action.is41) audio.victorySound();
+              else audio.closeCardSound();
+            }
+          }
+          prevTurnNumberRef.current = nextState.turnNumber;
+          setGameState41(nextState);
+          return;
+        }
 
         // If turn is 1 and game newly started or restarted, trigger dealing animation
         if (nextState.turnNumber === 1 && !nextState.firstMoveMade && prevTurnNumberRef.current !== 1) {
@@ -330,13 +375,19 @@ export default function App() {
   // ---------------------------------------------------------------------------
   // MULTIPLAYER HANDLERS
   // ---------------------------------------------------------------------------
-  const handleCreateRoom = async (username, maxPlayers = 4) => {
-    const res = await multiplayerAdapter.createRoom(username, maxPlayers);
+  const handleCreateRoom = async (username, maxPlayers = 4, gameType = activeGameType) => {
+    const res = await multiplayerAdapter.createRoom(username, maxPlayers, gameType);
     if (res.success) {
       setCurrentRoom(res.room);
       setMyPlayerId(res.player.id);
       if (res.room.game_state) {
-        setGameState(res.room.game_state);
+        if (res.room.game_state.gameType === 'game41') {
+          setActiveGameType('game41');
+          setGameState41(res.room.game_state);
+        } else {
+          setActiveGameType('sevens');
+          setGameState(res.room.game_state);
+        }
       }
       if (typeof window !== 'undefined' && window.history) {
         window.history.replaceState({}, document.title, window.location.pathname);
@@ -353,7 +404,13 @@ export default function App() {
       setCurrentRoom(res.room);
       setMyPlayerId(res.player.id);
       if (res.room.game_state) {
-        setGameState(res.room.game_state);
+        if (res.room.game_state.gameType === 'game41') {
+          setActiveGameType('game41');
+          setGameState41(res.room.game_state);
+        } else {
+          setActiveGameType('sevens');
+          setGameState(res.room.game_state);
+        }
       }
       if (typeof window !== 'undefined' && window.history) {
         window.history.replaceState({}, document.title, window.location.pathname);
@@ -371,11 +428,19 @@ export default function App() {
 
   const handleStartGame = async () => {
     if (!currentRoom?.code) return;
-    const res = await multiplayerAdapter.startGame(currentRoom.code, myPlayerId, gameConfig);
+    const isGame41 = activeGameType === 'game41' || currentRoom.game_state?.gameType === 'game41';
+    const configToUse = isGame41 ? { gameType: 'game41' } : gameConfig;
+    const res = await multiplayerAdapter.startGame(currentRoom.code, myPlayerId, configToUse, isGame41 ? 'game41' : 'sevens');
     if (res.success) {
       setCurrentRoom(res.room);
-      setGameState(res.gameState);
-      setIsDealingAnimationActive(true);
+      if (isGame41) {
+        setActiveGameType('game41');
+        setGameState41(res.gameState);
+      } else {
+        setActiveGameType('sevens');
+        setGameState(res.gameState);
+        setIsDealingAnimationActive(true);
+      }
       showToast('Permainan dimulai!');
     } else {
       setActiveFault({ message: res.error || 'Gagal memulai permainan.' });
@@ -441,19 +506,25 @@ export default function App() {
   // Determine which player's cards to show in the bottom tray
   // In multiplayer: Always the user's cards (myPlayerId)
   // In local mode: The player whose turn it currently is (pass-and-play)
-  const playersList = gameState?.players || [];
+  const isGame41Active = activeGameType === 'game41';
+  const playersList = isGame41Active
+    ? (gameState41?.players || [])
+    : (gameState?.players || []);
 
   const trayPlayer = isMultiplayerMode
     ? playersList.find((p) => p.id === myPlayerId) || playersList[0] || {}
-    : playersList.find((p) => p.id === gameState?.currentPlayer) || playersList[0] || {};
+    : playersList.find((p) => p.id === (isGame41Active ? gameState41?.currentPlayer : gameState?.currentPlayer)) || playersList[0] || {};
 
-  const currentHandRaw = gameState?.hands?.[trayPlayer.id] || [];
+  const currentHandRaw = isGame41Active
+    ? (gameState41?.hands?.[trayPlayer.id] || [])
+    : (gameState?.hands?.[trayPlayer.id] || []);
+
   const currentHand = useMemo(() => {
-    return sortHand(currentHandRaw, handSortBy);
-  }, [currentHandRaw, handSortBy]);
+    return isGame41Active ? currentHandRaw : sortHand(currentHandRaw, handSortBy);
+  }, [currentHandRaw, handSortBy, isGame41Active]);
 
   const isMyTurn = isMultiplayerMode
-    ? gameState?.currentPlayer === myPlayerId
+    ? (isGame41Active ? gameState41?.currentPlayer === myPlayerId : gameState?.currentPlayer === myPlayerId)
     : true; // In local mode, active player has turn
 
   // Seating around the poker table
@@ -570,6 +641,67 @@ export default function App() {
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // GAME 41 ACTIONS (DRAW, DISCARD, RESTART)
+  // ---------------------------------------------------------------------------
+  const isMyTurn41 = isMultiplayerMode
+    ? gameState41.currentPlayer === myPlayerId
+    : true;
+
+  const handleDrawCard41 = async (source) => {
+    const actingPlayerId = isMultiplayerMode ? myPlayerId : gameState41.currentPlayer;
+    const res = drawCard41(gameState41, actingPlayerId, source);
+    if (res.success) {
+      setGameState41(res.state);
+      audio.playCardSound();
+      if (isMultiplayerMode && currentRoom?.code) {
+        await multiplayerAdapter.syncGameState(currentRoom.code, res.state);
+      }
+    } else {
+      showToast(res.error);
+    }
+  };
+
+  const handleDiscardCard41 = async (card) => {
+    const actingPlayerId = isMultiplayerMode ? myPlayerId : gameState41.currentPlayer;
+    const res = discardCard41(gameState41, actingPlayerId, card);
+    if (res.success) {
+      setGameState41(res.state);
+      if (res.is41) {
+        audio.victorySound();
+      } else {
+        audio.closeCardSound();
+      }
+      if (isMultiplayerMode && currentRoom?.code) {
+        await multiplayerAdapter.syncGameState(currentRoom.code, res.state);
+      }
+    } else {
+      showToast(res.error);
+    }
+  };
+
+  const handleRestart41 = async (configOverrides) => {
+    if (gameMode === 'multiplayer' && currentRoom?.code) {
+      const isHost = currentRoom.host_id === myPlayerId;
+      if (!isHost) {
+        showToast('Hanya Host yang dapat mengocok ulang dan memulai game baru.');
+        return;
+      }
+      const res = await multiplayerAdapter.restartGame(currentRoom.code, myPlayerId, { gameType: 'game41', ...configOverrides });
+      if (res.success) {
+        setGameState41(res.gameState);
+        setIsDealingAnimationActive(true);
+        showToast('Permainan Kartu 41 baru dimulai!');
+      }
+    } else {
+      const count = gameState41.players?.length || 4;
+      const nextState = initGame41({ playerCount: count });
+      setGameState41(nextState);
+      setIsDealingAnimationActive(true);
+      showToast('Permainan Kartu 41 baru dimulai!');
+    }
+  };
+
   // Find active turn player's name
   const currentTurnPlayer = playersList.find((p) => p.id === gameState?.currentPlayer);
   const currentTurnPlayerName = currentTurnPlayer?.name || 'Pemain Lain';
@@ -619,22 +751,37 @@ export default function App() {
         )}
 
         <ModeSelectionScreen
-          onSelectMode={(mode, playerCount) => {
+          selectedGame={activeGameType}
+          onSelectGame={(game) => setActiveGameType(game)}
+          onSelectMode={(mode, playerCount, game) => {
+            const chosenGame = game || activeGameType;
+            setActiveGameType(chosenGame);
+
             if (mode === 'local') {
               const count = playerCount || 4;
-              const nextCfg = { ...gameConfig, playerCount: count };
-              setGameConfig(nextCfg);
-              setGameState(initGame(nextCfg));
+              if (chosenGame === 'game41') {
+                const state41 = initGame41({ playerCount: count });
+                setGameState41(state41);
+              } else {
+                const nextCfg = { ...gameConfig, playerCount: count };
+                setGameConfig(nextCfg);
+                setGameState(initGame(nextCfg));
+              }
+              setIsDealingAnimationActive(true);
               setGameMode('local');
             } else {
               setGameMode(mode);
             }
           }}
-          onOpenRules={() => setShowRulesModal(true)}
+          onOpenRules={(game) => {
+            if (game === 'game41') setShowRules41Modal(true);
+            else setShowRulesModal(true);
+          }}
         />
 
-        {/* Rules Guide Modal */}
+        {/* Rules Guide Modals */}
         {showRulesModal && <RulesGuideModal onClose={() => setShowRulesModal(false)} />}
+        {showRules41Modal && <RulesGuide41Modal onClose={() => setShowRules41Modal(false)} />}
       </div>
     );
   }
@@ -677,12 +824,21 @@ export default function App() {
       {/* Top Header Navigation */}
       <header className="top-nav">
         <div className="brand-section">
-          <div className="brand-title">
-            <span>♠</span>
-            <span>SEVENS</span>
-          </div>
+          <button
+            className="brand-title brand-home-btn"
+            onClick={handleBackToModeSelect}
+            title="Kembali ke Menu Utama / Ganti Game"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', display: 'flex', alignItems: 'center', gap: '8px', color: 'inherit' }}
+          >
+            <span>{activeGameType === 'game41' ? '🃏' : '♠'}</span>
+            <span>{activeGameType === 'game41' ? 'REMI 41' : 'SEVENS'}</span>
+          </button>
 
-          <span className="brand-tag desktop-only">Tujuh Sekop • {gameState.players?.length || 4} Pemain</span>
+          <span className="brand-tag desktop-only">
+            {activeGameType === 'game41'
+              ? `Kartu 41 • ${gameState41.players?.length || 4} Pemain`
+              : `Tujuh Sekop • ${gameState.players?.length || 4} Pemain`}
+          </span>
 
           {/* Mode Indicator / Badge */}
           {isMultiplayerMode ? (
@@ -825,14 +981,17 @@ export default function App() {
 
           <button
             className="btn-header"
-            onClick={() => setShowRulesModal(true)}
+            onClick={() => {
+              if (activeGameType === 'game41') setShowRules41Modal(true);
+              else setShowRulesModal(true);
+            }}
             title="Buku Aturan Permainan"
           >
             <BookOpen size={15} />
             <span>Aturan</span>
           </button>
 
-          {(!isMultiplayerMode || isHost) && (
+          {activeGameType === 'sevens' && (!isMultiplayerMode || isHost) && (
             <button
               className="btn-header"
               onClick={() => setShowConfigModal(true)}
@@ -843,14 +1002,16 @@ export default function App() {
             </button>
           )}
 
-          <button
-            className="btn-header"
-            onClick={() => setShowHistoryModal(true)}
-            title="Riwayat Aksi Pertandingan"
-          >
-            <History size={15} />
-            <span>Riwayat</span>
-          </button>
+          {activeGameType === 'sevens' && (
+            <button
+              className="btn-header"
+              onClick={() => setShowHistoryModal(true)}
+              title="Riwayat Aksi Pertandingan"
+            >
+              <History size={15} />
+              <span>Riwayat</span>
+            </button>
+          )}
 
           <button
             className={`btn-icon ${isMuted ? 'active' : ''}`}
@@ -863,7 +1024,10 @@ export default function App() {
           {(!isMultiplayerMode || isHost) && (
             <button
               className="btn-header btn-gold"
-              onClick={() => handleRestart()}
+              onClick={() => {
+                if (activeGameType === 'game41') handleRestart41();
+                else handleRestart();
+              }}
               title="Kocok ulang dan mulai game baru"
             >
               <RotateCcw size={15} />
@@ -905,18 +1069,30 @@ export default function App() {
 
       {/* Main Game Table Container */}
       <main className="game-layout">
-        {/* Felt Poker Table */}
-        <div className="poker-table-wrapper">
+        {/* Dealing & Shuffling Casino Animation Overlay (Plays for both Sevens and Game 41) */}
+        <ShuffleDealingAnimation
+          isActive={isDealingAnimationActive}
+          onComplete={() => setIsDealingAnimationActive(false)}
+          playerHand={currentHand}
+          seats={seats}
+        />
+
+        {activeGameType === 'game41' ? (
+          <Table41
+            gameState={gameState41}
+            onDrawCard={handleDrawCard41}
+            onDiscardCard={handleDiscardCard41}
+            isMyTurn={isMyTurn41}
+            myPlayerId={myPlayerId}
+            isMultiplayer={isMultiplayerMode}
+            onOpenRules={() => setShowRules41Modal(true)}
+          />
+        ) : (
+          <>
+            {/* Felt Poker Table */}
+            <div className="poker-table-wrapper">
           <div className="poker-felt">
             <div className="felt-watermark">SEVENS</div>
-
-            {/* Dealing & Shuffling Casino Animation Overlay */}
-            <ShuffleDealingAnimation
-              isActive={isDealingAnimationActive}
-              onComplete={() => setIsDealingAnimationActive(false)}
-              playerHand={currentHand}
-              seats={seats}
-            />
 
             {/* Table View Toolbar: Focus Toggle & Layout Switcher */}
             <div className="table-view-toolbar">
@@ -1078,6 +1254,8 @@ export default function App() {
           globalAceDirection={gameState?.globalAceDirection}
           config={gameConfig}
         />
+          </>
+        )}
       </main>
 
       {/* MULTIPLAYER RECONNECTING OVERLAY */}
@@ -1113,6 +1291,7 @@ export default function App() {
           onBackToMenu={handleBackToModeSelect}
           isSupabaseConfigured={isSupabaseConfigured}
           inviteRoomCode={inviteRoomCode}
+          activeGameType={activeGameType}
         />
       )}
 
@@ -1125,20 +1304,27 @@ export default function App() {
         onCopyRoomCode={handleCopyTopBarCode}
         onShareRoomLink={handleShareTopBarLink}
         copiedRoomCode={copiedRoomCode}
-        gameState={gameState}
+        gameState={activeGameType === 'game41' ? gameState41 : gameState}
         showOpponents={showOpponents}
         onToggleShowOpponents={handleToggleShowOpponents}
         boardLayout={boardLayout}
         onToggleBoardLayout={handleToggleBoardLayout}
-        onOpenRules={() => setShowRulesModal(true)}
+        onOpenRules={() => {
+          if (activeGameType === 'game41') setShowRules41Modal(true);
+          else setShowRulesModal(true);
+        }}
         onOpenConfig={() => setShowConfigModal(true)}
         onOpenHistory={() => setShowHistoryModal(true)}
         isMuted={isMuted}
         onToggleSound={handleToggleSound}
-        onRestart={() => handleRestart()}
+        onRestart={() => {
+          if (activeGameType === 'game41') handleRestart41();
+          else handleRestart();
+        }}
         isHost={isHost}
         onLeaveRoom={handleLeaveRoom}
         onBackToMenu={handleBackToModeSelect}
+        activeGameType={activeGameType}
         onSwitchMode={() => {
           if (isMultiplayerMode) {
             if (currentRoom) {
@@ -1173,8 +1359,8 @@ export default function App() {
         <FaultAlert fault={activeFault} onDismiss={() => setActiveFault(null)} />
       )}
 
-      {/* Game Over Modal */}
-      {gameState.gameStatus === GAME_STATUS.GAME_OVER && (
+      {/* Sevens Game Over Modal */}
+      {activeGameType === 'sevens' && gameState.gameStatus === GAME_STATUS.GAME_OVER && (
         <GameOverModal
           gameState={gameState}
           onRestart={() => handleRestart()}
@@ -1183,8 +1369,18 @@ export default function App() {
         />
       )}
 
-      {/* Rules Guide Modal */}
+      {/* Game 41 Game Over Modal */}
+      {activeGameType === 'game41' && gameState41.gameStatus === 'GAME_OVER' && (
+        <GameOver41Modal
+          gameState={gameState41}
+          onRestart={handleRestart41}
+          isMultiplayer={isMultiplayerMode}
+        />
+      )}
+
+      {/* Rules Guide Modals */}
       {showRulesModal && <RulesGuideModal onClose={() => setShowRulesModal(false)} />}
+      {showRules41Modal && <RulesGuide41Modal onClose={() => setShowRules41Modal(false)} />}
 
       {/* Settings / Config Modal */}
       {showConfigModal && (

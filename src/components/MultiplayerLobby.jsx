@@ -67,6 +67,7 @@ export default function MultiplayerLobby({
   onBackToMenu,
   isSupabaseConfigured,
   inviteRoomCode = null,
+  activeGameType = 'sevens',
 }) {
   const [selectedPlayerCount, setSelectedPlayerCount] = useState(4);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -139,7 +140,7 @@ export default function MultiplayerLobby({
     }
     setErrorMsg('');
     setIsLoading(true);
-    const res = await onCreateRoom(usernameInput.trim(), selectedPlayerCount);
+    const res = await onCreateRoom(usernameInput.trim(), selectedPlayerCount, activeGameType);
     setIsLoading(false);
     if (!res.success) {
       if (
@@ -201,8 +202,12 @@ export default function MultiplayerLobby({
             <div className="multiplayer-brand-icon">
               <Users size={32} />
             </div>
-            <h2>SEVENS ONLINE MULTIPLAYER</h2>
-            <p>Mainkan kartu Tujuh Sekop bersama teman secara realtime (4, 5, atau 6 Pemain)</p>
+            <h2>{activeGameType === 'game41' ? '🃏 REMI 41 ONLINE MULTIPLAYER' : '♠ SEVENS ONLINE MULTIPLAYER'}</h2>
+            <p>
+              {activeGameType === 'game41'
+                ? 'Mainkan kartu Remi 41 bersama teman secara realtime (4, 5, atau 6 Pemain)'
+                : 'Mainkan kartu Tujuh Sekop bersama teman secara realtime (4, 5, atau 6 Pemain)'}
+            </p>
           </div>
 
           {!isSupabaseConfigured && (
