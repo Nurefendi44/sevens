@@ -33,6 +33,9 @@ export function getCardBasePenalty(card, config = DEFAULT_CONFIG, globalAceDirec
     } else {
       faceValue = config.aceDefaultValue !== undefined ? config.aceDefaultValue : 11;
     }
+  } else if (card.rank >= 11 && card.rank <= 13) {
+    // Kartu J (11), Q (12), dan K (13) bernilai 10 poin
+    faceValue = 10;
   }
 
   return faceValue * multiplier;

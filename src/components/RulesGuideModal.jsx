@@ -69,6 +69,14 @@ export default function RulesGuideModal({ onClose }) {
             <p style={{ color: 'var(--text-secondary)' }}>
               Jika seorang pemain <strong>TIDAK MEMILIKI kartu wajib yang bisa dimainkan</strong> pada gilirannya (kartu 2..K atau 7), pemain <strong>BOLEH MENUTUP (CLOSE) SATU KARTU BEBAS</strong> dari tangannya. Kartu ini diletakkan tertutup face-down.
               <br />
+              <strong>Nilai Penalti Kartu yang Ditutup:</strong>
+              <br />
+              • Kartu angka 2 s/d 10 dinilai sesuai angkanya (<strong>-2 s/d -10</strong>).
+              <br />
+              • Kartu <strong>J, Q, dan K</strong> masing-masing bernilai <strong>-10</strong> (bukan -11, -12, -13).
+              <br />
+              • Kartu <strong>As</strong> bernilai <strong>-1</strong> (jika Tutup Rangkai Bawah) atau <strong>-11</strong> (jika Tutup Rangkai Atas).
+              <br />
               <em>*Catatan: Mengeluarkan kartu As untuk menutup rangkaian bersifat <strong>OPSIONAL</strong> (tidak wajib). Pemain tidak dipaksa menutup rangkaian dan bebas menyimpan kartu As untuk ronde berikutnya tanpa terkena FAULT.</em>
             </p>
             <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '6px', padding: '8px 12px', marginTop: '6px' }}>

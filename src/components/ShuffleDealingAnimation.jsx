@@ -18,6 +18,8 @@ export default function ShuffleDealingAnimation({
 }) {
   // Animation Phases: 'shuffle' | 'dealing' | 'revealing' | 'done'
   const [phase, setPhase] = useState('shuffle');
+  const [shuffleSubStage, setShuffleSubStage] = useState('wash'); // 'wash' | 'riffle1' | 'cut' | 'riffle2'
+  const [shuffleSecondsLeft, setShuffleSecondsLeft] = useState(15);
   const [totalDealt, setTotalDealt] = useState(0);
   const [bottomDealtCount, setBottomDealtCount] = useState(0);
   const [leftDealtCount, setLeftDealtCount] = useState(0);
@@ -28,6 +30,8 @@ export default function ShuffleDealingAnimation({
   const [isFadingOut, setIsFadingOut] = useState(false);
 
   const timerRef = useRef(null);
+  const shuffleTimersRef = useRef([]);
+  const countdownIntervalRef = useRef(null);
   const dealIntervalRef = useRef(null);
   const revealIntervalRef = useRef(null);
 
@@ -54,14 +58,19 @@ export default function ShuffleDealingAnimation({
   // Clean all timers
   const clearAllTimers = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     if (dealIntervalRef.current) clearInterval(dealIntervalRef.current);
     if (revealIntervalRef.current) clearInterval(revealIntervalRef.current);
+    shuffleTimersRef.current.forEach((t) => clearTimeout(t));
+    shuffleTimersRef.current = [];
   };
 
   useEffect(() => {
     if (!isActive) {
       clearAllTimers();
       setPhase('shuffle');
+      setShuffleSubStage('wash');
+      setShuffleSecondsLeft(15);
       setTotalDealt(0);
       setBottomDealtCount(0);
       setLeftDealtCount(0);
@@ -75,6 +84,8 @@ export default function ShuffleDealingAnimation({
 
     // Reset state for new animation run
     setPhase('shuffle');
+    setShuffleSubStage('wash');
+    setShuffleSecondsLeft(15);
     setTotalDealt(0);
     setBottomDealtCount(0);
     setLeftDealtCount(0);
@@ -85,13 +96,64 @@ export default function ShuffleDealingAnimation({
     setIsFadingOut(false);
 
     // =========================================================================
-    // STEP 1: SHUFFLE PHASE (0ms - 1100ms)
+    // STEP 1: AUTHENTIC CASINO SHUFFLE SEQUENCE (15 SECONDS MINIMUM)
     // =========================================================================
     audio.shuffleSound();
 
+    // 1-second interval countdown for 15s display
+    countdownIntervalRef.current = setInterval(() => {
+      setShuffleSecondsLeft((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+
+    const addShuffleTimer = (fn, delay) => {
+      const id = setTimeout(fn, delay);
+      shuffleTimersRef.current.push(id);
+    };
+
+    // Stage 1.1: 0s - 4s (Wash & Scramble on felt)
+    addShuffleTimer(() => {
+      audio.shuffleSound();
+    }, 2000);
+
+    // Stage 1.2: 4s - 8s (First Riffle Shuffle & Arch Bridge)
+    addShuffleTimer(() => {
+      setShuffleSubStage('riffle1');
+      audio.riffleFlutterSound();
+    }, 4000);
+
+    addShuffleTimer(() => {
+      audio.riffleFlutterSound();
+    }, 6200);
+
+    // Stage 1.3: 8s - 11.5s (Triple Strip Cut & Interlace)
+    addShuffleTimer(() => {
+      setShuffleSubStage('cut');
+      audio.deckCutTapSound();
+    }, 8000);
+
+    addShuffleTimer(() => {
+      audio.deckCutTapSound();
+    }, 9800);
+
+    // Stage 1.4: 11.5s - 15.2s (Final Fast Riffle & Casino Box Tap)
+    addShuffleTimer(() => {
+      setShuffleSubStage('riffle2');
+      audio.riffleFlutterSound();
+    }, 11500);
+
+    addShuffleTimer(() => {
+      audio.riffleFlutterSound();
+    }, 13300);
+
+    addShuffleTimer(() => {
+      audio.deckCutTapSound();
+    }, 14700);
+
+    // End of 15-second Shuffling: Transition to Dealing Phase at 15200ms
     timerRef.current = setTimeout(() => {
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
       // =======================================================================
-      // STEP 2: DEALING ONE-BY-ONE FACE-DOWN (1100ms - ~3600ms)
+      // STEP 2: DEALING ONE-BY-ONE FACE-DOWN
       // Cards dealt sequentially around the table
       // =======================================================================
       setPhase('dealing');
@@ -131,7 +193,7 @@ export default function ShuffleDealingAnimation({
           setRightDealtCount((prev) => Math.min(prev + 1, cardsPerHand));
         }
       }, 48);
-    }, 1100);
+    }, 15200);
 
     return () => {
       clearAllTimers();
@@ -226,25 +288,85 @@ export default function ShuffleDealingAnimation({
         <div className="dealing-center-stage">
           {phase === 'shuffle' && (
             <div className="shuffle-stage">
-              {/* Left Packet riffle */}
-              <div className="riffle-packet riffle-left">
-                <div className="packet-card" />
-                <div className="packet-card" />
-                <div className="packet-card" />
-              </div>
+              {/* STAGE A: TABLE WASH / SCRAMBLE (0s - 4s) */}
+              {shuffleSubStage === 'wash' && (
+                <div className="shuffle-wash-cluster">
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="wash-card-particle"
+                      style={{
+                        '--wash-angle': `${i * 30}deg`,
+                        '--wash-radius': `${38 + (i % 3) * 16}px`,
+                        '--wash-delay': `${(i % 4) * 0.15}s`,
+                      }}
+                    />
+                  ))}
+                  <div className="center-deck-core wash-core">
+                    <Sparkles size={26} className="shuffle-sparkle-icon" />
+                    <span className="deck-thickness-badge">TABLE WASH</span>
+                    <span className="deck-sub-badge">{totalCards} KARTU</span>
+                  </div>
+                </div>
+              )}
 
-              {/* Center Deck Core */}
-              <div className="center-deck-core">
-                <Sparkles size={28} className="shuffle-sparkle-icon" />
-                <span className="deck-thickness-badge">{totalCards} KARTU</span>
-              </div>
+              {/* STAGE B: RIFFLE 1 & ARCH BRIDGE (4s - 8s) */}
+              {shuffleSubStage === 'riffle1' && (
+                <div className="shuffle-riffle-cluster">
+                  <div className="riffle-packet riffle-left">
+                    <div className="packet-card" />
+                    <div className="packet-card" />
+                    <div className="packet-card" />
+                  </div>
+                  <div className="center-deck-core">
+                    <Sparkles size={24} className="shuffle-sparkle-icon" />
+                    <span className="deck-thickness-badge">RIFFLE & ARCH</span>
+                    <span className="deck-sub-badge">Tahap 2/4</span>
+                  </div>
+                  <div className="riffle-packet riffle-right">
+                    <div className="packet-card" />
+                    <div className="packet-card" />
+                    <div className="packet-card" />
+                  </div>
+                </div>
+              )}
 
-              {/* Right Packet riffle */}
-              <div className="riffle-packet riffle-right">
-                <div className="packet-card" />
-                <div className="packet-card" />
-                <div className="packet-card" />
-              </div>
+              {/* STAGE C: TRIPLE STRIP CUT & INTERLACE (8s - 11.5s) */}
+              {shuffleSubStage === 'cut' && (
+                <div className="shuffle-cut-cluster">
+                  <div className="cut-deck-packet cut-packet-1">
+                    <span className="cut-packet-tag">I</span>
+                  </div>
+                  <div className="cut-deck-packet cut-packet-2">
+                    <span className="cut-packet-tag">II</span>
+                  </div>
+                  <div className="cut-deck-packet cut-packet-3">
+                    <span className="cut-packet-tag">III</span>
+                  </div>
+                  <div className="cut-center-badge">
+                    <span>✂️ STRIP CUT</span>
+                  </div>
+                </div>
+              )}
+
+              {/* STAGE D: FINAL FAST RIFFLE & BOX TAP (11.5s - 15.2s) */}
+              {shuffleSubStage === 'riffle2' && (
+                <div className="shuffle-riffle-cluster cluster-fast">
+                  <div className="riffle-packet riffle-left fast">
+                    <div className="packet-card" />
+                    <div className="packet-card" />
+                  </div>
+                  <div className="center-deck-core core-glow-gold">
+                    <Sparkles size={28} className="shuffle-sparkle-icon" />
+                    <span className="deck-thickness-badge">FINAL SQUARE</span>
+                    <span className="deck-sub-badge">SIAP MAIN</span>
+                  </div>
+                  <div className="riffle-packet riffle-right fast">
+                    <div className="packet-card" />
+                    <div className="packet-card" />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -287,16 +409,44 @@ export default function ShuffleDealingAnimation({
         </div>
       </div>
 
-      {/* STATUS BANNER */}
+      {/* STATUS BANNER WITH REALTIME 15S PROGRESS */}
       <div className="dealing-status-banner">
         <span className="status-pulse-dot" />
-        <span className="status-text">
-          {phase === 'shuffle' && `Dealer mengocok ${totalCards} kartu remi secara acak...`}
-          {phase === 'dealing' &&
-            `Membagikan kartu tertutup satu per satu... Putaran ${currentRound}/${cardsPerHand} (${totalDealt}/${totalCards})`}
-          {phase === 'revealing' &&
-            'Semua kartu tertutup terbagi! Membuka kartu tangan Anda...'}
-        </span>
+        <div className="status-banner-content">
+          <div className="status-text-row">
+            <span className="status-text">
+              {phase === 'shuffle' && (
+                shuffleSubStage === 'wash'
+                  ? `Tahap 1/4: Dealer mengacak seluruh ${totalCards} kartu di meja (Casino Scramble Wash)...`
+                  : shuffleSubStage === 'riffle1'
+                  ? `Tahap 2/4: Riffle Shuffle & Arch Bridge — Menyisipkan kartu secara bersilang...`
+                  : shuffleSubStage === 'cut'
+                  ? `Tahap 3/4: Triple Strip Cut — Memotong dan membalik segmen tumpukan kartu...`
+                  : `Tahap 4/4: Final Riffle & Box Tap — Dek teracak sempurna, siap dibagikan!`
+              )}
+              {phase === 'dealing' &&
+                `Membagikan kartu tertutup satu per satu... Putaran ${currentRound}/${cardsPerHand} (${totalDealt}/${totalCards})`}
+              {phase === 'revealing' &&
+                'Semua kartu tertutup terbagi! Membuka kartu tangan Anda...'}
+            </span>
+            {phase === 'shuffle' && (
+              <span className="status-countdown-tag">
+                ⏳ <strong>{shuffleSecondsLeft}s</strong>
+              </span>
+            )}
+          </div>
+
+          {phase === 'shuffle' && (
+            <div className="shuffle-progress-track">
+              <div
+                className="shuffle-progress-fill"
+                style={{
+                  width: `${Math.min(100, Math.max(0, Math.round(((15.2 - shuffleSecondsLeft) / 15.2) * 100)))}%`,
+                }}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* BOTTOM: Player Hand Tray with Flip Cards */}

@@ -201,6 +201,66 @@ class AudioService {
   }
 
   /**
+   * Sound effect for fast cascading riffle flutter
+   */
+  riffleFlutterSound() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+
+    try {
+      const now = this.ctx.currentTime;
+      for (let i = 0; i < 18; i++) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const t = now + i * 0.024;
+
+        osc.type = 'triangle';
+        const freq = 210 + (i % 6) * 35 + Math.random() * 25;
+        osc.frequency.setValueAtTime(freq, t);
+        osc.frequency.exponentialRampToValueAtTime(80, t + 0.024);
+
+        gain.gain.setValueAtTime(0.14, t);
+        gain.gain.exponentialRampToValueAtTime(0.005, t + 0.024);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(t);
+        osc.stop(t + 0.025);
+      }
+    } catch (e) {}
+  }
+
+  /**
+   * Sound effect for deck cut & solid casino table tap
+   */
+  deckCutTapSound() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+
+    try {
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(160, now);
+      osc.frequency.exponentialRampToValueAtTime(50, now + 0.09);
+
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.09);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.09);
+    } catch (e) {}
+  }
+
+  /**
    * Sound effect for dealing a card (crisp flick/whoosh)
    */
   dealCardSound() {

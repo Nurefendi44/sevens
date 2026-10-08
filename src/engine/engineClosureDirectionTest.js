@@ -178,6 +178,23 @@ const scoresBottom = calculateScore(stateBottom);
 console.log('Closed Ace penalty under "bottom" direction (should be -1):', scoresBottom['player_1'].baseClosedScore);
 if (scoresBottom['player_1'].baseClosedScore !== -1) {
   throw new Error(`FAIL: Expected -1 for Ace under "bottom", got ${scoresBottom['player_1'].baseClosedScore}`);
+}// Test J, Q, K penalty is -10 (not -11, -12, -13)
+const stateFaceCards = {
+  ...state,
+  closedCards: {
+    player_1: [
+      { id: 'spades-11', suit: SUITS.SPADES, rank: 11, label: 'J', symbol: '♠' },
+      { id: 'hearts-12', suit: SUITS.HEARTS, rank: 12, label: 'Q', symbol: '♥' },
+      { id: 'clubs-13', suit: SUITS.CLUBS, rank: 13, label: 'K', symbol: '♣' },
+      { id: 'diamonds-10', suit: SUITS.DIAMONDS, rank: 10, label: '10', symbol: '♦' },
+      { id: 'diamonds-5', suit: SUITS.DIAMONDS, rank: 5, label: '5', symbol: '♦' },
+    ],
+  },
+};
+const scoresFace = calculateScore(stateFaceCards);
+console.log('J, Q, K, 10, 5 penalty total (should be -45):', scoresFace['player_1'].baseClosedScore);
+if (scoresFace['player_1'].baseClosedScore !== -45) {
+  throw new Error(`FAIL: Expected -45 for J(-10)+Q(-10)+K(-10)+10(-10)+5(-5), got ${scoresFace['player_1'].baseClosedScore}`);
 }
 
 console.log('=== TEST 4: TUTUP RANGKAI BAWAH (DIAMONDS 2 -> A) ===');

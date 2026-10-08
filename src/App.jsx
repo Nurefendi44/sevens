@@ -103,15 +103,82 @@ export default function App() {
     return session.roomCode ? 'multiplayer' : null;
   });
 
-  // Multiplayer Room & Identity State
-  const [currentRoom, setCurrentRoom] = useState(null);
+  // Multiplayer Room & Identity State (Synchronously restored from cache on refresh)
+  const [currentRoom, setCurrentRoom] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      const session = getActiveSession();
+      if (session.roomCode) {
+        try {
+          const cached = localStorage.getItem('sevens_cached_room');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && parsed.code === session.roomCode) {
+              return parsed;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+    return null;
+  });
+
   const [myPlayerId, setMyPlayerId] = useState(() => getLocalPlayerId());
   const [copiedRoomCode, setCopiedRoomCode] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+  const [isReconnecting, setIsReconnecting] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      const session = getActiveSession();
+      return Boolean(session.roomCode && !localStorage.getItem('sevens_cached_room'));
+    }
+    return false;
+  });
 
-  // Game Engine State (Single source of truth)
+  // Game Engine State (Single source of truth, restored from cached room on refresh if available)
   const [gameConfig, setGameConfig] = useState(DEFAULT_CONFIG);
-  const [gameState, setGameState] = useState(() => initGame(DEFAULT_CONFIG));
+  const [gameState, setGameState] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      const session = getActiveSession();
+      if (session.roomCode) {
+        try {
+          const cached = localStorage.getItem('sevens_cached_room');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && parsed.code === session.roomCode && parsed.game_state) {
+              return parsed.game_state;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+    return initGame(DEFAULT_CONFIG);
+  });
+
+  // Keep localStorage cached room synchronized
+  useEffect(() => {
+    if (typeof localStorage !== 'undefined') {
+      if (currentRoom) {
+        localStorage.setItem('sevens_cached_room', JSON.stringify(currentRoom));
+      } else {
+        localStorage.removeItem('sevens_cached_room');
+      }
+    }
+  }, [currentRoom]);
+
+  // Synchronize game_state inside cached room when it changes
+  useEffect(() => {
+    if (typeof localStorage !== 'undefined' && currentRoom?.code && gameState) {
+      try {
+        const cached = localStorage.getItem('sevens_cached_room');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.code === currentRoom.code) {
+            parsed.game_state = gameState;
+            localStorage.setItem('sevens_cached_room', JSON.stringify(parsed));
+          }
+        }
+      } catch (e) {}
+    }
+  }, [gameState, currentRoom?.code]);
 
   // Local UI State
   const [handSortBy, setHandSortBy] = useState('suit');
@@ -128,12 +195,13 @@ export default function App() {
   const prevTurnNumberRef = useRef(gameState.turnNumber);
 
   // ---------------------------------------------------------------------------
-  // 1. RECONNECT HANDLING (Check localStorage on mount)
+  // 1. RECONNECT HANDLING (Check server state on mount & silently update cache)
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const session = getActiveSession();
     if (session.roomCode && isSupabaseConfigured) {
       multiplayerAdapter.getRoom(session.roomCode).then(({ room, error }) => {
+        setIsReconnecting(false);
         if (room && !error) {
           setCurrentRoom(room);
           setGameMode('multiplayer');
@@ -143,11 +211,17 @@ export default function App() {
           if (room.game_state) {
             setGameState(room.game_state);
           }
-          showToast(`Terhubung kembali ke Room ${room.code}`);
+          // Only show toast if user reconnected cleanly
+          showToast(`Terhubung ke Room ${room.code}`);
         } else {
           clearLocalSession();
+          setCurrentRoom(null);
         }
+      }).catch(() => {
+        setIsReconnecting(false);
       });
+    } else {
+      setIsReconnecting(false);
     }
   }, []);
 
@@ -1000,11 +1074,32 @@ export default function App() {
           sortBy={handSortBy}
           onToggleSort={() => setHandSortBy((prev) => (prev === 'suit' ? 'rank' : 'suit'))}
           isCurrentTurn={isMyTurn}
+          closedCards={gameState?.closedCards?.[trayPlayer?.id] || []}
+          globalAceDirection={gameState?.globalAceDirection}
+          config={gameConfig}
         />
       </main>
 
+      {/* MULTIPLAYER RECONNECTING OVERLAY */}
+      {isReconnecting && !currentRoom && (
+        <div className="multiplayer-screen-overlay">
+          <div className="multiplayer-card" style={{ textAlign: 'center', padding: '2.5rem 1.5rem', maxWidth: '380px', margin: 'auto' }}>
+            <div className="lobby-status-pill" style={{ margin: '0 auto 1rem' }}>
+              <span className="pulsing-green-dot" />
+              Menghubungkan
+            </div>
+            <h3 style={{ color: '#fbbf24', marginBottom: '0.5rem', fontSize: '1.15rem' }}>
+              Kembali ke Room...
+            </h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: '1.4' }}>
+              Menyinkronkan status meja dan kartu dari server...
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* MULTIPLAYER LOBBY / ROOM SCREEN OVERLAY */}
-      {showMultiplayerLobby && (
+      {!isReconnecting && showMultiplayerLobby && (
         <MultiplayerLobby
           room={currentRoom}
           myPlayerId={myPlayerId}

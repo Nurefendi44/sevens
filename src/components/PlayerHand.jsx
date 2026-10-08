@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import CardView from './CardView.jsx';
 import { cardEquals } from '../engine/deck.js';
-import { ArrowUpDown } from 'lucide-react';
+import { ArrowUpDown, Lock, ChevronDown, ChevronUp, Eye } from 'lucide-react';
+import { getCardBasePenalty } from '../engine/scoring.js';
 
 export default function PlayerHand({
   player,
@@ -13,8 +14,16 @@ export default function PlayerHand({
   sortBy = 'suit',
   onToggleSort,
   isCurrentTurn = false,
+  closedCards = [],
+  globalAceDirection = null,
+  config = null,
 }) {
+  const [showClosedDetails, setShowClosedDetails] = useState(false);
   const isSelectedInHand = selectedCard && hand.some(c => cardEquals(c, selectedCard));
+
+  const totalClosedPenalty = closedCards.reduce((sum, c) => {
+    return sum + getCardBasePenalty(c, config || {}, globalAceDirection);
+  }, 0);
 
   return (
     <div className="player-tray">
@@ -25,13 +34,30 @@ export default function PlayerHand({
             <span style={{ fontSize: '1.25rem' }}>{player.avatar}</span>
             <span>{player.name}</span>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-              ({hand.length} kartu)
+              ({hand.length} kartu di tangan)
             </span>
           </div>
         </div>
 
-        {/* Card Sorting Toggle */}
+        {/* Tray Toggles: Sorting & Closed Cards Detail */}
         <div className="tray-toggles">
+          {/* Closed Cards Inspection Toggle */}
+          <button
+            className={`toggle-chip toggle-chip-closed ${showClosedDetails ? 'active' : ''} ${
+              closedCards.length > 0 ? 'has-cards' : ''
+            }`}
+            onClick={() => setShowClosedDetails(!showClosedDetails)}
+            title="Lihat rincian kartu yang sudah Anda tutup sendiri beserta estimasi penaltinya"
+          >
+            <Lock size={13} />
+            <span>Ditutup: <strong>{closedCards.length}</strong></span>
+            {closedCards.length > 0 && (
+              <span className="tray-closed-pts-chip">({totalClosedPenalty} pts)</span>
+            )}
+            {showClosedDetails ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+
+          {/* Card Sorting Toggle */}
           <button
             className="toggle-chip"
             onClick={onToggleSort}
@@ -42,6 +68,59 @@ export default function PlayerHand({
           </button>
         </div>
       </div>
+
+      {/* DETAILED CLOSED CARDS DRAWER (When open) */}
+      {showClosedDetails && (
+        <div className="closed-cards-drawer">
+          <div className="closed-drawer-header">
+            <div className="closed-drawer-title-row">
+              <span className="closed-lock-icon">🔒</span>
+              <span className="closed-drawer-title">
+                Rincian Kartu yang Anda Tutup ({closedCards.length} kartu)
+              </span>
+              <span className="closed-drawer-badge-pts">
+                Total Penalti: <strong>{totalClosedPenalty} poin</strong>
+              </span>
+            </div>
+            <button
+              className="btn-close-drawer-x"
+              onClick={() => setShowClosedDetails(false)}
+              title="Tutup Panel"
+            >
+              ✕
+            </button>
+          </div>
+
+          {closedCards.length === 0 ? (
+            <div className="closed-empty-box">
+              <span>🂠 Belum ada kartu yang Anda tutup. Kartu yang Anda tutup saat tidak bisa melangkah akan muncul di sini secara detail.</span>
+            </div>
+          ) : (
+            <div className="closed-cards-flex-list">
+              {closedCards.map((c, idx) => {
+                const penalty = getCardBasePenalty(c, config || {}, globalAceDirection);
+                const isRed = c.suit === 'hearts' || c.suit === 'diamonds';
+
+                return (
+                  <div
+                    key={c.id || idx}
+                    className={`closed-card-tag ${isRed ? 'tag-red' : 'tag-black'}`}
+                    title={`Kartu ${c.label}${c.symbol}: penalti ${penalty} poin`}
+                  >
+                    <span className="closed-tag-symbol">{c.symbol}</span>
+                    <span className="closed-tag-rank">{c.label}</span>
+                    <span className="closed-tag-pts">{penalty}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="closed-drawer-footer-note">
+            ℹ️ <em>Hitungan penalti: Kartu 2-10 bernilai -2 s/d -10. <strong>Kartu J, Q, dan K masing-masing bernilai -10</strong>. Kartu As bernilai {globalAceDirection === 'bottom' ? '-1 (Tutup Bawah)' : globalAceDirection === 'top' ? '-11 (Tutup Atas)' : '-1 / -11'}.</em>
+          </div>
+        </div>
+      )}
 
       {/* Cards Fan / Row - All cards visually equal, NO hints */}
       <div className="hand-cards-container">

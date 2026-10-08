@@ -65,6 +65,7 @@ export function setLocalSession(playerId, name, roomCode) {
 export function clearLocalSession() {
   if (typeof localStorage === 'undefined') return;
   localStorage.removeItem(STORAGE_ROOM_CODE);
+  localStorage.removeItem('sevens_cached_room');
 }
 
 /**
