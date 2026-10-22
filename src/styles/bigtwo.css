@@ -1,12 +1,11 @@
 /* ==============================================================================
    BIG TWO (CAPSA BANTING) - CASINO GREEN FELT STYLES & MOBILE GRID VIEW
-   Inspired by bigtwo.vercel.app reference design
    ============================================================================== */
 
 .bigtwo-table-felt {
   position: relative;
   width: 100%;
-  min-height: calc(100vh - 85px);
+  min-height: calc(100vh - 70px);
   background: radial-gradient(circle at 50% 45%, #166534 0%, #14532d 55%, #052e16 100%);
   border: 4px solid #1e3a1e;
   border-radius: 20px;
@@ -14,8 +13,8 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 1rem 0.75rem;
-  overflow: hidden;
+  padding: 0.85rem 0.75rem 4.75rem 0.75rem;
+  overflow-x: hidden;
   box-sizing: border-box;
 }
 
@@ -30,12 +29,12 @@
 
 .bigtwo-watermark {
   position: absolute;
-  top: 45%;
+  top: 42%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 5.5rem;
+  font-size: clamp(2.8rem, 7vw, 5.5rem);
   font-weight: 900;
-  color: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.035);
   letter-spacing: 0.2em;
   pointer-events: none;
   user-select: none;
@@ -49,37 +48,37 @@
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  gap: 1rem;
+  gap: 0.65rem;
   width: 100%;
   z-index: 10;
   flex-wrap: wrap;
 }
 
 .bigtwo-opponent-card {
-  background: rgba(15, 23, 42, 0.9);
+  background: rgba(15, 23, 42, 0.85);
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 12px;
-  padding: 0.5rem 0.85rem;
+  padding: 0.45rem 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.35rem;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
   transition: all 0.25s ease;
-  min-width: 160px;
+  min-width: 140px;
 }
 
 .bigtwo-opponent-card.active-turn {
   border-color: #38bdf8;
-  box-shadow: 0 0 20px rgba(56, 189, 248, 0.5), 0 4px 15px rgba(0, 0, 0, 0.6);
-  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.45), 0 4px 15px rgba(0, 0, 0, 0.6);
+  transform: translateY(-2px);
 }
 
 .bigtwo-opp-header {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.82rem;
+  gap: 0.35rem;
+  font-size: 0.78rem;
   color: #f1f5f9;
 }
 
@@ -94,12 +93,11 @@
 .turn-indicator-badge {
   background: #38bdf8;
   color: #0f172a;
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 800;
-  padding: 0.1rem 0.45rem;
-  border-radius: 8px;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
   margin-left: auto;
-  animation: pulse 1.5s infinite;
 }
 
 .bigtwo-opp-cards-fan {
@@ -110,8 +108,8 @@
 }
 
 .bigtwo-mini-card-back {
-  width: 18px;
-  height: 28px;
+  width: 16px;
+  height: 24px;
   background: linear-gradient(135deg, #1e3a8a, #0369a1);
   border: 1px solid #7dd3fc;
   border-radius: 3px;
@@ -120,10 +118,10 @@
 }
 
 .opp-more-cards {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 700;
   color: #cbd5e1;
-  margin-left: 6px;
+  margin-left: 5px;
 }
 
 /* ------------------------------------------------------------------------------
@@ -134,7 +132,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin: 0.75rem 0;
+  margin: 0.5rem 0;
   z-index: 10;
   position: relative;
 }
@@ -144,25 +142,25 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 1.25rem 2rem;
-  border: 2px dashed rgba(255, 255, 255, 0.2);
-  border-radius: 16px;
-  background: rgba(15, 23, 42, 0.4);
+  padding: 0.85rem 1.25rem;
+  border: 1.5px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.35);
   color: #cbd5e1;
-  gap: 0.35rem;
+  gap: 0.25rem;
   text-align: center;
-  max-width: 480px;
+  max-width: 440px;
 }
 
 .free-turn-badge {
-  font-size: 1.15rem;
+  font-size: 0.95rem;
   font-weight: 800;
   color: #38bdf8;
   letter-spacing: 0.05em;
 }
 
 .free-turn-text {
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   color: #94a3b8;
 }
 
@@ -170,29 +168,29 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.45rem;
 }
 
 .trick-meta-banner {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 20px;
-  padding: 0.35rem 1rem;
-  font-size: 0.82rem;
+  gap: 0.45rem;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 0.28rem 0.85rem;
+  font-size: 0.78rem;
   color: #e2e8f0;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 
 .trick-combo-badge {
   background: linear-gradient(135deg, #0284c7, #2563eb);
   color: #ffffff;
-  padding: 0.15rem 0.6rem;
-  border-radius: 10px;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
   font-weight: 800;
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -201,90 +199,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  min-height: 100px;
+  gap: 0.4rem;
+  min-height: 86px;
 }
 
 .table-card-item {
-  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.6));
-  transform: translateY(0);
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55));
   transition: transform 0.2s ease;
-}
-
-/* ------------------------------------------------------------------------------
-   TURN BANNER ANNOUNCEMENT (🔥 GILIRAN ANDA!)
-   ------------------------------------------------------------------------------ */
-.bigtwo-your-turn-banner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  background: linear-gradient(135deg, rgba(234, 88, 12, 0.95), rgba(217, 119, 6, 0.95));
-  color: #ffffff;
-  padding: 0.5rem 1.25rem;
-  border-radius: 24px;
-  font-weight: 800;
-  font-size: 0.95rem;
-  letter-spacing: 0.05em;
-  box-shadow: 0 0 25px rgba(234, 88, 12, 0.6), 0 4px 15px rgba(0, 0, 0, 0.5);
-  margin: 0 auto 0.5rem auto;
-  z-index: 15;
-  animation: pulseGlow 1.8s infinite;
-}
-
-@keyframes pulseGlow {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 20px rgba(234, 88, 12, 0.6);
-  }
-  50% {
-    transform: scale(1.03);
-    box-shadow: 0 0 32px rgba(234, 88, 12, 0.9);
-  }
-}
-
-/* ------------------------------------------------------------------------------
-   ACTION BOX (Take your action!) - Matching Reference Design
-   ------------------------------------------------------------------------------ */
-.bigtwo-action-box {
-  background: rgba(15, 23, 42, 0.95);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 14px;
-  padding: 0.75rem 1.25rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.6rem;
-  width: 100%;
-  max-width: 520px;
-  margin: 0 auto 0.75rem auto;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
-  z-index: 25;
-  transition: all 0.3s ease;
-}
-
-.bigtwo-action-box.is-my-turn {
-  border-color: #38bdf8;
-  box-shadow: 0 0 25px rgba(56, 189, 248, 0.35), 0 8px 30px rgba(0, 0, 0, 0.6);
-}
-
-.action-box-header {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 0.15rem;
-}
-
-.action-box-header strong {
-  font-size: 1rem;
-  color: #f8fafc;
-}
-
-.action-box-header span {
-  font-size: 0.75rem;
-  color: #94a3b8;
 }
 
 /* ------------------------------------------------------------------------------
@@ -292,29 +213,28 @@
    ------------------------------------------------------------------------------ */
 .bigtwo-alert-toast {
   position: fixed;
-  top: 75px;
+  top: 66px;
   left: 50%;
   transform: translateX(-50%);
-  background: linear-gradient(135deg, rgba(153, 27, 27, 0.96), rgba(185, 28, 28, 0.96));
-  backdrop-filter: blur(12px);
-  border: 1px solid #f87171;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(239, 68, 68, 0.4);
+  background: rgba(153, 27, 27, 0.92);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(248, 113, 113, 0.6);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   color: #ffffff;
-  padding: 0.65rem 1.15rem;
-  border-radius: 12px;
-  display: flex;
+  padding: 0.45rem 0.95rem;
+  border-radius: 999px;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.85rem;
+  gap: 0.6rem;
   z-index: 1000;
-  max-width: 90vw;
-  animation: alertBounceIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  max-width: 92vw;
+  animation: alertBounceIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes alertBounceIn {
   0% {
     opacity: 0;
-    transform: translate(-50%, -15px) scale(0.92);
+    transform: translate(-50%, -10px) scale(0.95);
   }
   100% {
     opacity: 1;
@@ -325,8 +245,8 @@
 .alert-toast-body {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.88rem;
+  gap: 0.4rem;
+  font-size: 0.8rem;
   font-weight: 700;
 }
 
@@ -343,130 +263,161 @@
   background: rgba(255, 255, 255, 0.15);
   border: none;
   color: #ffffff;
-  border-radius: 6px;
-  width: 24px;
-  height: 24px;
+  border-radius: 999px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.15s ease;
   flex-shrink: 0;
 }
 
-.btn-alert-dismiss:hover {
-  background: rgba(255, 255, 255, 0.3);
+/* ------------------------------------------------------------------------------
+   FLOATING BOTTOM TRANSPARENT ACTION DOCK
+   ------------------------------------------------------------------------------ */
+.bigtwo-floating-dock-wrapper {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: 96vw;
+  pointer-events: none;
 }
 
-.action-combo-analyzer {
+.bigtwo-floating-combo-pill {
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(56, 189, 248, 0.3);
-  padding: 0.2rem 0.65rem;
-  border-radius: 10px;
-  font-size: 0.78rem;
-  color: #38bdf8;
-  font-weight: 700;
+  gap: 0.35rem;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  padding: 0.22rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  color: #7dd3fc;
+  font-weight: 800;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
 }
 
-.action-box-buttons {
-  display: flex;
+.bigtwo-floating-dock {
+  pointer-events: auto;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-  width: 100%;
+  gap: 0.45rem;
+  padding: 0.42rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.68);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.bigtwo-floating-dock.is-my-turn {
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 18px rgba(56, 189, 248, 0.22);
 }
 
 .btn-action-play {
-  background: linear-gradient(135deg, #15803d, #16a34a);
+  background: linear-gradient(135deg, #16a34a, #15803d);
   color: #ffffff;
-  border: 1px solid #4ade80;
-  border-radius: 8px;
-  padding: 0.55rem 1.25rem;
-  font-weight: 700;
-  font-size: 0.85rem;
+  border: 1px solid rgba(74, 222, 128, 0.5);
+  border-radius: 999px;
+  padding: 0.5rem 1.1rem;
+  font-weight: 800;
+  font-size: 0.82rem;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
+  gap: 0.38rem;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.35);
   transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .btn-action-play:not(:disabled):hover {
-  background: linear-gradient(135deg, #16a34a, #22c55e);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(22, 163, 74, 0.6);
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  transform: translateY(-1px);
 }
 
 .btn-action-play:disabled {
-  opacity: 0.45;
+  opacity: 0.42;
   cursor: not-allowed;
   box-shadow: none;
 }
 
 .btn-action-pass {
-  background: linear-gradient(135deg, #0284c7, #2563eb);
+  background: rgba(2, 132, 199, 0.85);
   color: #ffffff;
-  border: 1px solid #60a5fa;
-  border-radius: 8px;
-  padding: 0.55rem 1.15rem;
-  font-weight: 700;
-  font-size: 0.85rem;
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  border-radius: 999px;
+  padding: 0.5rem 0.95rem;
+  font-weight: 800;
+  font-size: 0.82rem;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+  gap: 0.35rem;
   transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .btn-action-pass:not(:disabled):hover {
-  background: linear-gradient(135deg, #0369a1, #1d4ed8);
-  transform: translateY(-2px);
+  background: #0284c7;
+  transform: translateY(-1px);
 }
 
 .btn-action-pass:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .btn-action-deselect {
-  background: rgba(217, 119, 6, 0.2);
-  border: 1px solid rgba(245, 158, 11, 0.5);
-  color: #fbbf24;
-  border-radius: 8px;
-  padding: 0.55rem 0.85rem;
-  font-weight: 600;
-  font-size: 0.8rem;
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #fde68a;
+  border-radius: 999px;
+  padding: 0.5rem 0.8rem;
+  font-weight: 700;
+  font-size: 0.78rem;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.3rem;
   transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .btn-action-deselect:hover {
-  background: rgba(217, 119, 6, 0.35);
+  background: rgba(245, 158, 11, 0.32);
 }
 
 .btn-action-rules {
   background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #cbd5e1;
-  border-radius: 8px;
-  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #e2e8f0;
+  border-radius: 999px;
+  width: 34px;
+  height: 34px;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .btn-action-rules:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* ------------------------------------------------------------------------------
@@ -477,7 +428,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
   z-index: 20;
 }
 
@@ -487,77 +438,68 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
   flex-wrap: wrap;
-  padding: 0 0.5rem;
+  padding: 0 0.25rem;
 }
 
 .tray-hand-info {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .tray-label {
-  font-size: 0.95rem;
+  font-size: 0.88rem;
   color: #ffffff;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .tray-label strong {
   color: #38bdf8;
 }
 
-/* Orange Toggle Hand Grid View Button (Matching Reference Screenshot) */
-.btn-toggle-grid {
-  background: #c2410c;
-  color: #ffffff;
-  border: 1px solid #ea580c;
-  border-radius: 8px;
-  padding: 0.45rem 0.95rem;
-  font-weight: 700;
-  font-size: 0.82rem;
-  cursor: pointer;
-  display: flex;
+.bigtwo-inline-turn-pill {
+  display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  box-shadow: 0 4px 10px rgba(194, 65, 12, 0.4);
+  gap: 0.25rem;
+  background: linear-gradient(135deg, #ea580c, #d97706);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0.18rem 0.6rem;
+  border-radius: 999px;
+  box-shadow: 0 0 12px rgba(234, 88, 12, 0.5);
+}
+
+.btn-toggle-grid {
+  background: rgba(15, 23, 42, 0.75);
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  padding: 0.38rem 0.85rem;
+  font-weight: 700;
+  font-size: 0.76rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   transition: all 0.2s ease;
 }
 
 .btn-toggle-grid:hover {
-  background: #ea580c;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(234, 88, 12, 0.5);
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .btn-toggle-grid.active-grid {
-  background: #0284c7;
+  background: rgba(2, 132, 199, 0.85);
   border-color: #38bdf8;
-  box-shadow: 0 4px 10px rgba(2, 132, 199, 0.4);
-}
-
-/* Soft Amber Pill Deselect All Button */
-.btn-deselect-pill {
-  background: #fde68a;
-  color: #78350f;
-  border: 1px solid #fcd34d;
-  border-radius: 20px;
-  padding: 0.25rem 0.75rem;
-  font-weight: 700;
-  font-size: 0.78rem;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-  transition: all 0.2s ease;
-}
-
-.btn-deselect-pill:hover {
-  background: #fef3c7;
-  transform: translateY(-1px);
+  color: #ffffff;
 }
 
 /* ------------------------------------------------------------------------------
-   CARDS CONTAINER: FAN VIEW vs GRID VIEW
+   CARDS CONTAINER: FAN VIEW vs GRID VIEW (NO OVERFLOW-X WOBBLE)
    ------------------------------------------------------------------------------ */
 .bigtwo-cards-container {
   width: 100%;
@@ -565,35 +507,24 @@
   box-sizing: border-box;
 }
 
-/* FAN MODE: Dynamic Overlap with Guaranteed Rank & Suit Symbol Visibility */
+/* FAN MODE */
 .bigtwo-cards-container.mode-fan {
   display: flex;
   align-items: flex-end;
-  padding: 1.25rem 1rem 1.75rem 1rem;
+  padding: 1.25rem 0.75rem 1.25rem 0.75rem;
   overflow-x: auto;
   overflow-y: visible;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   max-width: 100%;
   box-sizing: border-box;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(56, 189, 248, 0.45) rgba(15, 23, 42, 0.3);
+  scrollbar-width: none;
 }
 
 .bigtwo-cards-container.mode-fan::-webkit-scrollbar {
-  height: 6px;
+  display: none;
 }
 
-.bigtwo-cards-container.mode-fan::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.4);
-  border-radius: 999px;
-}
-
-.bigtwo-cards-container.mode-fan::-webkit-scrollbar-thumb {
-  background: rgba(56, 189, 248, 0.5);
-  border-radius: 999px;
-}
-
-/* Center when cards fit on screen, naturally start from left when overflowing */
 .bigtwo-cards-container.mode-fan > .bigtwo-card-slot:first-child {
   margin-left: auto;
 }
@@ -602,69 +533,80 @@
   margin-right: auto;
 }
 
-/* Overlap spacing for 2nd card onwards via CSS variables */
 .bigtwo-cards-container.mode-fan > .bigtwo-card-slot + .bigtwo-card-slot {
   margin-left: var(--fan-overlap, -42px);
 }
 
-@media (max-width: 768px) {
-  .bigtwo-cards-container.mode-fan {
-    padding: 1rem 0.75rem 1.5rem 0.75rem;
-  }
-
-  .bigtwo-cards-container.mode-fan > .bigtwo-card-slot + .bigtwo-card-slot {
-    margin-left: var(--fan-overlap-mobile, -26px);
-  }
-}
-
-/* GRID MODE: Multi-row Grid for Mobile/Desktop */
+/* GRID MODE: Strictly NO horizontal scroll (overflow-x: hidden) */
 .bigtwo-cards-container.mode-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
   gap: 8px;
-  padding: 0.75rem 0.5rem 1rem 0.5rem;
-  max-height: 280px;
+  padding: 0.75rem 0.65rem 4.25rem 0.65rem;
+  max-height: 320px;
   overflow-y: auto;
-  background: rgba(15, 23, 42, 0.4);
-  border-radius: 14px;
+  overflow-x: hidden !important;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  background: rgba(15, 23, 42, 0.42);
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
+}
+
+.bigtwo-cards-container.mode-grid .bigtwo-card-slot {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.bigtwo-cards-container.mode-grid .playing-card {
+  width: 100% !important;
+  max-width: 66px;
+  height: auto !important;
+  aspect-ratio: 50 / 72;
 }
 
 .bigtwo-card-slot {
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
   cursor: pointer;
   flex-shrink: 0;
 }
 
-/* Card Slot Shadow to make overlapping cards distinct & 3D */
 .bigtwo-cards-container.mode-fan .bigtwo-card-slot .playing-card {
   box-shadow: -3px 0 8px rgba(0, 0, 0, 0.35), 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .bigtwo-cards-container.mode-fan .bigtwo-card-slot:hover {
-  transform: translateY(-12px);
+  transform: translateY(-10px);
   z-index: 50 !important;
 }
 
 .bigtwo-cards-container.mode-fan .bigtwo-card-slot.selected {
-  transform: translateY(-24px);
+  transform: translateY(-20px);
   z-index: 60 !important;
 }
 
+/* In Grid mode, lift vertically without horizontal scaling so edges never overflow */
 .bigtwo-cards-container.mode-grid .bigtwo-card-slot:hover {
-  transform: scale(1.08);
-  z-index: 50 !important;
+  transform: translateY(-3px);
+  z-index: 20 !important;
 }
 
 .bigtwo-cards-container.mode-grid .bigtwo-card-slot.selected {
-  transform: scale(1.12);
-  z-index: 60 !important;
+  transform: translateY(-6px);
+  z-index: 30 !important;
+}
+
+.bigtwo-cards-container.mode-grid .bigtwo-card-slot.selected .playing-card {
+  transform: none !important;
 }
 
 .bigtwo-card-slot.selected .playing-card,
 .bigtwo-card-slot.selected .card {
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.9), 0 8px 20px rgba(0, 0, 0, 0.7) !important;
-  border: 2px solid #38bdf8 !important;
+  box-shadow: 0 0 0 2.5px #38bdf8, 0 8px 18px rgba(0, 0, 0, 0.65) !important;
+  border-color: #38bdf8 !important;
 }
 
 /* ------------------------------------------------------------------------------
@@ -672,47 +614,44 @@
    ------------------------------------------------------------------------------ */
 @media (max-width: 768px) {
   .bigtwo-table-felt {
-    padding: 0.5rem;
-    min-height: calc(100vh - 65px);
+    padding: 0.5rem 0.5rem 4.75rem 0.5rem;
+    min-height: calc(100vh - 58px);
     border-radius: 12px;
   }
 
-  .bigtwo-watermark {
-    font-size: 3.5rem;
-  }
-
   .bigtwo-opponent-card {
-    min-width: 130px;
-    padding: 0.35rem 0.6rem;
+    min-width: 118px;
+    padding: 0.35rem 0.55rem;
   }
 
   .bigtwo-mini-card-back {
-    width: 14px;
-    height: 22px;
+    width: 13px;
+    height: 20px;
+  }
+
+  .bigtwo-cards-container.mode-fan {
+    padding: 1rem 0.5rem 1rem 0.5rem;
+  }
+
+  .bigtwo-cards-container.mode-fan > .bigtwo-card-slot + .bigtwo-card-slot {
+    margin-left: var(--fan-overlap-mobile, -26px);
   }
 
   .bigtwo-cards-container.mode-grid {
-    grid-template-columns: repeat(7, 1fr);
-    gap: 4px;
-    max-height: 240px;
-  }
-
-  .bigtwo-action-box {
-    padding: 0.6rem 0.85rem;
-  }
-
-  .action-box-buttons {
-    gap: 0.4rem;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 6px;
+    padding: 0.65rem 0.5rem 4.5rem 0.5rem;
+    max-height: 44vh;
   }
 
   .btn-action-play,
   .btn-action-pass {
-    padding: 0.45rem 0.85rem;
+    padding: 0.46rem 0.9rem;
     font-size: 0.78rem;
   }
 
-  .btn-toggle-grid {
-    padding: 0.35rem 0.75rem;
-    font-size: 0.75rem;
+  .btn-action-deselect {
+    padding: 0.46rem 0.7rem;
+    font-size: 0.74rem;
   }
 }

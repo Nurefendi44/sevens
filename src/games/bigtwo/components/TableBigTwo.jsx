@@ -1,7 +1,17 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import CardView from '../../../components/CardView.jsx';
 import { evaluateCombo, canBeatCombo } from '../engine/handEvaluator.js';
-import { Play, SkipForward, RotateCcw, HelpCircle, Flame, LayoutGrid, Layers, AlertTriangle, X } from 'lucide-react';
+import {
+  Play,
+  SkipForward,
+  RotateCcw,
+  HelpCircle,
+  Flame,
+  LayoutGrid,
+  Layers,
+  AlertTriangle,
+  X,
+} from 'lucide-react';
 import '../../../styles/bigtwo.css';
 
 export default function TableBigTwo({
@@ -18,29 +28,41 @@ export default function TableBigTwo({
   const [isGridView, setIsGridView] = useState(false);
   const [actionAlert, setActionAlert] = useState(null);
 
-  // Auto-dismiss in-game alert after 3.5s
+  // Auto-dismiss in-game alert after 3s
   useEffect(() => {
     if (actionAlert) {
-      const timer = setTimeout(() => setActionAlert(null), 3500);
+      const timer = setTimeout(() => setActionAlert(null), 3000);
       return () => clearTimeout(timer);
     }
   }, [actionAlert]);
 
-  if (!gameState || !gameState.players || !Array.isArray(gameState.players) || gameState.players.length === 0 || !gameState.hands) {
+  if (
+    !gameState ||
+    !gameState.players ||
+    !Array.isArray(gameState.players) ||
+    gameState.players.length === 0 ||
+    !gameState.hands
+  ) {
     return null;
   }
 
   // Bottom perspective: In multiplayer viewer is myPlayerId, in local it's currentPlayer
   const myPlayer = isMultiplayer
-    ? (gameState.players.find((p) => p.id === myPlayerId) || gameState.players[0] || { id: myPlayerId, name: 'Pemain' })
-    : (gameState.players.find((p) => p.id === gameState.currentPlayer) || gameState.players[0] || { id: 'player_1', name: 'Pemain' });
+    ? gameState.players.find((p) => p.id === myPlayerId) ||
+      gameState.players[0] || { id: myPlayerId, name: 'Pemain' }
+    : gameState.players.find((p) => p.id === gameState.currentPlayer) ||
+      gameState.players[0] || { id: 'player_1', name: 'Pemain' };
 
-  const myHand = (myPlayer?.id && gameState.hands && gameState.hands[myPlayer.id]) || [];
-  const opponentPlayers = (gameState.players || []).filter((p) => p.id !== myPlayer?.id);
+  const myHand =
+    (myPlayer?.id && gameState.hands && gameState.hands[myPlayer.id]) || [];
+  const opponentPlayers = (gameState.players || []).filter(
+    (p) => p.id !== myPlayer?.id
+  );
 
   const currentTrick = gameState.currentTrick || {};
   const tableCombo = currentTrick.combo || null;
-  const isFreeTurn = !tableCombo || !currentTrick.cards || currentTrick.cards.length === 0;
+  const isFreeTurn =
+    !tableCombo || !currentTrick.cards || currentTrick.cards.length === 0;
 
   // Evaluate currently selected cards in real-time
   const selectedEval = useMemo(() => {
@@ -56,9 +78,14 @@ export default function TableBigTwo({
 
   const toggleSelectCard = (card) => {
     setSelectedCards((prev) => {
-      const exists = prev.some((c) => c.id === card.id || (c.rank === card.rank && c.suit === card.suit));
+      const exists = prev.some(
+        (c) => c.id === card.id || (c.rank === card.rank && c.suit === card.suit)
+      );
       if (exists) {
-        return prev.filter((c) => !(c.id === card.id || (c.rank === card.rank && c.suit === card.suit)));
+        return prev.filter(
+          (c) =>
+            !(c.id === card.id || (c.rank === card.rank && c.suit === card.suit))
+        );
       }
       return [...prev, card];
     });
@@ -70,7 +97,6 @@ export default function TableBigTwo({
 
   const triggerAlert = (msg) => {
     setActionAlert(msg);
-    if (onError) onError(msg);
   };
 
   const handlePlay = () => {
@@ -79,15 +105,17 @@ export default function TableBigTwo({
       return;
     }
     if (selectedCards.length === 0) {
-      triggerAlert('Pilih kartu di tangan Anda terlebih dahulu untuk dimainkan!');
+      triggerAlert('Pilih kartu di tangan Anda terlebih dahulu!');
       return;
     }
     if (!selectedEval?.isValid) {
-      triggerAlert(selectedEval?.error || 'Kombinasi kartu yang Anda pilih tidak sah!');
+      triggerAlert(selectedEval?.error || 'Kombinasi kartu tidak sah!');
       return;
     }
     if (!beatCheck.canBeat) {
-      triggerAlert(beatCheck.reason || 'Kombinasi kartu Anda tidak dapat mengalahkan kartu di meja!');
+      triggerAlert(
+        beatCheck.reason || 'Kombinasi kartu belum mengalahkan kartu di meja!'
+      );
       return;
     }
 
@@ -103,21 +131,19 @@ export default function TableBigTwo({
     setActionAlert(null);
   };
 
-  // Dynamic overlap calculation ensuring at least 24px (mobile) or 30px (desktop)
-  // exposed corner on every card, keeping rank number and suit symbol 100% visible
   const getFanOverlapMargin = (count, isMobile = false) => {
     if (isMobile) {
       if (count <= 3) return 6;
       if (count <= 6) return -8;
       if (count <= 10) return -16;
       if (count <= 16) return -22;
-      return -26; // Leaves >=24px exposed on 50px card
+      return -26;
     } else {
       if (count <= 3) return 10;
       if (count <= 6) return -12;
       if (count <= 10) return -20;
       if (count <= 16) return -30;
-      return -42; // Leaves >=30px exposed on 72px card
+      return -42;
     }
   };
 
@@ -129,11 +155,11 @@ export default function TableBigTwo({
       <div className="bigtwo-felt-overlay" />
       <div className="bigtwo-watermark">BIG TWO</div>
 
-      {/* FLOATING ACTION ALERT POPUP (Triggered when invalid cards are played) */}
+      {/* FLOATING ACTION ALERT POPUP */}
       {actionAlert && (
         <div className="bigtwo-alert-toast" role="alert">
           <div className="alert-toast-body">
-            <AlertTriangle size={17} className="alert-icon" />
+            <AlertTriangle size={16} className="alert-icon" />
             <span className="alert-text">{actionAlert}</span>
           </div>
           <button
@@ -142,7 +168,7 @@ export default function TableBigTwo({
             onClick={() => setActionAlert(null)}
             aria-label="Tutup Peringatan"
           >
-            <X size={15} />
+            <X size={14} />
           </button>
         </div>
       )}
@@ -156,25 +182,32 @@ export default function TableBigTwo({
           return (
             <div
               key={p.id}
-              className={`bigtwo-opponent-card ${isOpponentTurn ? 'active-turn' : ''}`}
+              className={`bigtwo-opponent-card ${
+                isOpponentTurn ? 'active-turn' : ''
+              }`}
             >
               <div className="bigtwo-opp-header">
                 <span className="opp-avatar">{p.avatar || '🤖'}</span>
-                <span className="opp-name">{p.name} : <strong>{oppCardCount} cards</strong></span>
-                {isOpponentTurn && <span className="turn-indicator-badge">Berpikir...</span>}
+                <span className="opp-name">
+                  {p.name} : <strong>{oppCardCount}</strong>
+                </span>
+                {isOpponentTurn && (
+                  <span className="turn-indicator-badge">Giliran</span>
+                )}
               </div>
 
-              {/* Fan of Face-Down Cards for Opponent */}
               <div className="bigtwo-opp-cards-fan">
-                {Array.from({ length: Math.min(oppCardCount, 16) }).map((_, idx) => (
-                  <div
-                    key={idx}
-                    className="bigtwo-mini-card-back"
-                    style={{ marginLeft: idx === 0 ? 0 : '-11px' }}
-                  />
-                ))}
-                {oppCardCount > 16 && (
-                  <span className="opp-more-cards">+{oppCardCount - 16}</span>
+                {Array.from({ length: Math.min(oppCardCount, 14) }).map(
+                  (_, idx) => (
+                    <div
+                      key={idx}
+                      className="bigtwo-mini-card-back"
+                      style={{ marginLeft: idx === 0 ? 0 : '-11px' }}
+                    />
+                  )
+                )}
+                {oppCardCount > 14 && (
+                  <span className="opp-more-cards">+{oppCardCount - 14}</span>
                 )}
               </div>
             </div>
@@ -186,100 +219,32 @@ export default function TableBigTwo({
       <div className="bigtwo-center-arena">
         {isFreeTurn ? (
           <div className="trick-empty-slate">
-            <span className="free-turn-badge">✦ GILIRAN BEBAS ✦</span>
-            <span className="free-turn-text">Meja bersih! Anda bebas mengeluarkan kombinasi apa saja (Single, Pair, Triple, atau 5 Kartu).</span>
+            <span className="free-turn-badge">✦ MEJA BEBAS ✦</span>
+            <span className="free-turn-text">
+              Bebas keluarkan Single, Pair, Triple, atau 5 Kartu Poker.
+            </span>
           </div>
         ) : (
           <div className="trick-active-box">
             <div className="trick-meta-banner">
-              <span>Current combo dari <strong>{currentTrick.playedByName}</strong>:</span>
-              <span className="trick-combo-badge">{tableCombo?.type?.replace(/_/g, ' ')}</span>
+              <span>
+                <strong>{currentTrick.playedByName}</strong>
+              </span>
+              <span className="trick-combo-badge">
+                {tableCombo?.type?.replace(/_/g, ' ')}
+              </span>
               <strong style={{ color: '#fbbf24' }}>{tableCombo?.label}</strong>
             </div>
 
             <div className="trick-cards-display">
               {currentTrick.cards.map((card, idx) => (
                 <div key={card.id || idx} className="table-card-item">
-                  <CardView
-                    card={card}
-                    isPlayable={false}
-                    size="medium"
-                  />
+                  <CardView card={card} isPlayable={false} size="medium" />
                 </div>
               ))}
             </div>
           </div>
         )}
-      </div>
-
-      {/* PROMINENT TURN ANNOUNCEMENT (When it's My Turn) */}
-      {isMyTurn && (
-        <div className="bigtwo-your-turn-banner animate-pulse-glow">
-          <span className="turn-fire">🔥</span>
-          <span>GILIRAN ANDA!</span>
-          <span className="turn-tip desktop-only">— Pilih kartu di bawah lalu klik Keluarkan</span>
-        </div>
-      )}
-
-      {/* FLOATING ACTION BOX (Take your action! - Clean minimal design, no warning clutter) */}
-      <div className={`bigtwo-action-box ${isMyTurn ? 'is-my-turn' : ''}`}>
-        <div className="action-box-header">
-          <strong>Take your action!</strong>
-          <span>Select cards in your hand to play or pass!</span>
-        </div>
-
-        {/* Minimal valid combo indicator only - no warning box cluttering UI */}
-        {selectedCards.length > 0 && selectedEval?.isValid && (
-          <div className="action-combo-analyzer valid">
-            <Flame size={14} color="#38bdf8" />
-            <span>{selectedEval.label}</span>
-          </div>
-        )}
-
-        <div className="action-box-buttons">
-          <button
-            type="button"
-            className="btn-action-play"
-            disabled={!isMyTurn || selectedCards.length === 0}
-            onClick={handlePlay}
-          >
-            <Play size={16} fill="currentColor" />
-            <span>Play a combo {selectedCards.length > 0 ? `(${selectedCards.length})` : ''}</span>
-          </button>
-
-          <button
-            type="button"
-            className="btn-action-pass"
-            disabled={!isMyTurn || isFreeTurn}
-            onClick={handlePassClick}
-            title={isFreeTurn ? 'Meja kosong, wajib mengeluarkan kartu' : 'Lewat giliran'}
-          >
-            <SkipForward size={16} />
-            <span>Pass</span>
-          </button>
-
-          {selectedCards.length > 0 && (
-            <button
-              type="button"
-              className="btn-action-deselect"
-              onClick={handleClearSelection}
-            >
-              <RotateCcw size={14} />
-              <span>Deselect all</span>
-            </button>
-          )}
-
-          {onOpenRules && (
-            <button
-              type="button"
-              className="btn-action-rules"
-              onClick={onOpenRules}
-              title="Lihat Panduan Aturan"
-            >
-              <HelpCircle size={15} />
-            </button>
-          )}
-        </div>
       </div>
 
       {/* BOTTOM: Player Tray & Hand Controls */}
@@ -288,18 +253,11 @@ export default function TableBigTwo({
           <div className="tray-hand-info">
             <span className="tray-avatar">{myPlayer.avatar || '👑'}</span>
             <span className="tray-label">
-              Your hand (<strong>{myHand.length} cards</strong>):
+              Kartu Anda (<strong>{myHand.length}</strong>)
             </span>
 
-            {/* Quick Deselect All Button */}
-            {selectedCards.length > 0 && (
-              <button
-                type="button"
-                className="btn-deselect-pill"
-                onClick={handleClearSelection}
-              >
-                Deselect all
-              </button>
+            {isMyTurn && (
+              <span className="bigtwo-inline-turn-pill">🔥 Giliran Anda</span>
             )}
           </div>
 
@@ -310,14 +268,16 @@ export default function TableBigTwo({
             onClick={() => setIsGridView(!isGridView)}
             title="Beralih antara tampilan kisi (grid) dan baris kipas (fan)"
           >
-            {isGridView ? <Layers size={16} /> : <LayoutGrid size={16} />}
-            <span>Toggle hand grid view</span>
+            {isGridView ? <Layers size={15} /> : <LayoutGrid size={15} />}
+            <span>{isGridView ? 'Mode Kipas' : 'Mode Grid'}</span>
           </button>
         </div>
 
         {/* PLAYER CARDS CONTAINER: Mode Fan OR Mode Grid */}
         <div
-          className={`bigtwo-cards-container ${isGridView ? 'mode-grid' : 'mode-fan'}`}
+          className={`bigtwo-cards-container ${
+            isGridView ? 'mode-grid' : 'mode-fan'
+          }`}
           style={{
             '--fan-overlap': `${desktopOverlap}px`,
             '--fan-overlap-mobile': `${mobileOverlap}px`,
@@ -325,7 +285,8 @@ export default function TableBigTwo({
         >
           {myHand.map((card, idx) => {
             const isSelected = selectedCards.some(
-              (c) => c.id === card.id || (c.rank === card.rank && c.suit === card.suit)
+              (c) =>
+                c.id === card.id || (c.rank === card.rank && c.suit === card.suit)
             );
 
             return (
@@ -344,6 +305,72 @@ export default function TableBigTwo({
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* FLOATING BOTTOM TRANSPARENT ACTION DOCK */}
+      <div className="bigtwo-floating-dock-wrapper">
+        {/* Combo preview pill above dock when valid combo is selected */}
+        {selectedCards.length > 0 && selectedEval?.isValid && (
+          <div className="bigtwo-floating-combo-pill">
+            <Flame size={13} color="#38bdf8" />
+            <span>{selectedEval.label}</span>
+          </div>
+        )}
+
+        <div
+          className={`bigtwo-floating-dock ${isMyTurn ? 'is-my-turn' : ''}`}
+        >
+          <button
+            type="button"
+            className="btn-action-play"
+            disabled={!isMyTurn || selectedCards.length === 0}
+            onClick={handlePlay}
+          >
+            <Play size={15} fill="currentColor" />
+            <span>
+              Mainkan{' '}
+              {selectedCards.length > 0 ? `(${selectedCards.length})` : ''}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className="btn-action-pass"
+            disabled={!isMyTurn || isFreeTurn}
+            onClick={handlePassClick}
+            title={
+              isFreeTurn
+                ? 'Meja kosong, wajib mengeluarkan kartu'
+                : 'Lewat giliran'
+            }
+          >
+            <SkipForward size={15} />
+            <span>Pass</span>
+          </button>
+
+          {selectedCards.length > 0 && (
+            <button
+              type="button"
+              className="btn-action-deselect"
+              onClick={handleClearSelection}
+              title="Batalkan pilihan kartu"
+            >
+              <RotateCcw size={14} />
+              <span>Reset</span>
+            </button>
+          )}
+
+          {onOpenRules && (
+            <button
+              type="button"
+              className="btn-action-rules"
+              onClick={onOpenRules}
+              title="Lihat Panduan Aturan"
+            >
+              <HelpCircle size={15} />
+            </button>
+          )}
         </div>
       </div>
     </div>
