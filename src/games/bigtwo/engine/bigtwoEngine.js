@@ -21,7 +21,7 @@ import {
 export const DEFAULT_CONFIG_BIGTWO = {
   playerCount: 4,
   deckMode: 'single', // 'single' (52 kartu) | 'double' (104 kartu)
-  starterCardMandatory: true, // Wajib menyertakan 3♦ di putaran pertama
+  starterCardMandatory: false, // Kartu 3 tidak perlu dikeluarkan di awal (Giliran Bebas)
 };
 
 /**
@@ -104,28 +104,37 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
     hands[p.id] = sortBigTwoCards(hands[p.id]);
   });
 
-  // Find player who has the lowest card to start the first round
-  // Lowest card is 3 of diamonds (rank 3, diamonds)
-  let startingPlayerId = players[0].id;
+  // Find lowest card (for reference, but card 3 is no longer mandatory to start)
   let lowestCardFound = null;
-
   for (const p of players) {
     const playerHand = hands[p.id];
     for (const card of playerHand) {
       if (!lowestCardFound) {
         lowestCardFound = card;
-        startingPlayerId = p.id;
       } else {
         const rankDiff = getCardRank(card) - getCardRank(lowestCardFound);
         if (rankDiff < 0 || (rankDiff === 0 && getCardSuitValue(card) < getCardSuitValue(lowestCardFound))) {
           lowestCardFound = card;
-          startingPlayerId = p.id;
         }
       }
     }
   }
 
-  const startingPlayer = players.find((p) => p.id === startingPlayerId) || players[0];
+  // Determine starting player:
+  // Random pick or explicit override (no longer forced to lowest card 3♦)
+  let startingPlayerId = configOverrides.startingPlayerId;
+  if (!startingPlayerId || !players.some((p) => p.id === startingPlayerId)) {
+    const randomIdx = Math.floor(Math.random() * players.length);
+    startingPlayerId = players[randomIdx].id;
+  }
+
+  const isFromPreviousWinner = Boolean(
+    configOverrides.startingPlayerId && players.some((p) => p.id === configOverrides.startingPlayerId)
+  );
+
+  const startMessage = isFromPreviousWinner
+    ? `Permainan Big Two baru dimulai. ${startingPlayer.name} (Pemenang game sebelumnya) memegang giliran awal (Meja Bebas)!`
+    : `Permainan Big Two (Capsa Banting) dimulai (${playerCount} pemain, ${config.deckMode === 'double' ? 'Double Deck' : 'Single Deck'}). Giliran pertama ditentukan secara acak: ${startingPlayer.name} terpilih jalan pertama (Giliran Bebas)!`;
 
   const initialState = {
     gameType: 'bigtwo',
@@ -152,10 +161,11 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
     disqualifiedPlayerName: null,
     endReason: null,
     rankings: null,
+    finishedPlayers: [], // [{ id, name, avatar, rank, remainingCards: 0 }]
     history: [
       {
         turn: 1,
-        message: `Permainan Big Two (Capsa Banting) dimulai (${playerCount} pemain, ${config.deckMode === 'double' ? 'Double Deck' : 'Single Deck'}). Pemegang kartu terendah (${lowestCardFound?.label || 3}${lowestCardFound?.symbol || '♦'}) adalah ${startingPlayer.name} yang berhak jalan pertama.`,
+        message: startMessage,
       },
     ],
   };
@@ -164,21 +174,27 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
 }
 
 /**
- * Finds the next player clockwise from currentId who has NOT passed in the current trick.
+ * Finds the next player clockwise from currentId who has NOT passed in the current trick
+ * and has NOT finished all their cards.
  * @param {Array<Object>} players 
  * @param {string} currentId 
  * @param {Array<string>} passedPlayerIds 
+ * @param {Array<string>} finishedPlayerIds 
  * @returns {Object|null}
  */
-export function getNextActivePlayer(players = [], currentId, passedPlayerIds = []) {
+export function getNextActivePlayer(players = [], currentId, passedPlayerIds = [], finishedPlayerIds = []) {
   if (!players || players.length === 0) return null;
   const count = players.length;
   const currentIdx = players.findIndex((p) => p.id === currentId);
-  if (currentIdx === -1) return players[0];
+  const startIdx = currentIdx === -1 ? 0 : currentIdx;
 
-  for (let i = 1; i < count; i++) {
-    const candidate = players[(currentIdx + i) % count];
-    if (!passedPlayerIds.includes(candidate.id)) {
+  for (let i = 1; i <= count; i++) {
+    const candidate = players[(startIdx + i) % count];
+    if (
+      candidate.id !== currentId &&
+      !finishedPlayerIds.includes(candidate.id) &&
+      !passedPlayerIds.includes(candidate.id)
+    ) {
       return candidate;
     }
   }
@@ -253,7 +269,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
     [playerId]: sortBigTwoCards(newPlayerHand),
   };
 
-  // Check Game Over (Hand empty = WINNER or RULE 1 DISQUALIFICATION)
+  // Check if player's hand is empty (Finished all cards!)
   if (newPlayerHand.length === 0) {
     // RULE 1: Kartu angka 2 tidak boleh menjadi kartu terakhir yang dikeluarkan/dipegang!
     const hasTwoAsLastCard = selectedCards.some(
@@ -262,7 +278,6 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
 
     if (hasTwoAsLastCard) {
       // RULE 1 VIOLATION: Pemain mengeluarkan kartu 2 terakhir -> OTOMATIS KALAH!
-      // Pemain lain diurutkan berdasarkan sisa kartu paling sedikit (sisa kartu tersedikit = Menang)
       const otherPlayersRanked = gameState.players
         .filter((p) => p.id !== playerId)
         .map((p) => {
@@ -282,7 +297,6 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
       }
       const actualWinner = otherPlayersRanked[0];
 
-      // Pemain yang melanggar ditempatkan di posisi terbawah (Kalah / Pinalti)
       const rankings = [
         ...otherPlayersRanked,
         {
@@ -329,7 +343,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
           ...gameState.history,
           {
             turn: gameState.history.length + 1,
-            message: `🚫 PELANGGARAN ATURAN: ${playerName} mengeluarkan kartu 2 sebagai kartu terakhir! ${playerName} OTOMATIS KALAH! Pemenang adalah ${actualWinner?.name} (sisa kartu paling sedikit).`,
+            message: `🚫 PELANGGARAN ATURAN: ${playerName} mengeluarkan kartu 2 sebagai kartu terakhir! ${playerName} OTOMATIS KALAH! Pemenang adalah ${actualWinner?.name}.`,
           },
         ],
       };
@@ -337,63 +351,141 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
       return { success: true, gameState: finishedState };
     }
 
-    // Normal Win!
-    const rankings = gameState.players
-      .map((p) => {
-        const remaining = p.id === playerId ? 0 : (updatedHands[p.id]?.length || 0);
-        return {
-          id: p.id,
-          name: p.name,
-          avatar: p.avatar,
-          remainingCards: remaining,
-          isWinner: p.id === playerId,
-        };
-      })
-      .sort((a, b) => a.remainingCards - b.remainingCards);
+    // NORMAL FINISH: Player finishes all cards!
+    const previousFinished = gameState.finishedPlayers || [];
+    const finishRank = previousFinished.length + 1;
+    const playerObj = gameState.players.find((p) => p.id === playerId);
+    const newFinishedEntry = {
+      id: playerId,
+      name: playerName,
+      avatar: playerObj?.avatar || '👤',
+      rank: finishRank,
+      remainingCards: 0,
+      isWinner: finishRank === 1,
+    };
+    const nextFinishedPlayers = [...previousFinished, newFinishedEntry];
+    const finishedIds = nextFinishedPlayers.map((f) => f.id);
+
+    // Check remaining active players who still hold cards
+    const remainingActivePlayers = gameState.players.filter(
+      (p) => !finishedIds.includes(p.id) && (updatedHands[p.id]?.length || 0) > 0
+    );
+
+    // If only 1 (or 0) player left with cards: GAME OVER!
+    if (remainingActivePlayers.length <= 1) {
+      const lastPlayer = remainingActivePlayers[0] || null;
+      const lastRemaining = lastPlayer ? (updatedHands[lastPlayer.id]?.length || 0) : 0;
+      const finalRankings = [
+        ...nextFinishedPlayers,
+        ...(lastPlayer ? [{
+          id: lastPlayer.id,
+          name: lastPlayer.name,
+          avatar: lastPlayer.avatar,
+          rank: nextFinishedPlayers.length + 1,
+          remainingCards: lastRemaining,
+          isWinner: false,
+        }] : []),
+      ];
+
+      const actionPayload = {
+        type: 'PLAY_COMBO',
+        playerId,
+        playerName,
+        avatar: playerObj?.avatar || '👤',
+        cards: selectedCards,
+        combo,
+        message: `🏆 ${playerName} mengeluarkan ${combo.label} dan menghabiskan seluruh kartunya! (Juara ${finishRank})`,
+        timestamp: Date.now(),
+      };
+
+      const finalState = {
+        ...gameState,
+        hands: updatedHands,
+        currentTrick: {
+          cards: selectedCards,
+          combo,
+          playedBy: playerId,
+          playedByName: playerName,
+        },
+        lastPlayedCombo: combo,
+        lastAction: actionPayload,
+        gameStatus: GAME_STATUS_BIGTWO.GAME_OVER,
+        winner: nextFinishedPlayers[0]?.id || playerId,
+        endReason: 'NORMAL_WIN',
+        finishedPlayers: nextFinishedPlayers,
+        rankings: finalRankings,
+        history: [
+          ...gameState.history,
+          {
+            turn: gameState.history.length + 1,
+            message: `🏆 ${playerName} mengeluarkan ${combo.label} dan menghabiskan seluruh kartu (Juara ${finishRank})! Seluruh putaran selesai.`,
+          },
+        ],
+      };
+
+      return { success: true, gameState: finalState };
+    }
+
+    // GAME CONTINUES! 2 or more players still hold cards!
+    const nextPlayer = getNextActivePlayer(gameState.players, playerId, gameState.passedPlayers || [], finishedIds);
+
+    let clearedTable = false;
+    let nextCurrentPlayerId = null;
+    let nextTrickLeaderId = playerId;
+
+    if (!nextPlayer) {
+      // All other remaining players have passed in this trick: clear table!
+      clearedTable = true;
+      const nextFreeLeader = getNextActivePlayer(gameState.players, playerId, [], finishedIds) || remainingActivePlayers[0];
+      nextCurrentPlayerId = nextFreeLeader.id;
+      nextTrickLeaderId = nextFreeLeader.id;
+    } else {
+      nextCurrentPlayerId = nextPlayer.id;
+    }
 
     const actionPayload = {
       type: 'PLAY_COMBO',
       playerId,
       playerName,
-      avatar: gameState.players.find((p) => p.id === playerId)?.avatar || '👤',
+      avatar: playerObj?.avatar || '👤',
       cards: selectedCards,
       combo,
-      message: `${playerName} mengeluarkan ${combo.label}`,
+      message: `🎉 ${playerName} menghabiskan seluruh kartunya (Juara ${finishRank} 👑)! Permainan berlanjut untuk pemain lain...`,
       timestamp: Date.now(),
     };
 
-    const finishedState = {
+    const nextGameState = {
       ...gameState,
       hands: updatedHands,
-      currentTrick: {
-        cards: selectedCards,
-        combo,
-        playedBy: playerId,
-        playedByName: playerName,
-      },
+      finishedPlayers: nextFinishedPlayers,
+      currentTrick: clearedTable
+        ? { cards: [], combo: null, playedBy: null, playedByName: null }
+        : { cards: selectedCards, combo, playedBy: playerId, playedByName: playerName },
       lastPlayedCombo: combo,
       lastAction: actionPayload,
-      gameStatus: GAME_STATUS_BIGTWO.GAME_OVER,
-      winner: playerId,
-      endReason: 'NORMAL_WIN',
-      rankings,
+      trickLeaderId: nextTrickLeaderId,
+      passedPlayers: clearedTable ? [] : (gameState.passedPlayers || []),
+      consecutivePassCount: 0,
+      isFirstPlayOfGame: false,
+      currentPlayer: nextCurrentPlayerId,
       history: [
         ...gameState.history,
         {
           turn: gameState.history.length + 1,
-          message: `🏆 ${playerName} mengeluarkan ${combo.label} dan menghabiskan seluruh kartu! ${playerName} MENANG!`,
+          message: `🎉 ${playerName} menghabiskan seluruh kartunya (Juara ${finishRank})! Giliran dilanjutkan oleh ${gameState.players.find(p => p.id === nextCurrentPlayerId)?.name}.`,
         },
       ],
     };
 
-    return { success: true, gameState: finishedState };
+    return { success: true, gameState: nextGameState };
   }
 
-  // Determine Next Player (Clockwise) among players who have NOT passed in this trick
+  // Determine Next Player (Clockwise) among players who have NOT passed and have NOT finished
+  const finishedIds = (gameState.finishedPlayers || []).map((f) => f.id);
   const currentPassed = gameState.passedPlayers || [];
-  const nextPlayer = getNextActivePlayer(gameState.players, playerId, currentPassed);
+  const nextPlayer = getNextActivePlayer(gameState.players, playerId, currentPassed, finishedIds);
 
-  // If every other player already passed in this trick, trick clears immediately!
+  // If every other active player already passed in this trick, trick clears immediately!
   if (!nextPlayer || nextPlayer.id === playerId) {
     const actionPayload = {
       type: 'PLAY_COMBO',
@@ -402,7 +494,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
       avatar: gameState.players.find((p) => p.id === playerId)?.avatar || '👤',
       cards: selectedCards,
       combo,
-      message: `${playerName} mengeluarkan ${combo.label}. Semua pemain lain telah lewat! Meja dibersihkan.`,
+      message: `${playerName} mengeluarkan ${combo.label}. Semua lawan telah lewat! Meja dibersihkan.`,
       timestamp: Date.now(),
     };
 
@@ -496,18 +588,28 @@ export function passTurnBigTwo(gameState, playerId) {
   }
 
   const playerName = gameState.players.find((p) => p.id === playerId)?.name || 'Pemain';
+  const finishedIds = (gameState.finishedPlayers || []).map((f) => f.id);
+  const activePlayers = gameState.players.filter((p) => !finishedIds.includes(p.id));
+
   const currentPassed = gameState.passedPlayers || [];
   const updatedPassed = [...new Set([...currentPassed, playerId])];
 
   const leaderId = gameState.trickLeaderId;
-  const leaderPlayer = gameState.players.find((p) => p.id === leaderId) || gameState.players[0];
+  const isLeaderStillActive = !finishedIds.includes(leaderId);
 
-  // All players other than the trick leader
-  const otherPlayers = gameState.players.filter((p) => p.id !== leaderId);
-  const allOthersPassed = otherPlayers.every((p) => updatedPassed.includes(p.id));
+  // All active players other than the trick leader
+  const otherActivePlayers = activePlayers.filter((p) => p.id !== leaderId);
+  const allOthersPassed = otherActivePlayers.every((p) => updatedPassed.includes(p.id));
 
-  // If all other players have passed in this trick: MEJA BEBAS!
-  if (allOthersPassed) {
+  // If all other active players have passed in this trick: MEJA BEBAS!
+  if (allOthersPassed || otherActivePlayers.length === 0) {
+    let newLeaderId = leaderId;
+    if (!isLeaderStillActive) {
+      const nextFreeLeader = getNextActivePlayer(gameState.players, leaderId, [], finishedIds) || activePlayers[0];
+      newLeaderId = nextFreeLeader?.id || activePlayers[0]?.id;
+    }
+    const newLeaderPlayer = gameState.players.find((p) => p.id === newLeaderId) || activePlayers[0];
+
     const clearedState = {
       ...gameState,
       currentTrick: {
@@ -518,21 +620,21 @@ export function passTurnBigTwo(gameState, playerId) {
       },
       passedPlayers: [], // Meja bebas: reset daftar pass untuk putaran baru!
       consecutivePassCount: 0,
-      trickLeaderId: leaderId,
-      currentPlayer: leaderId,
+      trickLeaderId: newLeaderId,
+      currentPlayer: newLeaderId,
       lastAction: {
         type: 'PASS',
         playerId,
         playerName,
         avatar: gameState.players.find((p) => p.id === playerId)?.avatar || '👤',
-        message: `${playerName} Lewat (Pass). Semua pemain telah lewat. Meja dibersihkan! Giliran Bebas untuk ${leaderPlayer.name}.`,
+        message: `${playerName} Lewat (Pass). Semua pemain telah lewat. Meja dibersihkan! Giliran Bebas untuk ${newLeaderPlayer?.name}.`,
         timestamp: Date.now(),
       },
       history: [
         ...gameState.history,
         {
           turn: gameState.history.length + 1,
-          message: `${playerName} LEWAT (Pass). Semua pemain lain telah lewat dalam rangkaian ini. Meja dibersihkan! Giliran Bebas untuk ${leaderPlayer.name}.`,
+          message: `${playerName} LEWAT (Pass). Semua pemain lain telah lewat dalam rangkaian ini. Meja dibersihkan! Giliran Bebas untuk ${newLeaderPlayer?.name}.`,
         },
       ],
     };
@@ -540,8 +642,8 @@ export function passTurnBigTwo(gameState, playerId) {
     return { success: true, gameState: clearedState };
   }
 
-  // Next active player who has NOT passed in this trick
-  const nextPlayer = getNextActivePlayer(gameState.players, playerId, updatedPassed) || leaderPlayer;
+  // Next active player who has NOT passed in this trick and NOT finished
+  const nextPlayer = getNextActivePlayer(gameState.players, playerId, updatedPassed, finishedIds) || activePlayers[0];
 
   const nextState = {
     ...gameState,

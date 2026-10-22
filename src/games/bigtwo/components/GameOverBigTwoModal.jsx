@@ -6,6 +6,7 @@ export default function GameOverBigTwoModal({
   onPlayAgain,
   onRestart,
   onBackToMenu,
+  onOpenScoreboard,
   isMultiplayer = false,
   isHost = true,
 }) {
@@ -40,29 +41,30 @@ export default function GameOverBigTwoModal({
           }}>
             {gameState.endReason === 'LAST_CARD_TWO_DISQUALIFICATION'
               ? 'PELANGGARAN: KARTU 2 TERAKHIR!'
-              : 'PERMAINAN BIG TWO SELESAI!'}
+              : 'PERMAINAN SELESAI (BIG TWO)'}
           </h2>
           <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.92rem' }}>
             {gameState.endReason === 'LAST_CARD_TWO_DISQUALIFICATION' ? (
               <>
                 <strong>{gameState.disqualifiedPlayerName || 'Pemain'}</strong> mengeluarkan kartu 2 sebagai kartu terakhir (dilarang).
                 <br />
-                Pemenang: <strong style={{ color: '#38bdf8' }}>{winnerPlayer?.name}</strong> (sisa kartu paling sedikit)!
+                Pemenang: <strong style={{ color: '#38bdf8' }}>{winnerPlayer?.name}</strong>!
               </>
             ) : (
               <>
-                <strong>{winnerPlayer?.name || 'Pemain'}</strong> berhasil menghabiskan seluruh kartunya terlebih dahulu!
+                Pemenang: <strong style={{ color: '#38bdf8' }}>{winnerPlayer?.name || 'Pemain'}</strong> berhasil meraih Juara 1 (+1 Poin)!
               </>
             )}
           </p>
         </div>
 
-        {/* Leaderboard Table */}
+        {/* Leaderboard Table (Model Poin) */}
         <div className="modal-body" style={{ padding: '1rem 0' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {rankings.map((r, index) => {
               const isWinner = r.isWinner ?? (index === 0 && !r.isDisqualified);
               const isDisqualified = r.isDisqualified;
+              const rankPos = r.rank || index + 1;
 
               return (
                 <div
@@ -87,7 +89,7 @@ export default function GameOverBigTwoModal({
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <span style={{ fontSize: '1.4rem' }}>
-                      {isDisqualified ? '❌' : index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
+                      {isDisqualified ? '❌' : rankPos === 1 ? '🥇' : rankPos === 2 ? '🥈' : rankPos === 3 ? '🥉' : `#${rankPos}`}
                     </span>
                     <span style={{ fontSize: '1.25rem' }}>{r.avatar}</span>
                     <div>
@@ -96,12 +98,10 @@ export default function GameOverBigTwoModal({
                       </strong>
                       <div style={{ fontSize: '0.75rem', color: isDisqualified ? '#fca5a5' : '#94a3b8' }}>
                         {isDisqualified
-                          ? 'KALAH (Kartu 2 Terakhir Dilarang)'
-                          : isWinner
-                          ? (gameState.endReason === 'LAST_CARD_TWO_DISQUALIFICATION'
-                              ? `MENANG (Sisa ${r.remainingCards} kartu)`
-                              : 'KARTU HABIS (MENANG!)')
-                          : `Sisa ${r.remainingCards} kartu`}
+                          ? 'Kalah (Kartu 2 Terakhir Dilarang)'
+                          : rankPos === 1
+                          ? 'Juara 1 (Kartu Habis Lebih Dulu)'
+                          : `Juara ${rankPos}${r.remainingCards > 0 ? ` (Sisa ${r.remainingCards} kartu)` : ' (Kartu Habis)'}`}
                       </div>
                     </div>
                   </div>
@@ -109,15 +109,15 @@ export default function GameOverBigTwoModal({
                   <div style={{ textAlign: 'right' }}>
                     {isDisqualified ? (
                       <span style={{ background: '#dc2626', color: '#ffffff', padding: '0.25rem 0.65rem', borderRadius: '6px', fontWeight: 800, fontSize: '0.75rem' }}>
-                        KALAH OTOMATIS ⚠️
+                        0 Poin ⚠️
                       </span>
                     ) : isWinner ? (
-                      <span className="badge-ready" style={{ background: '#0284c7', color: '#ffffff', padding: '0.25rem 0.65rem' }}>
-                        PEMENANG 👑
+                      <span className="badge-ready" style={{ background: 'linear-gradient(135deg, #0284c7, #2563eb)', color: '#ffffff', padding: '0.3rem 0.75rem', borderRadius: '8px', fontWeight: 800 }}>
+                        +1 POIN 🏆
                       </span>
                     ) : (
-                      <span style={{ color: '#f87171', fontWeight: 700, fontSize: '0.9rem' }}>
-                        +{r.remainingCards} penalti
+                      <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.85rem' }}>
+                        Peringkat #{rankPos}
                       </span>
                     )}
                   </div>
@@ -144,6 +144,19 @@ export default function GameOverBigTwoModal({
               Menunggu Host untuk memulai babak berikutnya...
             </div>
           )}
+
+          {onOpenScoreboard && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={onOpenScoreboard}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
+            >
+              <Trophy size={16} color="#eab308" />
+              <span>Scoreboard</span>
+            </button>
+          )}
+
           <button
             type="button"
             className="btn-secondary"

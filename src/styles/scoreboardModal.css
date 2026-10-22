@@ -1,0 +1,238 @@
+/* Scoreboard Modal - Exact Clean & Luxury Design */
+
+.scoreboard-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1rem;
+  animation: scoreboardFadeIn 0.22s ease-out;
+}
+
+@keyframes scoreboardFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.scoreboard-modal-card {
+  background: #ffffff;
+  color: #1e293b;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 580px;
+  padding: 1.5rem 1.75rem;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(226, 232, 240, 0.8);
+  position: relative;
+  animation: scoreboardSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: inherit;
+}
+
+@keyframes scoreboardSlideUp {
+  from {
+    transform: translateY(18px) scale(0.97);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Modal Header */
+.scoreboard-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.scoreboard-modal-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.scoreboard-btn-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  padding: 0.35rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.scoreboard-btn-close:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Trophy + Scoreboard Title */
+.scoreboard-section-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+}
+
+.scoreboard-trophy-icon {
+  font-size: 1.75rem;
+  line-height: 1;
+}
+
+.scoreboard-section-title {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #0f172a;
+  font-family: 'Georgia', 'Playfair Display', serif, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* Table */
+.scoreboard-table-container {
+  overflow-x: auto;
+  margin-bottom: 1.25rem;
+}
+
+.scoreboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.scoreboard-table thead tr {
+  border-bottom: 1.5px solid #e2e8f0;
+}
+
+.scoreboard-table th {
+  padding: 0.75rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #475569;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.scoreboard-table tbody tr {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.15s ease;
+}
+
+.scoreboard-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.scoreboard-table td {
+  padding: 1rem 0.6rem;
+  font-size: 0.95rem;
+  color: #1e293b;
+}
+
+/* Columns */
+.col-rank {
+  width: 12%;
+  font-weight: 700;
+  color: #334155;
+}
+
+.rank-badge {
+  font-size: 1.05rem;
+}
+
+.col-name {
+  width: 48%;
+}
+
+.player-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.player-avatar {
+  font-size: 1.2rem;
+}
+
+.player-name-text {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.col-games {
+  width: 20%;
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+  font-size: 1rem;
+}
+
+.col-score {
+  width: 20%;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-value {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+/* Empty state */
+.empty-scoreboard-cell {
+  text-align: center;
+  padding: 2rem 1rem !important;
+  color: #94a3b8;
+  font-size: 0.88rem;
+  font-style: italic;
+}
+
+/* Footer */
+.scoreboard-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.75rem;
+  border-top: 1px solid #f1f5f9;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.scoreboard-footnote {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.btn-reset-scoreboard {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-reset-scoreboard:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+}

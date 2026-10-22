@@ -19,6 +19,7 @@ import {
   EyeOff,
   Columns3,
   Rows3,
+  Trophy,
 } from 'lucide-react';
 
 export default function MobileNavDrawer({
@@ -37,6 +38,7 @@ export default function MobileNavDrawer({
   onOpenRules,
   onOpenConfig,
   onOpenHistory,
+  onOpenScoreboard,
   isMuted,
   onToggleSound,
   onRestart,
@@ -216,6 +218,25 @@ export default function MobileNavDrawer({
               <small>{isMultiplayerMode ? 'Beralih ke pass-and-play' : 'Bermain realtime bersama teman'}</small>
             </div>
           </button>
+
+          {/* Scoreboard Button */}
+          {onOpenScoreboard && (
+            <button
+              className="mobile-menu-item"
+              onClick={() => {
+                onOpenScoreboard();
+                onClose();
+              }}
+            >
+              <div className="menu-item-icon">
+                <Trophy size={18} color="#eab308" />
+              </div>
+              <div className="menu-item-text">
+                <span>Scoreboard & Peringkat</span>
+                <small>Akumulasi poin & riwayat kemenangan</small>
+              </div>
+            </button>
+          )}
 
           {/* Rules Guide */}
           <button

@@ -41,6 +41,7 @@ import { initGame41, drawCard41, discardCard41 } from './games/game41/engine/eng
 import TableBigTwo from './games/bigtwo/components/TableBigTwo.jsx';
 import GameOverBigTwoModal from './games/bigtwo/components/GameOverBigTwoModal.jsx';
 import RulesGuideBigTwoModal from './games/bigtwo/components/RulesGuideBigTwoModal.jsx';
+import BigTwoFirstTurnWheel from './games/bigtwo/components/BigTwoFirstTurnWheel.jsx';
 import { initBigTwo, playComboBigTwo, passTurnBigTwo } from './games/bigtwo/engine/bigtwoEngine.js';
 
 import ActionAnnouncementPopup from './components/ActionAnnouncementPopup.jsx';
@@ -54,8 +55,7 @@ import {
   SINGLE_HUMAN_ID,
 } from './engine/botAI.js';
 
-import './styles/multiplayer.css';
-
+import ScoreboardModal from './components/ScoreboardModal.jsx';
 
 import {
   Volume2,
@@ -78,6 +78,7 @@ import {
   EyeOff,
   Columns3,
   Rows3,
+  Trophy,
 } from 'lucide-react';
 
 export default function App() {
@@ -228,6 +229,19 @@ export default function App() {
   // Big Two State (2-6 players)
   const [gameStateBigtwo, setGameStateBigtwo] = useState(() => initBigTwo({ playerCount: 4 }));
   const [showRulesBigtwoModal, setShowRulesBigtwoModal] = useState(false);
+  const [bigTwoWheelPicker, setBigTwoWheelPicker] = useState(null);
+  const [pendingBigTwoWheel, setPendingBigTwoWheel] = useState(null);
+
+  // Cumulative Scoreboard Data (Games Played & Point Score, persisted in localStorage)
+  const [scoreboardData, setScoreboardData] = useState(() => {
+    try {
+      const saved = localStorage.getItem('poker_scoreboard_data');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [showScoreboardModal, setShowScoreboardModal] = useState(false);
 
   // Real-time Action Announcement Pop-up State
   const [recentActionPopup, setRecentActionPopup] = useState(null);
@@ -580,8 +594,11 @@ export default function App() {
   // In multiplayer: Always the user's cards (myPlayerId)
   // In single player: Always human player (SINGLE_HUMAN_ID)
   // In local mode: The player whose turn it currently is (pass-and-play)
+  const isBigTwoActive = activeGameType === 'bigtwo';
   const isGame41Active = activeGameType === 'game41';
-  const playersList = isGame41Active
+  const playersList = isBigTwoActive
+    ? (gameStateBigtwo?.players || [])
+    : isGame41Active
     ? (gameState41?.players || [])
     : (gameState?.players || []);
 
@@ -589,20 +606,28 @@ export default function App() {
     ? playersList.find((p) => p.id === myPlayerId) || playersList[0] || {}
     : isSingleMode
     ? playersList.find((p) => p.id === SINGLE_HUMAN_ID) || playersList[0] || {}
-    : playersList.find((p) => p.id === (isGame41Active ? gameState41?.currentPlayer : gameState?.currentPlayer)) || playersList[0] || {};
+    : playersList.find((p) => p.id === (
+        isBigTwoActive
+          ? gameStateBigtwo?.currentPlayer
+          : isGame41Active
+          ? gameState41?.currentPlayer
+          : gameState?.currentPlayer
+      )) || playersList[0] || {};
 
-  const currentHandRaw = isGame41Active
+  const currentHandRaw = isBigTwoActive
+    ? (gameStateBigtwo?.hands?.[trayPlayer.id] || [])
+    : isGame41Active
     ? (gameState41?.hands?.[trayPlayer.id] || [])
     : (gameState?.hands?.[trayPlayer.id] || []);
 
   const currentHand = useMemo(() => {
-    return isGame41Active ? currentHandRaw : sortHand(currentHandRaw, handSortBy);
-  }, [currentHandRaw, handSortBy, isGame41Active]);
+    return (isGame41Active || isBigTwoActive) ? currentHandRaw : sortHand(currentHandRaw, handSortBy);
+  }, [currentHandRaw, handSortBy, isGame41Active, isBigTwoActive]);
 
   const isMyTurn = isMultiplayerMode
-    ? (isGame41Active ? gameState41?.currentPlayer === myPlayerId : gameState?.currentPlayer === myPlayerId)
+    ? (isBigTwoActive ? gameStateBigtwo?.currentPlayer === myPlayerId : isGame41Active ? gameState41?.currentPlayer === myPlayerId : gameState?.currentPlayer === myPlayerId)
     : isSingleMode
-    ? (isGame41Active ? gameState41?.currentPlayer === SINGLE_HUMAN_ID : gameState?.currentPlayer === SINGLE_HUMAN_ID)
+    ? (isBigTwoActive ? gameStateBigtwo?.currentPlayer === SINGLE_HUMAN_ID : isGame41Active ? gameState41?.currentPlayer === SINGLE_HUMAN_ID : gameState?.currentPlayer === SINGLE_HUMAN_ID)
     : true; // In local mode, active player has turn
 
   // Seating around the poker table
@@ -884,17 +909,105 @@ export default function App() {
     }
   };
 
+  const recordGameEndScore = (gameKey, rankings = [], winnerId = null) => {
+    if (!rankings || rankings.length === 0) return;
+    setScoreboardData((prev) => {
+      const gameScores = { ...(prev[gameKey] || {}) };
+      rankings.forEach((r, idx) => {
+        const key = r.id || r.name;
+        const current = gameScores[key] || {
+          id: r.id,
+          name: r.name,
+          avatar: r.avatar,
+          games: 0,
+          score: 0,
+        };
+        const isWinner = r.isWinner || idx === 0 || (winnerId && r.id === winnerId);
+        gameScores[key] = {
+          ...current,
+          name: r.name || current.name,
+          avatar: r.avatar || current.avatar,
+          games: (current.games || 0) + 1,
+          score: (current.score || 0) + (isWinner ? 1 : 0),
+        };
+      });
+      const nextScores = { ...prev, [gameKey]: gameScores };
+      try {
+        localStorage.setItem('poker_scoreboard_data', JSON.stringify(nextScores));
+      } catch (e) {
+        console.error('Failed to save scoreboard data', e);
+      }
+      return nextScores;
+    });
+  };
+
+  const handleResetScoreboard = (gameKey) => {
+    setScoreboardData((prev) => {
+      const target = gameKey || activeGameType;
+      const nextScores = { ...prev, [target]: {} };
+      try {
+        localStorage.setItem('poker_scoreboard_data', JSON.stringify(nextScores));
+      } catch (e) {}
+      return nextScores;
+    });
+    showToast('Scoreboard berhasil di-reset!');
+  };
+
+  const handleBigTwoWheelComplete = async (selectedPlayerId) => {
+    setBigTwoWheelPicker(null);
+    const chosenPlayer = gameStateBigtwo.players?.find((p) => p.id === selectedPlayerId);
+    showToast(`🎯 Giliran Pertama: ${chosenPlayer?.name || 'Pemain'} (Meja Bebas)!`);
+    if (gameStateBigtwo.currentPlayer !== selectedPlayerId) {
+      const updatedState = {
+        ...gameStateBigtwo,
+        currentPlayer: selectedPlayerId,
+        trickLeaderId: selectedPlayerId,
+        currentTrick: { cards: [], combo: null, playedBy: null, playedByName: null },
+        passedPlayers: [],
+      };
+      setGameStateBigtwo(updatedState);
+      if (isMultiplayerMode && currentRoom?.code) {
+        await multiplayerAdapter.syncGameState(currentRoom.code, updatedState);
+      }
+    }
+  };
+
+  const handleBigTwoRespin = () => {
+    if (!gameStateBigtwo.players || gameStateBigtwo.players.length === 0) return;
+    const players = gameStateBigtwo.players;
+    const randomIdx = Math.floor(Math.random() * players.length);
+    setBigTwoWheelPicker({
+      isOpen: true,
+      players,
+      targetPlayerId: players[randomIdx].id,
+    });
+  };
+
   const handleRestartBigTwo = async (configOverrides = {}) => {
+    // When playing again, no need to spin wheel; previous winner starts the next game
+    const previousWinnerId = gameStateBigtwo.winner;
+    const previousWinnerObj = gameStateBigtwo.players?.find((p) => p.id === previousWinnerId);
+
     if (gameMode === 'multiplayer' && currentRoom?.code) {
       const isHost = currentRoom.host_id === myPlayerId;
       if (!isHost) {
         showToast('Hanya Host yang dapat mengocok ulang dan memulai game baru.');
         return;
       }
-      const res = await multiplayerAdapter.restartGame(currentRoom.code, myPlayerId, { gameType: 'bigtwo', ...configOverrides });
+      const res = await multiplayerAdapter.restartGame(currentRoom.code, myPlayerId, {
+        gameType: 'bigtwo',
+        startingPlayerId: previousWinnerId,
+        ...configOverrides,
+      });
       if (res.success) {
         setGameStateBigtwo(res.gameState);
-        showToast('Permainan Big Two baru dimulai!');
+        setPendingBigTwoWheel(null); // Tidak perlu spin lagi saat main lagi
+        setIsDealingAnimationActive(true);
+        if (previousWinnerObj) {
+          showToast(`Game baru dimulai! Giliran awal: ${previousWinnerObj.name} (Pemenang sebelumnya) 👑`);
+        } else {
+          showToast('Permainan Big Two baru dimulai!');
+        }
       } else {
         showToast(res.error || 'Gagal memulai ulang permainan.');
       }
@@ -902,14 +1015,41 @@ export default function App() {
       const count = gameStateBigtwo.players?.length || 2;
       const roster = createSinglePlayerRoster(count);
       const effectiveDeckMode = count > 4 ? gameStateBigtwo.config.deckMode : 'single';
-      const nextState = initBigTwo({ playerCount: count, deckMode: effectiveDeckMode, ...configOverrides }, roster);
+      const nextState = initBigTwo(
+        {
+          playerCount: count,
+          deckMode: effectiveDeckMode,
+          startingPlayerId: previousWinnerId,
+          ...configOverrides,
+        },
+        roster
+      );
       setGameStateBigtwo(nextState);
-      showToast('Permainan Big Two baru dimulai!');
+      setPendingBigTwoWheel(null); // Tidak perlu spin lagi saat main lagi
+      setIsDealingAnimationActive(true);
+      const startPlayer = nextState.players.find((p) => p.id === nextState.currentPlayer);
+      if (previousWinnerObj) {
+        showToast(`Game baru dimulai! Giliran awal: ${previousWinnerObj.name} (Pemenang sebelumnya) 👑`);
+      } else {
+        showToast(`Game baru dimulai! Giliran awal: ${startPlayer?.name || 'Pemain'}`);
+      }
     } else {
       const count = gameStateBigtwo.players?.length || 4;
-      const nextState = initBigTwo({ playerCount: count, deckMode: gameStateBigtwo.config.deckMode, ...configOverrides });
+      const nextState = initBigTwo({
+        playerCount: count,
+        deckMode: gameStateBigtwo.config.deckMode,
+        startingPlayerId: previousWinnerId,
+        ...configOverrides,
+      });
       setGameStateBigtwo(nextState);
-      showToast('Permainan Big Two baru dimulai!');
+      setPendingBigTwoWheel(null); // Tidak perlu spin lagi saat main lagi
+      setIsDealingAnimationActive(true);
+      const startPlayer = nextState.players.find((p) => p.id === nextState.currentPlayer);
+      if (previousWinnerObj) {
+        showToast(`Game baru dimulai! Giliran awal: ${previousWinnerObj.name} (Pemenang sebelumnya) 👑`);
+      } else {
+        showToast(`Game baru dimulai! Giliran awal: ${startPlayer?.name || 'Pemain'}`);
+      }
     }
   };
 
@@ -927,7 +1067,7 @@ export default function App() {
     let timer = null;
 
     if (activeGameType === 'bigtwo') {
-      if (gameStateBigtwo.gameStatus === 'GAME_OVER') return;
+      if (gameStateBigtwo.gameStatus === 'GAME_OVER' || bigTwoWheelPicker?.isOpen) return;
       const currentId = gameStateBigtwo.currentPlayer;
       if (isBotPlayer(gameStateBigtwo, currentId)) {
         const botObj = gameStateBigtwo.players.find((p) => p.id === currentId);
@@ -1003,6 +1143,7 @@ export default function App() {
     gameStateBigtwo.currentPlayer,
     gameStateBigtwo.gameStatus,
     gameStateBigtwo.currentTrick,
+    bigTwoWheelPicker?.isOpen,
   ]);
 
   // Find active turn player's name
@@ -1014,6 +1155,19 @@ export default function App() {
       : gameState?.currentPlayer
   ));
   const currentTurnPlayerName = currentTurnPlayer?.name || 'Pemain Lain';
+
+  // Automatic Score Recording for Cumulative Scoreboard (Points model, not penalty)
+  useEffect(() => {
+    if (activeGameType === 'bigtwo' && gameStateBigtwo.gameStatus === 'GAME_OVER' && gameStateBigtwo.rankings) {
+      recordGameEndScore('bigtwo', gameStateBigtwo.rankings, gameStateBigtwo.winner);
+    }
+  }, [gameStateBigtwo.gameStatus]);
+
+  useEffect(() => {
+    if (activeGameType === 'game41' && (gameState41.gameStatus === 'game_over' || gameState41.gameStatus === 'GAME_OVER') && gameState41.rankings) {
+      recordGameEndScore('game41', gameState41.rankings, gameState41.winner);
+    }
+  }, [gameState41.gameStatus]);
 
   // Return to Mode Selection Screen (Home)
   const handleBackToModeSelect = () => {
@@ -1098,6 +1252,11 @@ export default function App() {
                   deckMode: totalCount > 4 ? (options?.deckMode || 'single') : 'single',
                 }, roster);
                 setGameStateBigtwo(stateBigtwo);
+                setPendingBigTwoWheel({
+                  isOpen: true,
+                  players: stateBigtwo.players,
+                  targetPlayerId: stateBigtwo.currentPlayer,
+                });
               } else if (chosenGame === 'game41') {
                 const state41 = initGame41({ playerCount: totalCount }, roster);
                 setGameState41(state41);
@@ -1116,6 +1275,11 @@ export default function App() {
                   deckMode: count > 4 ? (options?.deckMode || 'single') : 'single',
                 });
                 setGameStateBigtwo(stateBigtwo);
+                setPendingBigTwoWheel({
+                  isOpen: true,
+                  players: stateBigtwo.players,
+                  targetPlayerId: stateBigtwo.currentPlayer,
+                });
               } else if (chosenGame === 'game41') {
                 const state41 = initGame41({ playerCount: count });
                 setGameState41(state41);
@@ -1381,6 +1545,17 @@ export default function App() {
             </button>
           )}
 
+          {/* Cumulative Scoreboard Button */}
+          <button
+            className="btn-header"
+            onClick={() => setShowScoreboardModal(true)}
+            title="Lihat Papan Skor (Scoreboard)"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+          >
+            <Trophy size={15} color="#eab308" />
+            <span>Scoreboard</span>
+          </button>
+
           <button
             className={`btn-icon ${isMuted ? 'active' : ''}`}
             onClick={handleToggleSound}
@@ -1418,6 +1593,14 @@ export default function App() {
           )}
 
           <button
+            className="btn-icon"
+            onClick={() => setShowScoreboardModal(true)}
+            title="Papan Skor (Scoreboard)"
+          >
+            <Trophy size={16} color="#eab308" />
+          </button>
+
+          <button
             className={`btn-icon ${isMuted ? 'active' : ''}`}
             onClick={handleToggleSound}
             title={isMuted ? 'Nyalakan Suara' : 'Matikan Suara'}
@@ -1438,10 +1621,16 @@ export default function App() {
 
       {/* Main Game Table Container */}
       <main className="game-layout">
-        {/* Dealing & Shuffling Casino Animation Overlay (Plays for both Sevens and Game 41) */}
+        {/* Dealing & Shuffling Casino Animation Overlay */}
         <ShuffleDealingAnimation
           isActive={isDealingAnimationActive}
-          onComplete={() => setIsDealingAnimationActive(false)}
+          onComplete={() => {
+            setIsDealingAnimationActive(false);
+            if (pendingBigTwoWheel) {
+              setBigTwoWheelPicker(pendingBigTwoWheel);
+              setPendingBigTwoWheel(null);
+            }
+          }}
           playerHand={currentHand}
           seats={seats}
         />
@@ -1463,6 +1652,7 @@ export default function App() {
             onPass={handlePassBigTwo}
             isMultiplayer={isMultiplayerMode}
             onOpenRules={() => setShowRulesBigtwoModal(true)}
+            onOpenWheel={handleBigTwoRespin}
             onError={showToast}
           />
         ) : activeGameType === 'game41' ? (
@@ -1704,6 +1894,7 @@ export default function App() {
         }}
         onOpenConfig={() => setShowConfigModal(true)}
         onOpenHistory={() => setShowHistoryModal(true)}
+        onOpenScoreboard={() => setShowScoreboardModal(true)}
         isMuted={isMuted}
         onToggleSound={handleToggleSound}
         onRestart={() => {
@@ -1779,10 +1970,26 @@ export default function App() {
           onRestart={handleRestartBigTwo}
           onPlayAgain={handleRestartBigTwo}
           onBackToMenu={handleBackToModeSelect}
+          onOpenScoreboard={() => setShowScoreboardModal(true)}
           isMultiplayer={isMultiplayerMode}
           isHost={isHost}
         />
       )}
+
+      {/* Cumulative Scoreboard Modal (Points Model) */}
+      <ScoreboardModal
+        isOpen={showScoreboardModal}
+        onClose={() => setShowScoreboardModal(false)}
+        scoreboardData={Object.values(scoreboardData[activeGameType] || {})}
+        onResetScoreboard={() => handleResetScoreboard(activeGameType)}
+        activeGameTitle={
+          activeGameType === 'bigtwo'
+            ? 'Scoreboard • Capsa Banting (Big Two)'
+            : activeGameType === 'game41'
+            ? 'Scoreboard • Remi 41'
+            : 'Scoreboard • Sevens (Tujuh Sekop)'
+        }
+      />
 
       {/* Rules Guide Modals */}
       {showRulesModal && <RulesGuideModal onClose={() => setShowRulesModal(false)} />}
@@ -1791,6 +1998,18 @@ export default function App() {
         <RulesGuideBigTwoModal
           isOpen={showRulesBigtwoModal}
           onClose={() => setShowRulesBigtwoModal(false)}
+        />
+      )}
+
+      {/* Big Two First Turn Picker Wheel Modal */}
+      {bigTwoWheelPicker?.isOpen && (
+        <BigTwoFirstTurnWheel
+          isOpen={bigTwoWheelPicker.isOpen}
+          players={bigTwoWheelPicker.players || gameStateBigtwo.players}
+          targetPlayerId={bigTwoWheelPicker.targetPlayerId}
+          onComplete={handleBigTwoWheelComplete}
+          onClose={() => setBigTwoWheelPicker(null)}
+          onRespin={handleBigTwoRespin}
         />
       )}
 

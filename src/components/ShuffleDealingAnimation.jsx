@@ -262,36 +262,44 @@ export default function ShuffleDealingAnimation({
       </button>
 
       {/* TOP: Seat Pod */}
-      <div className="dealing-seat-pod seat-pod-top">
-        <div className="seat-pod-avatar">
-          {seats.topPlayers && seats.topPlayers.length > 1
-            ? seats.topPlayers.map((p) => p.avatar).join(' ')
-            : seats.top?.avatar || '👤'}
-        </div>
-        <div className="seat-pod-meta">
-          <span className="seat-pod-name">
+      {(seats.top || (seats.topPlayers && seats.topPlayers.length > 0)) ? (
+        <div className="dealing-seat-pod seat-pod-top">
+          <div className="seat-pod-avatar">
             {seats.topPlayers && seats.topPlayers.length > 1
-              ? seats.topPlayers.map((p) => p.name).join(' & ')
-              : seats.top?.name || 'Pemain Atas'}
-          </span>
-          <span className="seat-pod-count">
-            🂠 {topDealtCount}/{cardsPerHand} kartu tertutup
-          </span>
+              ? seats.topPlayers.map((p) => p.avatar).join(' ')
+              : seats.top?.avatar || '👤'}
+          </div>
+          <div className="seat-pod-meta">
+            <span className="seat-pod-name">
+              {seats.topPlayers && seats.topPlayers.length > 1
+                ? seats.topPlayers.map((p) => p.name).join(' & ')
+                : seats.top?.name || 'Pemain Atas'}
+            </span>
+            <span className="seat-pod-count">
+              🂠 {topDealtCount}/{cardsPerHand} kartu tertutup
+            </span>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="dealing-seat-pod-empty top-empty" />
+      )}
 
       {/* MIDDLE ROW: Left Seat, Center Deck / Riffle, Right Seat */}
       <div className="dealing-middle-arena">
         {/* LEFT: Seat Pod */}
-        <div className="dealing-seat-pod seat-pod-left">
-          <div className="seat-pod-avatar">{seats.left?.avatar || '👤'}</div>
-          <div className="seat-pod-meta">
-            <span className="seat-pod-name">{seats.left?.name || 'Pemain Kiri'}</span>
-            <span className="seat-pod-count">
-              🂠 {leftDealtCount}/{cardsPerHand}
-            </span>
+        {seats.left ? (
+          <div className="dealing-seat-pod seat-pod-left">
+            <div className="seat-pod-avatar">{seats.left?.avatar || '👤'}</div>
+            <div className="seat-pod-meta">
+              <span className="seat-pod-name">{seats.left?.name || 'Pemain Kiri'}</span>
+              <span className="seat-pod-count">
+                🂠 {leftDealtCount}/{cardsPerHand}
+              </span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="dealing-seat-pod-empty side-empty" />
+        )}
 
         {/* CENTER TABLE: Shuffling Deck / Dealing Hub */}
         <div className="dealing-center-stage">
@@ -407,15 +415,19 @@ export default function ShuffleDealingAnimation({
         </div>
 
         {/* RIGHT: Seat Pod */}
-        <div className="dealing-seat-pod seat-pod-right">
-          <div className="seat-pod-avatar">{seats.right?.avatar || '👤'}</div>
-          <div className="seat-pod-meta">
-            <span className="seat-pod-name">{seats.right?.name || 'Pemain Kanan'}</span>
-            <span className="seat-pod-count">
-              🂠 {rightDealtCount}/{cardsPerHand}
-            </span>
+        {seats.right ? (
+          <div className="dealing-seat-pod seat-pod-right">
+            <div className="seat-pod-avatar">{seats.right?.avatar || '👤'}</div>
+            <div className="seat-pod-meta">
+              <span className="seat-pod-name">{seats.right?.name || 'Pemain Kanan'}</span>
+              <span className="seat-pod-count">
+                🂠 {rightDealtCount}/{cardsPerHand}
+              </span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="dealing-seat-pod-empty side-empty" />
+        )}
       </div>
 
       {/* STATUS BANNER WITH REALTIME 15S PROGRESS */}

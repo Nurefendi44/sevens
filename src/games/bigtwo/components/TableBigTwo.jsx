@@ -11,6 +11,7 @@ import {
   Layers,
   AlertTriangle,
   X,
+  Sparkles,
 } from 'lucide-react';
 import '../../../styles/bigtwo.css';
 
@@ -22,6 +23,7 @@ export default function TableBigTwo({
   onPass,
   isMultiplayer = false,
   onOpenRules,
+  onOpenWheel,
   onError,
 }) {
   const [selectedCards, setSelectedCards] = useState([]);
@@ -179,6 +181,7 @@ export default function TableBigTwo({
         {opponentPlayers.map((p) => {
           const isOpponentTurn = gameState.currentPlayer === p.id;
           const isOpponentPassed = gameState.passedPlayers?.includes(p.id);
+          const finishedEntry = gameState.finishedPlayers?.find((f) => f.id === p.id);
           const oppCardCount = gameState.hands[p.id]?.length || 0;
 
           return (
@@ -187,14 +190,35 @@ export default function TableBigTwo({
               className={`bigtwo-opponent-card ${
                 isOpponentTurn ? 'active-turn' : ''
               } ${isOpponentPassed ? 'is-passed' : ''}`}
-              style={isOpponentPassed ? { opacity: 0.65 } : {}}
+              style={
+                finishedEntry
+                  ? { border: '1.5px solid #eab308', background: 'rgba(234, 179, 8, 0.08)' }
+                  : isOpponentPassed
+                  ? { opacity: 0.65 }
+                  : {}
+              }
             >
               <div className="bigtwo-opp-header">
                 <span className="opp-avatar">{p.avatar || '🤖'}</span>
                 <span className="opp-name">
-                  {p.name} : <strong>{oppCardCount}</strong>
+                  {p.name} : <strong>{finishedEntry ? 'HABIS' : oppCardCount}</strong>
                 </span>
-                {isOpponentPassed ? (
+                {finishedEntry ? (
+                  <span
+                    style={{
+                      background: 'linear-gradient(135deg, #eab308, #ca8a04)',
+                      color: '#0f172a',
+                      fontSize: '0.62rem',
+                      fontWeight: 900,
+                      padding: '0.15rem 0.45rem',
+                      borderRadius: '999px',
+                      marginLeft: 'auto',
+                      boxShadow: '0 2px 6px rgba(234, 179, 8, 0.4)',
+                    }}
+                  >
+                    👑 JUARA {finishedEntry.rank}
+                  </span>
+                ) : isOpponentPassed ? (
                   <span
                     style={{
                       background: 'rgba(100, 116, 139, 0.4)',
@@ -274,11 +298,25 @@ export default function TableBigTwo({
               Kartu Anda (<strong>{myHand.length}</strong>)
             </span>
 
-            {isMyTurn && (
+            {gameState.finishedPlayers?.some((f) => f.id === myPlayer.id) ? (
+              <span
+                style={{
+                  background: 'linear-gradient(135deg, #eab308, #ca8a04)',
+                  color: '#0f172a',
+                  fontSize: '0.75rem',
+                  fontWeight: 900,
+                  padding: '0.2rem 0.65rem',
+                  borderRadius: '999px',
+                  boxShadow: '0 2px 8px rgba(234, 179, 8, 0.4)',
+                }}
+              >
+                🎉 JUARA {gameState.finishedPlayers.find((f) => f.id === myPlayer.id)?.rank} (KARTU HABIS)
+              </span>
+            ) : isMyTurn ? (
               <span className="bigtwo-inline-turn-pill">🔥 Giliran Anda</span>
-            )}
+            ) : null}
 
-            {gameState.passedPlayers?.includes(myPlayer.id) && (
+            {gameState.passedPlayers?.includes(myPlayer.id) && !gameState.finishedPlayers?.some((f) => f.id === myPlayer.id) && (
               <span
                 style={{
                   background: 'rgba(100, 116, 139, 0.4)',
@@ -408,6 +446,18 @@ export default function TableBigTwo({
             >
               <RotateCcw size={14} />
               <span>Reset</span>
+            </button>
+          )}
+
+          {onOpenWheel && (
+            <button
+              type="button"
+              className="btn-action-rules"
+              onClick={onOpenWheel}
+              title="Putar Roda Acak Giliran Pertama"
+              style={{ background: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.3)', color: '#fbbf24' }}
+            >
+              <Sparkles size={15} />
             </button>
           )}
 
