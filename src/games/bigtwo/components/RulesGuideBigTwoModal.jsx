@@ -48,9 +48,15 @@ export default function RulesGuideBigTwoModal({ isOpen, onClose }) {
           {/* Strict Rules */}
           <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', padding: '12px 16px', borderRadius: '10px' }}>
             <h4 style={{ color: '#f87171', fontWeight: 700, margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <AlertTriangle size={16} /> ATURAN KHUSUS KOMBINASI
+              <AlertTriangle size={16} /> ATURAN KHUSUS BIG TWO
             </h4>
             <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <li>
+                <strong>DILARANG Kartu 2 Menjadi Kartu Terakhir (Kalah Otomatis):</strong> Kartu angka 2 tidak boleh menjadi kartu terakhir yang dikeluarkan untuk menghabiskan kartu tangan. Misalnya Anda memegang 2 dan 5, maka Anda harus mengeluarkan kartu 2 terlebih dahulu, baru kemudian kartu 5. <em>Jika kartu terakhir Anda adalah 2, Anda dinyatakan <strong>OTOMATIS KALAH</strong> dan pemain lain dengan kartu tersedikit menjadi pemenang!</em>
+              </li>
+              <li>
+                <strong>Sistem Pass dalam Satu Rangkaian (Dilewati Hingga Meja Bebas):</strong> Jika Anda menekan <strong>Pass (Lewat)</strong> dalam satu putaran/rangkaian, Anda akan <strong>dilewati</strong> dan tidak berhak jalan lagi di putaran tersebut hingga kartu di meja dibersihkan (Meja Bebas). Setelah meja bebas, semua pemain berhak bermain kembali!
+              </li>
               <li>
                 <strong>DILARANG Mengeluarkan Double Pair:</strong> Kombinasi 4 kartu berupa 2 pasang (seperti 5-5-8-8) tidak sah dan tidak boleh dikeluarkan.
               </li>

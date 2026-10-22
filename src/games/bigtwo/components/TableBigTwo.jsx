@@ -178,6 +178,7 @@ export default function TableBigTwo({
       <div className="bigtwo-opponents-row">
         {opponentPlayers.map((p) => {
           const isOpponentTurn = gameState.currentPlayer === p.id;
+          const isOpponentPassed = gameState.passedPlayers?.includes(p.id);
           const oppCardCount = gameState.hands[p.id]?.length || 0;
 
           return (
@@ -185,16 +186,32 @@ export default function TableBigTwo({
               key={p.id}
               className={`bigtwo-opponent-card ${
                 isOpponentTurn ? 'active-turn' : ''
-              }`}
+              } ${isOpponentPassed ? 'is-passed' : ''}`}
+              style={isOpponentPassed ? { opacity: 0.65 } : {}}
             >
               <div className="bigtwo-opp-header">
                 <span className="opp-avatar">{p.avatar || '🤖'}</span>
                 <span className="opp-name">
                   {p.name} : <strong>{oppCardCount}</strong>
                 </span>
-                {isOpponentTurn && (
+                {isOpponentPassed ? (
+                  <span
+                    style={{
+                      background: 'rgba(100, 116, 139, 0.4)',
+                      color: '#cbd5e1',
+                      border: '1px solid rgba(148, 163, 184, 0.4)',
+                      fontSize: '0.62rem',
+                      fontWeight: 700,
+                      padding: '0.1rem 0.4rem',
+                      borderRadius: '999px',
+                      marginLeft: 'auto',
+                    }}
+                  >
+                    LEWAT
+                  </span>
+                ) : isOpponentTurn ? (
                   <span className="turn-indicator-badge">Giliran</span>
-                )}
+                ) : null}
               </div>
 
               <div className="bigtwo-opp-cards-fan">
@@ -260,6 +277,22 @@ export default function TableBigTwo({
             {isMyTurn && (
               <span className="bigtwo-inline-turn-pill">🔥 Giliran Anda</span>
             )}
+
+            {gameState.passedPlayers?.includes(myPlayer.id) && (
+              <span
+                style={{
+                  background: 'rgba(100, 116, 139, 0.4)',
+                  color: '#cbd5e1',
+                  border: '1px solid rgba(148, 163, 184, 0.4)',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  padding: '0.15rem 0.5rem',
+                  borderRadius: '999px',
+                }}
+              >
+                🔒 Anda Lewat (Dilewati Hingga Meja Bebas)
+              </span>
+            )}
           </div>
 
           {/* Toggle Hand Grid View Button */}
@@ -313,9 +346,25 @@ export default function TableBigTwo({
       <div className="bigtwo-floating-dock-wrapper">
         {/* Combo preview pill above dock when valid combo is selected */}
         {selectedCards.length > 0 && selectedEval?.isValid && (
-          <div className="bigtwo-floating-combo-pill">
-            <Flame size={13} color="#38bdf8" />
-            <span>{selectedEval.label}</span>
+          <div
+            className="bigtwo-floating-combo-pill"
+            style={
+              selectedCards.length === myHand.length && selectedCards.some((c) => c.rank === 2)
+                ? { background: 'rgba(220, 38, 38, 0.95)', border: '1px solid #ef4444', color: '#ffffff' }
+                : {}
+            }
+          >
+            {selectedCards.length === myHand.length && selectedCards.some((c) => c.rank === 2) ? (
+              <>
+                <AlertTriangle size={13} color="#fef08a" />
+                <span style={{ fontWeight: 800 }}>⚠️ PERINGATAN: Kartu 2 terakhir = Kalah Otomatis!</span>
+              </>
+            ) : (
+              <>
+                <Flame size={13} color="#38bdf8" />
+                <span>{selectedEval.label}</span>
+              </>
+            )}
           </div>
         )}
 

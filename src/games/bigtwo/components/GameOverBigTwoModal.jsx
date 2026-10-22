@@ -29,12 +29,31 @@ export default function GameOverBigTwoModal({
       <div className="modal-card" style={{ maxWidth: '600px', width: '92vw' }}>
         {/* Header */}
         <div className="modal-header" style={{ justifyContent: 'center', textAlign: 'center', flexDirection: 'column' }}>
-          <div style={{ fontSize: '3rem', margin: '0.25rem 0' }}>🏆</div>
-          <h2 style={{ margin: '0 0 0.25rem 0', color: '#38bdf8', fontSize: '1.6rem', fontWeight: 900 }}>
-            PERMAINAN BIG TWO SELESAI!
+          <div style={{ fontSize: '3rem', margin: '0.25rem 0' }}>
+            {gameState.endReason === 'LAST_CARD_TWO_DISQUALIFICATION' ? '🚫' : '🏆'}
+          </div>
+          <h2 style={{
+            margin: '0 0 0.25rem 0',
+            color: gameState.endReason === 'LAST_CARD_TWO_DISQUALIFICATION' ? '#f87171' : '#38bdf8',
+            fontSize: '1.5rem',
+            fontWeight: 900
+          }}>
+            {gameState.endReason === 'LAST_CARD_TWO_DISQUALIFICATION'
+              ? 'PELANGGARAN: KARTU 2 TERAKHIR!'
+              : 'PERMAINAN BIG TWO SELESAI!'}
           </h2>
-          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-            <strong>{winnerPlayer?.name || 'Pemain'}</strong> berhasil menghabiskan seluruh kartunya terlebih dahulu!
+          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.92rem' }}>
+            {gameState.endReason === 'LAST_CARD_TWO_DISQUALIFICATION' ? (
+              <>
+                <strong>{gameState.disqualifiedPlayerName || 'Pemain'}</strong> mengeluarkan kartu 2 sebagai kartu terakhir (dilarang).
+                <br />
+                Pemenang: <strong style={{ color: '#38bdf8' }}>{winnerPlayer?.name}</strong> (sisa kartu paling sedikit)!
+              </>
+            ) : (
+              <>
+                <strong>{winnerPlayer?.name || 'Pemain'}</strong> berhasil menghabiskan seluruh kartunya terlebih dahulu!
+              </>
+            )}
           </p>
         </div>
 
@@ -42,16 +61,23 @@ export default function GameOverBigTwoModal({
         <div className="modal-body" style={{ padding: '1rem 0' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {rankings.map((r, index) => {
-              const isWinner = index === 0;
+              const isWinner = r.isWinner ?? (index === 0 && !r.isDisqualified);
+              const isDisqualified = r.isDisqualified;
 
               return (
                 <div
                   key={r.id}
                   style={{
-                    background: isWinner
+                    background: isDisqualified
+                      ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(15, 23, 42, 0.9))'
+                      : isWinner
                       ? 'linear-gradient(135deg, rgba(2, 132, 199, 0.25), rgba(15, 23, 42, 0.9))'
                       : 'rgba(255, 255, 255, 0.04)',
-                    border: isWinner ? '1.5px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.1)',
+                    border: isDisqualified
+                      ? '1.5px solid #ef4444'
+                      : isWinner
+                      ? '1.5px solid #38bdf8'
+                      : '1px solid rgba(255, 255, 255, 0.1)',
                     borderRadius: '12px',
                     padding: '0.75rem 1rem',
                     display: 'flex',
@@ -61,21 +87,31 @@ export default function GameOverBigTwoModal({
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <span style={{ fontSize: '1.4rem' }}>
-                      {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
+                      {isDisqualified ? '❌' : index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
                     </span>
                     <span style={{ fontSize: '1.25rem' }}>{r.avatar}</span>
                     <div>
-                      <strong style={{ color: isWinner ? '#38bdf8' : '#f8fafc', fontSize: '0.95rem' }}>
+                      <strong style={{ color: isDisqualified ? '#f87171' : isWinner ? '#38bdf8' : '#f8fafc', fontSize: '0.95rem' }}>
                         {r.name}
                       </strong>
-                      <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                        {isWinner ? 'KARTU HABIS (MENANG!)' : `Sisa ${r.remainingCards} kartu`}
+                      <div style={{ fontSize: '0.75rem', color: isDisqualified ? '#fca5a5' : '#94a3b8' }}>
+                        {isDisqualified
+                          ? 'KALAH (Kartu 2 Terakhir Dilarang)'
+                          : isWinner
+                          ? (gameState.endReason === 'LAST_CARD_TWO_DISQUALIFICATION'
+                              ? `MENANG (Sisa ${r.remainingCards} kartu)`
+                              : 'KARTU HABIS (MENANG!)')
+                          : `Sisa ${r.remainingCards} kartu`}
                       </div>
                     </div>
                   </div>
 
                   <div style={{ textAlign: 'right' }}>
-                    {isWinner ? (
+                    {isDisqualified ? (
+                      <span style={{ background: '#dc2626', color: '#ffffff', padding: '0.25rem 0.65rem', borderRadius: '6px', fontWeight: 800, fontSize: '0.75rem' }}>
+                        KALAH OTOMATIS ⚠️
+                      </span>
+                    ) : isWinner ? (
                       <span className="badge-ready" style={{ background: '#0284c7', color: '#ffffff', padding: '0.25rem 0.65rem' }}>
                         PEMENANG 👑
                       </span>

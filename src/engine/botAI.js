@@ -225,7 +225,27 @@ function weakest(combos) {
 }
 
 function isTwo(card) {
-  return getCardRank(card) === 15;
+  return getCardRank(card) === 15 || card.rank === 2;
+}
+
+/**
+ * Checks if playing this combo would violate Rule 1 or trap the bot into violating Rule 1:
+ * - Finishing with a 2 (selected has 2 and empties hand) -> automatic loss!
+ * - Leaving ONLY 2s in hand (leaves 1 or more cards, all of which are 2) -> will force finishing with 2 later and lose!
+ */
+function isSuicidalRule1Move(hand, comboCards) {
+  const remaining = hand.filter(
+    (c) => !comboCards.some((sc) => sc.id === c.id || (sc.rank === c.rank && sc.suit === c.suit))
+  );
+  // Finishing with a 2 causes immediate loss
+  if (remaining.length === 0 && comboCards.some(isTwo)) {
+    return true;
+  }
+  // Leaving only 2s in hand traps player into finishing with a 2 later
+  if (remaining.length > 0 && remaining.every(isTwo)) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -235,11 +255,26 @@ export function chooseBigTwoBotMove(gameState, botId) {
   const hand = sortBigTwoCards(gameState.hands?.[botId] || []);
   if (hand.length === 0) return { action: 'pass' };
 
+  // If bot already passed in this trick, it cannot move (Rule 2)
+  if (gameState.passedPlayers?.includes(botId)) {
+    return { action: 'pass' };
+  }
+
   const tableCombo = gameState.currentTrick?.combo || null;
   const isFreeTurn = !tableCombo || !gameState.currentTrick?.cards?.length;
 
-  // FREE TURN: lead with combo that contains our lowest card (dump the most cards)
+  // FREE TURN:
   if (isFreeTurn) {
+    // If bot has a 2 and other non-2 cards, and hand is very small (2-3 cards),
+    // prioritize getting rid of the 2 so it is NOT the last card!
+    const twos = hand.filter(isTwo);
+    const nonTwos = hand.filter((c) => !isTwo(c));
+
+    if (twos.length > 0 && nonTwos.length > 0 && hand.length <= 3) {
+      // Dump the 2 now to stay safe!
+      return { action: 'play', cards: [twos[0]] };
+    }
+
     let anchor = hand[0];
     if (gameState.isFirstPlayOfGame && gameState.config?.starterCardMandatory && gameState.lowestCard) {
       anchor =
@@ -247,10 +282,22 @@ export function chooseBigTwoBotMove(gameState, botId) {
           (c) => getCardRank(c) === getCardRank(gameState.lowestCard) && c.suit === gameState.lowestCard.suit
         ) || hand[0];
     }
+
     for (const size of [5, 3, 2]) {
-      const combos = generateCombos(hand, size, anchor);
+      const combos = generateCombos(hand, size, anchor).filter(
+        (c) => !isSuicidalRule1Move(hand, c.cards)
+      );
       if (combos.length > 0) return { action: 'play', cards: weakest(combos).cards };
     }
+
+    // Single card lead: pick lowest card that is not suicidal
+    const nonSuicidalSingles = hand.filter((c) => !isSuicidalRule1Move(hand, [c]));
+    if (nonSuicidalSingles.length > 0) {
+      // If anchor is in nonSuicidalSingles, play anchor, else weakest non-suicidal
+      const pick = nonSuicidalSingles.includes(anchor) ? anchor : nonSuicidalSingles[0];
+      return { action: 'play', cards: [pick] };
+    }
+
     return { action: 'play', cards: [anchor] };
   }
 
@@ -259,7 +306,15 @@ export function chooseBigTwoBotMove(gameState, botId) {
   const beating = generateCombos(hand, size).filter((c) => canBeatCombo(c, tableCombo).canBeat);
   if (beating.length === 0) return { action: 'pass' };
 
-  const choice = weakest(beating);
+  // Filter out suicidal moves (Rule 1: don't leave only 2s and don't finish with 2)
+  const safeBeating = beating.filter((c) => !isSuicidalRule1Move(hand, c.cards));
+
+  // If all beating moves are suicidal, choose to pass instead of losing!
+  if (safeBeating.length === 0) {
+    return { action: 'pass' };
+  }
+
+  const choice = weakest(safeBeating);
   // Save "2" cards early in the game unless we're close to finishing
   if (choice.cards.some(isTwo) && hand.length > 6 && Math.random() < 0.5) {
     return { action: 'pass' };
