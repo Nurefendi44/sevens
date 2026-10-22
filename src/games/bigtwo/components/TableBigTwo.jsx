@@ -46,8 +46,9 @@ export default function TableBigTwo({
     return null;
   }
 
-  // Bottom perspective: In multiplayer viewer is myPlayerId, in local it's currentPlayer
-  const myPlayer = isMultiplayer
+  // Bottom perspective: In multiplayer viewer is myPlayerId, in single player it's always the human, in local pass-and-play it's currentPlayer
+  const isDedicatedViewer = isMultiplayer || (myPlayerId && gameState.players.some((p) => p.id === myPlayerId && p.isHuman));
+  const myPlayer = isDedicatedViewer
     ? gameState.players.find((p) => p.id === myPlayerId) ||
       gameState.players[0] || { id: myPlayerId, name: 'Pemain' }
     : gameState.players.find((p) => p.id === gameState.currentPlayer) ||

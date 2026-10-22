@@ -13,6 +13,51 @@
   gap: 1rem;
 }
 
+/* Floating Bot Thinking Indicator Pill */
+.bot-thinking-banner {
+  position: fixed;
+  top: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(168, 85, 247, 0.55);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), 0 0 16px rgba(168, 85, 247, 0.28);
+  color: #f3e8ff;
+  padding: 0.38rem 1.05rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  animation: botBounceIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+}
+
+.bot-thinking-spinner {
+  font-size: 1.1rem;
+  animation: botWiggle 1.2s infinite ease-in-out;
+}
+
+@keyframes botWiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-8deg); }
+  75% { transform: rotate(8deg); }
+}
+
+@keyframes botBounceIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
 /* Poker Table Outer Frame */
 .poker-table-wrapper {
   flex: 1;

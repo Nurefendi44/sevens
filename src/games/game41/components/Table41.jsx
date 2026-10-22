@@ -23,8 +23,9 @@ export default function Table41({
 
   const currentTurnPlayer = gameState.players.find((p) => p.id === gameState.currentPlayer) || gameState.players[0];
 
-  // In local pass-and-play, bottom player perspective follows whose turn it is
-  const myPlayer = isMultiplayer
+  // In multiplayer/single-player viewer stays fixed to user, in local pass-and-play it follows whose turn it is
+  const isDedicatedViewer = isMultiplayer || (myPlayerId && gameState.players.some((p) => p.id === myPlayerId && p.isHuman));
+  const myPlayer = isDedicatedViewer
     ? (gameState.players.find((p) => p.id === myPlayerId) || gameState.players[0] || { id: myPlayerId, name: 'Pemain' })
     : (gameState.players.find((p) => p.id === gameState.currentPlayer) || gameState.players[0] || { id: 'player_1', name: 'Pemain' });
 

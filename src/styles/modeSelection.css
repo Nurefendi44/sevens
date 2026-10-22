@@ -518,7 +518,7 @@
 
 .mode-modal-sheet {
   width: 100%;
-  max-width: 880px;
+  max-width: 1020px;
   border-radius: 28px;
   background: linear-gradient(165deg, #111c24 0%, #091117 100%);
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -543,10 +543,11 @@
 .sheet-drag-handle {
   display: none;
   width: 100%;
-  padding: 8px 0 14px 0;
-  margin: -4px auto 0.4rem;
+  padding: 10px 0 16px 0;
+  margin: -6px auto 0.4rem;
   cursor: grab;
   touch-action: none;
+  -webkit-touch-action: none;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -556,18 +557,19 @@
 }
 
 .sheet-drag-bar {
-  width: 44px;
-  height: 5px;
+  width: 48px;
+  height: 6px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.35);
   margin: 0 auto;
   transition: background 0.2s ease, width 0.2s ease;
+  pointer-events: none;
 }
 
 .sheet-drag-handle:hover .sheet-drag-bar,
 .sheet-drag-handle:active .sheet-drag-bar {
-  background: rgba(255, 255, 255, 0.75);
-  width: 56px;
+  background: rgba(255, 255, 255, 0.85);
+  width: 60px;
 }
 
 /* Header Modal */
@@ -579,6 +581,8 @@
   padding-bottom: 1.25rem;
   margin-bottom: 1.4rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  touch-action: none;
+  -webkit-touch-action: none;
   flex-wrap: wrap;
 }
 
@@ -674,13 +678,13 @@
 }
 
 /* ==========================================================================
-   GRID OPSI ONLINE VS OFFLINE DI DALAM MODAL
+   GRID 3 OPSI: SINGLE PLAYER (BOT) VS ONLINE VS OFFLINE
    ========================================================================== */
 
 .mode-cards-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.15rem;
 }
 
 .mode-card {
@@ -688,11 +692,16 @@
   flex-direction: column;
   justify-content: space-between;
   border-radius: 20px;
-  padding: 1.35rem;
+  padding: 1.25rem;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.09);
   cursor: pointer;
   transition: all 0.25s ease;
+}
+
+.mode-card-single:hover {
+  border-color: rgba(168, 85, 247, 0.55);
+  background: rgba(168, 85, 247, 0.04);
 }
 
 .mode-card-online:hover {
@@ -716,6 +725,12 @@
   margin-bottom: 0.85rem;
 }
 
+.badge-single {
+  background: rgba(168, 85, 247, 0.18);
+  color: #d8b4fe;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+}
+
 .badge-online {
   background: rgba(56, 189, 248, 0.15);
   color: #7dd3fc;
@@ -726,6 +741,77 @@
   background: rgba(251, 191, 36, 0.15);
   color: #fde68a;
   border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.bubble-single {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.25) 0%, rgba(126, 34, 206, 0.35) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  color: #c084fc;
+}
+
+.pill-single {
+  background: rgba(168, 85, 247, 0.2) !important;
+  color: #e9d5ff !important;
+  border-color: rgba(168, 85, 247, 0.45) !important;
+}
+
+.btn-bot-pill.active {
+  background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%) !important;
+  border-color: #c084fc !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4) !important;
+}
+
+.bot-roster-preview {
+  margin-top: 0.65rem;
+  margin-bottom: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.bot-roster-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  font-weight: 700;
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.bot-roster-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.bot-chip-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  color: #e9d5ff;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.bot-chip-avatar {
+  font-size: 0.85rem;
+}
+
+.btn-single-action {
+  background: linear-gradient(135deg, #a855f7 0%, #7e22ce 100%);
+  color: #ffffff;
+  box-shadow: 0 8px 20px -4px rgba(168, 85, 247, 0.5);
+}
+
+.btn-single-action:hover {
+  background: linear-gradient(135deg, #c084fc 0%, #9333ea 100%);
 }
 
 .mode-card-title-row {
@@ -983,6 +1069,12 @@
   .game-catalog-grid {
     grid-template-columns: 1fr;
     max-width: 480px;
+    margin: 0 auto;
+  }
+
+  .mode-cards-grid {
+    grid-template-columns: 1fr;
+    max-width: 520px;
     margin: 0 auto;
   }
 }

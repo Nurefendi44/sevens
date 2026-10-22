@@ -12,8 +12,19 @@ import {
   Layers,
   X,
   CheckCircle2,
+  Bot,
+  Plus,
+  Minus,
 } from 'lucide-react';
 import '../styles/modeSelection.css';
+
+const BOT_PREVIEWS = [
+  { name: 'Bot Raka', avatar: '🤖', style: 'Taktis & Agresif' },
+  { name: 'Bot Sinta', avatar: '👾', style: 'Cermat & Waspada' },
+  { name: 'Bot Dimas', avatar: '🦾', style: 'Solid & Konsisten' },
+  { name: 'Bot Maya', avatar: '🎯', style: 'Presisi Tinggi' },
+  { name: 'Bot Joko', avatar: '🧠', style: 'Ahli Kalkulasi' },
+];
 
 const GAME_CATALOG = [
   {
@@ -78,6 +89,7 @@ export default function ModeSelectionScreen({
   const [activeGame, setActiveGame] = useState(selectedGame || 'sevens');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [offlinePlayerCount, setOfflinePlayerCount] = useState(4);
+  const [botCount, setBotCount] = useState(1); // Default: 1 Bot (Main berdua: Anda + 1 Bot)
   const [deckMode, setDeckMode] = useState('single');
 
   // Mobile bottom sheet drag-down-to-close gesture handling
@@ -87,43 +99,71 @@ export default function ModeSelectionScreen({
   const currentDragYRef = useRef(0);
   const sheetRef = useRef(null);
 
-  const handleTouchStart = (e) => {
-    const touch = e.touches[0];
-    dragStartYRef.current = touch.clientY;
-    currentDragYRef.current = touch.clientY;
+  const startDrag = (clientY) => {
+    dragStartYRef.current = clientY;
+    currentDragYRef.current = clientY;
     setIsDraggingSheet(true);
   };
 
-  const handleTouchMove = (e) => {
+  const updateDrag = (clientY, cancelableEvent = null) => {
     if (!isDraggingSheet) return;
-    const touch = e.touches[0];
-    currentDragYRef.current = touch.clientY;
-    const deltaY = touch.clientY - dragStartYRef.current;
+    currentDragYRef.current = clientY;
+    const deltaY = clientY - dragStartYRef.current;
 
     // Only allow dragging downwards
     if (deltaY > 0) {
+      if (cancelableEvent && cancelableEvent.cancelable) {
+        cancelableEvent.preventDefault();
+      }
       setDragOffsetY(deltaY);
     } else {
       setDragOffsetY(0);
     }
   };
 
-  const handleTouchEnd = () => {
+  const endDrag = () => {
     if (!isDraggingSheet) return;
     setIsDraggingSheet(false);
     const deltaY = currentDragYRef.current - dragStartYRef.current;
 
-    // If dragged down by more than 75px, close modal with smooth slide
-    if (deltaY > 75) {
+    // If dragged down by more than 55px, dismiss bottom sheet smoothly
+    if (deltaY > 55) {
       setDragOffsetY(window.innerHeight);
       setTimeout(() => {
         setIsModalOpen(false);
         setDragOffsetY(0);
       }, 180);
     } else {
-      // Snap back to open position
       setDragOffsetY(0);
     }
+  };
+
+  const handleTouchStart = (e) => {
+    if (e.touches && e.touches[0]) {
+      startDrag(e.touches[0].clientY);
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (e.touches && e.touches[0]) {
+      updateDrag(e.touches[0].clientY, e);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    endDrag();
+  };
+
+  const handleMouseDown = (e) => {
+    startDrag(e.clientY);
+    const handleMouseMove = (ev) => updateDrag(ev.clientY, ev);
+    const handleMouseUp = () => {
+      endDrag();
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
   };
 
   // Reset drag position when modal opens or closes
@@ -154,27 +194,27 @@ export default function ModeSelectionScreen({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isModalOpen]);
 
-  const renderDealInfo = () => {
+  const renderDealInfoForCount = (count) => {
     if (activeGame === 'sevens') {
-      if (offlinePlayerCount === 6)
+      if (count === 6)
         return (
           <span>
             Setiap pemain dapat <strong>8 kartu</strong> (semua angka 7 otomatis di meja)
           </span>
         );
-      if (offlinePlayerCount === 5)
+      if (count === 5)
         return (
           <span>
             Setiap pemain dapat <strong>10 kartu</strong> (7♠ & 7♥ otomatis di meja)
           </span>
         );
-      if (offlinePlayerCount === 3)
+      if (count === 3)
         return (
           <span>
             Setiap pemain dapat <strong>17 kartu</strong> (7♠ otomatis di meja)
           </span>
         );
-      if (offlinePlayerCount === 2)
+      if (count === 2)
         return (
           <span>
             Duel 1 vs 1 • Setiap pemain dapat <strong>26 kartu</strong>
@@ -188,7 +228,7 @@ export default function ModeSelectionScreen({
     }
 
     if (activeGame === 'bigtwo') {
-      if (offlinePlayerCount === 2) {
+      if (count === 2) {
         return (
           <span>
             Single Deck (52 kartu) • Duel 1 vs 1: Setiap pemain dapat <strong>26 kartu</strong> penuh. Pemegang{' '}
@@ -196,7 +236,7 @@ export default function ModeSelectionScreen({
           </span>
         );
       }
-      if (offlinePlayerCount === 3) {
+      if (count === 3) {
         return (
           <span>
             Single Deck (52 kartu) • 3 Pemain: Setiap pemain dapat <strong>17–18 kartu</strong> (semua 52 kartu dibagi habis). Pemegang{' '}
@@ -204,7 +244,7 @@ export default function ModeSelectionScreen({
           </span>
         );
       }
-      if (offlinePlayerCount === 4) {
+      if (count === 4) {
         return (
           <span>
             Single Deck (52 kartu) • Standar 4 Pemain: Setiap pemain dapat <strong>13 kartu</strong> penuh. Pemegang{' '}
@@ -212,7 +252,7 @@ export default function ModeSelectionScreen({
           </span>
         );
       }
-      if (offlinePlayerCount === 5) {
+      if (count === 5) {
         return (
           <span>
             {deckMode === 'double' ? (
@@ -227,7 +267,7 @@ export default function ModeSelectionScreen({
           </span>
         );
       }
-      if (offlinePlayerCount === 6) {
+      if (count === 6) {
         return (
           <span>
             {deckMode === 'double' ? (
@@ -248,7 +288,7 @@ export default function ModeSelectionScreen({
     return (
       <span>
         Setiap pemain memegang <strong>4 kartu</strong> di tangan • Kumpulkan skor{' '}
-        <strong>41 satu kembang</strong>!
+        <strong>41 poin</strong> satu kembang!
       </span>
     );
   };
@@ -407,6 +447,7 @@ export default function ModeSelectionScreen({
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
+              onMouseDown={handleMouseDown}
               onClick={() => setIsModalOpen(false)}
               role="button"
               tabIndex={0}
@@ -422,6 +463,7 @@ export default function ModeSelectionScreen({
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
+              onMouseDown={handleMouseDown}
             >
               <div className="modal-game-identity">
                 <div className="modal-mini-fan" aria-hidden="true">
@@ -469,9 +511,148 @@ export default function ModeSelectionScreen({
               </div>
             </div>
 
-            {/* Grid Pilihan Mode: Online vs Offline Pass & Play */}
+            {/* Grid 3 Pilihan Mode: Single Player Bot vs Online vs Offline Pass & Play */}
             <div className="mode-cards-grid">
-              {/* OPSI 1: MAIN ONLINE (MULTIPLAYER) */}
+              {/* OPSI 1: SINGLE PLAYER (LAWAN BOT AI) */}
+              <div
+                className="mode-card mode-card-single"
+                onClick={() =>
+                  onSelectMode('single', botCount + 1, activeGame, {
+                    botCount,
+                    deckMode: botCount + 1 > 4 ? deckMode : 'single',
+                  })
+                }
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectMode('single', botCount + 1, activeGame, {
+                      botCount,
+                      deckMode: botCount + 1 > 4 ? deckMode : 'single',
+                    });
+                  }
+                }}
+              >
+                <div className="mode-card-top">
+                  <span className="mode-card-badge badge-single">
+                    <Bot size={13} />
+                    <span>Single Player vs Bot</span>
+                  </span>
+
+                  <div className="mode-card-title-row">
+                    <div className="mode-card-icon-bubble bubble-single">
+                      <Bot size={28} className="icon-pulse" />
+                    </div>
+                    <div>
+                      <h3 className="mode-card-title">Main Lawan Bot</h3>
+                      <p className="mode-card-subtitle">
+                        Main Sendiri Lawan Komputer Cerdas
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  className="mode-card-body"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="offline-player-selector">
+                    <div className="selector-header-row">
+                      <label className="selector-title">
+                        <Bot size={14} />
+                        <span>Jumlah Bot AI</span>
+                      </label>
+                      <span className="selector-active-pill pill-single">
+                        {botCount} Bot ({botCount + 1} Pemain)
+                      </span>
+                    </div>
+
+                    <div className="player-count-buttons">
+                      {[1, 2, 3, 4, 5].map((count) => (
+                        <button
+                          key={count}
+                          type="button"
+                          className={`btn-player-pill btn-bot-pill ${
+                            botCount === count ? 'active' : ''
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBotCount(count);
+                          }}
+                        >
+                          <span className="count-num">{count}</span>
+                          <span className="count-unit">Bot</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Roster Bot yang akan ikut main */}
+                    <div className="bot-roster-preview">
+                      <span className="bot-roster-label">Lawan Anda:</span>
+                      <div className="bot-roster-chips">
+                        {BOT_PREVIEWS.slice(0, botCount).map((b, idx) => (
+                          <span key={idx} className="bot-chip-pill" title={b.style}>
+                            <span className="bot-chip-avatar">{b.avatar}</span>
+                            <span className="bot-chip-name">{b.name}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Opsi Single / Double Deck khusus Big Two > 4 Pemain */}
+                    {activeGame === 'bigtwo' && botCount + 1 > 4 && (
+                      <div className="deck-mode-selector">
+                        <span className="deck-mode-label">
+                          <Layers size={13} />
+                          <span>Tipe Deck:</span>
+                        </span>
+                        <div className="deck-toggle-group">
+                          <button
+                            type="button"
+                            className={`btn-deck-toggle ${
+                              deckMode === 'single' ? 'active' : ''
+                            }`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeckMode('single');
+                            }}
+                          >
+                            Single (52)
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn-deck-toggle ${
+                              deckMode === 'double' ? 'active' : ''
+                            }`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeckMode('double');
+                            }}
+                          >
+                            Double (104)
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Info Pembagian Kartu */}
+                    <div className="player-count-detail-note">
+                      <Sparkles size={14} className="note-sparkle-icon" />
+                      {renderDealInfoForCount(botCount + 1)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mode-card-footer">
+                  <button type="button" className="btn-mode-action btn-single-action">
+                    <span>Mulai Main (1 vs {botCount} Bot AI)</span>
+                    <ArrowRight size={17} />
+                  </button>
+                </div>
+              </div>
+
+              {/* OPSI 2: MAIN ONLINE (MULTIPLAYER) */}
               <div
                 className="mode-card mode-card-online"
                 onClick={() =>
@@ -530,7 +711,7 @@ export default function ModeSelectionScreen({
                 </div>
               </div>
 
-              {/* OPSI 2: MAIN OFFLINE (PASS & PLAY 1 PERANGKAT) */}
+              {/* OPSI 3: MAIN OFFLINE (PASS & PLAY 1 PERANGKAT) */}
               <div
                 className="mode-card mode-card-offline"
                 onClick={() =>
@@ -642,7 +823,7 @@ export default function ModeSelectionScreen({
                     {/* Info Pembagian Kartu */}
                     <div className="player-count-detail-note">
                       <Sparkles size={14} className="note-sparkle-icon" />
-                      {renderDealInfo()}
+                      {renderDealInfoForCount(offlinePlayerCount)}
                     </div>
                   </div>
                 </div>

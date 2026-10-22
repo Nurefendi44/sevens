@@ -34,7 +34,8 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
   // Determine deck mode:
   // For 4 players or fewer, ALWAYS use Single Deck (52 cards).
   // Double Deck (104 cards) is strictly and only allowed for > 4 players (5 or 6 players) if explicitly chosen.
-  const deckMode = playerCount > 4 && configOverrides.deckMode === 'double' ? 'double' : 'single';
+  const isEligibleForDouble = playerCount > 4;
+  const deckMode = isEligibleForDouble && configOverrides.deckMode === 'double' ? 'double' : 'single';
 
   const config = {
     ...DEFAULT_CONFIG_BIGTWO,
@@ -42,6 +43,11 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
     playerCount,
     deckMode,
   };
+
+  // Hard safety: never allow double deck on <= 4 players under any circumstance
+  if (playerCount <= 4) {
+    config.deckMode = 'single';
+  }
 
   const defaultAvatars = ['👑', '⚡', '🌟', '💎', '🔥', '🎲'];
   const defaultNames = ['Pemain 1 (Anda)', 'Pemain 2', 'Pemain 3', 'Pemain 4', 'Pemain 5', 'Pemain 6'];
@@ -58,7 +64,7 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
 
   // Create Deck
   let fullDeck = [];
-  if (config.deckMode === 'double') {
+  if (config.deckMode === 'double' && playerCount > 4) {
     // 2 Decks (104 cards): pre-shuffle each deck independently first to scatter factory order, then combine and multi-pass shuffle
     const deck1 = shuffleDeck(createDeck().map((c) => ({ ...c, id: `${c.id}_d1` })), 3);
     const deck2 = shuffleDeck(createDeck().map((c) => ({ ...c, id: `${c.id}_d2` })), 3);

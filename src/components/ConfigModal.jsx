@@ -73,6 +73,8 @@ export default function ConfigModal({ currentConfig, onSaveConfig, onClose }) {
                   fontWeight: 700,
                 }}
               >
+                <option value={2}>2 Pemain (26 kartu/orang, duel 1 vs 1)</option>
+                <option value={3}>3 Pemain (17 kartu/orang, ♠7 otomatis di meja)</option>
                 <option value={4}>4 Pemain (13 kartu/orang, meja mulai kosong)</option>
                 <option value={5}>5 Pemain (10 kartu/orang, ♠7 & ♥7 otomatis di meja)</option>
                 <option value={6}>6 Pemain (8 kartu/orang, semua kartu 7 otomatis di meja)</option>

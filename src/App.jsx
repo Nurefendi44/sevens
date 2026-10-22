@@ -45,6 +45,15 @@ import { initBigTwo, playComboBigTwo, passTurnBigTwo } from './games/bigtwo/engi
 
 import ActionAnnouncementPopup from './components/ActionAnnouncementPopup.jsx';
 
+import {
+  createSinglePlayerRoster,
+  isBotPlayer,
+  chooseSevensBotMove,
+  chooseGame41BotMove,
+  chooseBigTwoBotMove,
+  SINGLE_HUMAN_ID,
+} from './engine/botAI.js';
+
 import './styles/multiplayer.css';
 
 
@@ -528,9 +537,19 @@ export default function App() {
         setIsDealingAnimationActive(true);
         showToast('Permainan baru dimulai!');
       }
+    } else if (gameMode === 'single') {
+      const count = nextCfg.playerCount || gameState.players?.length || 2;
+      const roster = createSinglePlayerRoster(count);
+      const nextState = initGame({ ...nextCfg, playerCount: count }, roster);
+      setGameState(nextState);
+      setSelectedCard(null);
+      setActiveFault(null);
+      setPendingAceChoiceCard(null);
+      setIsDealingAnimationActive(true);
+      showToast('Permainan Single Player baru dimulai!');
     } else {
-      // Local Mode: preserve selected player count
-      const count = gameState.players?.length || nextCfg.playerCount || 4;
+      // Local Mode: apply configured player count
+      const count = nextCfg.playerCount || gameState.players?.length || 4;
       const nextState = resetGame({ ...nextCfg, playerCount: count });
       setGameState(nextState);
       setSelectedCard(null);
@@ -553,11 +572,13 @@ export default function App() {
   // ---------------------------------------------------------------------------
   // ACTIVE PLAYER & PERSPECTIVE SEATING
   // ---------------------------------------------------------------------------
+  const isSingleMode = gameMode === 'single';
   const isMultiplayerMode = gameMode === 'multiplayer';
   const isHost = isMultiplayerMode && currentRoom?.host_id === myPlayerId;
 
   // Determine which player's cards to show in the bottom tray
   // In multiplayer: Always the user's cards (myPlayerId)
+  // In single player: Always human player (SINGLE_HUMAN_ID)
   // In local mode: The player whose turn it currently is (pass-and-play)
   const isGame41Active = activeGameType === 'game41';
   const playersList = isGame41Active
@@ -566,6 +587,8 @@ export default function App() {
 
   const trayPlayer = isMultiplayerMode
     ? playersList.find((p) => p.id === myPlayerId) || playersList[0] || {}
+    : isSingleMode
+    ? playersList.find((p) => p.id === SINGLE_HUMAN_ID) || playersList[0] || {}
     : playersList.find((p) => p.id === (isGame41Active ? gameState41?.currentPlayer : gameState?.currentPlayer)) || playersList[0] || {};
 
   const currentHandRaw = isGame41Active
@@ -578,13 +601,18 @@ export default function App() {
 
   const isMyTurn = isMultiplayerMode
     ? (isGame41Active ? gameState41?.currentPlayer === myPlayerId : gameState?.currentPlayer === myPlayerId)
+    : isSingleMode
+    ? (isGame41Active ? gameState41?.currentPlayer === SINGLE_HUMAN_ID : gameState?.currentPlayer === SINGLE_HUMAN_ID)
     : true; // In local mode, active player has turn
 
   // Seating around the poker table
   // In multiplayer: relative rotation so user is ALWAYS at the bottom!
+  // In single player: relative rotation so human is ALWAYS at the bottom!
   // In local mode: relative rotation to whoever's turn it is (pass-and-play perspective)
   const seats = isMultiplayerMode
     ? getRelativeSeats(playersList, myPlayerId)
+    : isSingleMode
+    ? getRelativeSeats(playersList, SINGLE_HUMAN_ID)
     : getRelativeSeats(playersList, trayPlayer?.id);
 
   const opponentPlayers = playersList.filter((p) => p.id !== trayPlayer?.id);
@@ -776,6 +804,13 @@ export default function App() {
         setIsDealingAnimationActive(true);
         showToast('Permainan Kartu 41 baru dimulai!');
       }
+    } else if (gameMode === 'single') {
+      const count = gameState41.players?.length || 2;
+      const roster = createSinglePlayerRoster(count);
+      const nextState = initGame41({ playerCount: count }, roster);
+      setGameState41(nextState);
+      setIsDealingAnimationActive(true);
+      showToast('Permainan Kartu 41 baru dimulai!');
     } else {
       const count = gameState41.players?.length || 4;
       const nextState = initGame41({ playerCount: count });
@@ -789,24 +824,26 @@ export default function App() {
   // BIG TWO (CAPSA BANTING) ACTIONS
   const isMyTurnBigtwo = isMultiplayerMode
     ? gameStateBigtwo.currentPlayer === myPlayerId
+    : isSingleMode
+    ? gameStateBigtwo.currentPlayer === SINGLE_HUMAN_ID
     : true;
 
-  // Sound chime whenever user's turn arrives in multiplayer mode
-  const activeIsMyTurn = isMultiplayerMode
+  // Sound chime whenever user's turn arrives in multiplayer / single player mode
+  const activeIsMyTurn = (isMultiplayerMode || isSingleMode)
     ? (activeGameType === 'bigtwo'
-        ? gameStateBigtwo.currentPlayer === myPlayerId
+        ? gameStateBigtwo.currentPlayer === (isMultiplayerMode ? myPlayerId : SINGLE_HUMAN_ID)
         : activeGameType === 'game41'
-        ? gameState41?.currentPlayer === myPlayerId
-        : gameState?.currentPlayer === myPlayerId)
+        ? gameState41?.currentPlayer === (isMultiplayerMode ? myPlayerId : SINGLE_HUMAN_ID)
+        : gameState?.currentPlayer === (isMultiplayerMode ? myPlayerId : SINGLE_HUMAN_ID))
     : false;
 
   const prevIsMyTurnRef = useRef(false);
   useEffect(() => {
-    if (isMultiplayerMode && activeIsMyTurn && !prevIsMyTurnRef.current) {
+    if ((isMultiplayerMode || isSingleMode) && activeIsMyTurn && !prevIsMyTurnRef.current) {
       audio.sevenChime();
     }
     prevIsMyTurnRef.current = activeIsMyTurn;
-  }, [activeIsMyTurn, isMultiplayerMode]);
+  }, [activeIsMyTurn, isMultiplayerMode, isSingleMode]);
 
   const handlePlayBigTwoCombo = async (selectedCards) => {
     const actingPlayerId = isMultiplayerMode ? myPlayerId : gameStateBigtwo.currentPlayer;
@@ -857,16 +894,119 @@ export default function App() {
         setGameStateBigtwo(res.gameState);
         showToast('Permainan Big Two baru dimulai!');
       }
+    } else if (gameMode === 'single') {
+      const count = gameStateBigtwo.players?.length || 2;
+      const roster = createSinglePlayerRoster(count);
+      const effectiveDeckMode = count > 4 ? gameStateBigtwo.config.deckMode : 'single';
+      const nextState = initBigTwo({ playerCount: count, deckMode: effectiveDeckMode, ...configOverrides }, roster);
+      setGameStateBigtwo(nextState);
+      showToast('Permainan Big Two baru dimulai!');
     } else {
       const count = gameStateBigtwo.players?.length || 4;
-      const nextState = initBigTwo({ playerCount: count, deckMode: gameStateBigtwo.config.deckMode });
+      const nextState = initBigTwo({ playerCount: count, deckMode: gameStateBigtwo.config.deckMode, ...configOverrides });
       setGameStateBigtwo(nextState);
       showToast('Permainan Big Two baru dimulai!');
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // BOT AI AUTOMATION (SINGLE PLAYER MODE)
+  // ---------------------------------------------------------------------------
+  const [botThinking, setBotThinking] = useState(null);
+
+  useEffect(() => {
+    if (gameMode !== 'single') {
+      setBotThinking(null);
+      return;
+    }
+
+    let timer = null;
+
+    if (activeGameType === 'bigtwo') {
+      if (gameStateBigtwo.gameStatus === 'GAME_OVER') return;
+      const currentId = gameStateBigtwo.currentPlayer;
+      if (isBotPlayer(gameStateBigtwo, currentId)) {
+        const botObj = gameStateBigtwo.players.find((p) => p.id === currentId);
+        setBotThinking(botObj);
+        timer = setTimeout(() => {
+          const move = chooseBigTwoBotMove(gameStateBigtwo, currentId);
+          setBotThinking(null);
+          if (!move || move.action === 'pass') {
+            handlePassBigTwo();
+          } else if (move.action === 'play' && move.cards?.length > 0) {
+            handlePlayBigTwoCombo(move.cards);
+          }
+        }, 900 + Math.random() * 400);
+      } else {
+        setBotThinking(null);
+      }
+    } else if (activeGameType === 'game41') {
+      if (gameState41.status === 'GAME_OVER') return;
+      const currentId = gameState41.currentPlayer;
+      if (isBotPlayer(gameState41, currentId)) {
+        const botObj = gameState41.players.find((p) => p.id === currentId);
+        setBotThinking(botObj);
+
+        if (gameState41.turnPhase === 'DRAW') {
+          timer = setTimeout(() => {
+            const move = chooseGame41BotMove(gameState41, currentId);
+            handleDrawCard41(move.source);
+          }, 850 + Math.random() * 350);
+        } else if (gameState41.turnPhase === 'DISCARD') {
+          timer = setTimeout(() => {
+            const move = chooseGame41BotMove(gameState41, currentId);
+            setBotThinking(null);
+            handleDiscardCard41(move.card);
+          }, 650 + Math.random() * 300);
+        }
+      } else {
+        setBotThinking(null);
+      }
+    } else {
+      // Sevens
+      if (gameState.status === GAME_STATUS.FINISHED) return;
+      const currentId = gameState.currentPlayer;
+      if (isBotPlayer(gameState, currentId)) {
+        const botObj = gameState.players.find((p) => p.id === currentId);
+        setBotThinking(botObj);
+        timer = setTimeout(() => {
+          const move = chooseSevensBotMove(gameState, currentId);
+          setBotThinking(null);
+          if (move?.action === 'play') {
+            handlePlayCard(move.card, move.direction);
+          } else if (move?.action === 'close') {
+            handleCloseCard(move.card);
+          }
+        }, 900 + Math.random() * 400);
+      } else {
+        setBotThinking(null);
+      }
+    }
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [
+    gameMode,
+    activeGameType,
+    gameState.currentPlayer,
+    gameState.status,
+    gameState41.currentPlayer,
+    gameState41.turnPhase,
+    gameState41.status,
+    gameStateBigtwo.currentPlayer,
+    gameStateBigtwo.gameStatus,
+    gameStateBigtwo.currentTrick,
+  ]);
+
   // Find active turn player's name
-  const currentTurnPlayer = playersList.find((p) => p.id === gameState?.currentPlayer);
+  const currentTurnPlayer = playersList.find((p) => p.id === (
+    activeGameType === 'bigtwo'
+      ? gameStateBigtwo.currentPlayer
+      : activeGameType === 'game41'
+      ? gameState41?.currentPlayer
+      : gameState?.currentPlayer
+  ));
   const currentTurnPlayerName = currentTurnPlayer?.name || 'Pemain Lain';
 
   // Return to Mode Selection Screen (Home)
@@ -920,12 +1060,32 @@ export default function App() {
             const chosenGame = game || activeGameType;
             setActiveGameType(chosenGame);
 
-            if (mode === 'local') {
+            if (mode === 'single') {
+              const totalCount = playerCount || (options?.botCount ? options.botCount + 1 : 2);
+              const roster = createSinglePlayerRoster(totalCount);
+
+              if (chosenGame === 'bigtwo') {
+                const stateBigtwo = initBigTwo({
+                  playerCount: totalCount,
+                  deckMode: totalCount > 4 ? (options?.deckMode || 'single') : 'single',
+                }, roster);
+                setGameStateBigtwo(stateBigtwo);
+              } else if (chosenGame === 'game41') {
+                const state41 = initGame41({ playerCount: totalCount }, roster);
+                setGameState41(state41);
+              } else {
+                const nextCfg = { ...gameConfig, playerCount: totalCount };
+                setGameConfig(nextCfg);
+                setGameState(initGame(nextCfg, roster));
+              }
+              setIsDealingAnimationActive(true);
+              setGameMode('single');
+            } else if (mode === 'local') {
               const count = playerCount || 4;
               if (chosenGame === 'bigtwo') {
                 const stateBigtwo = initBigTwo({
                   playerCount: count,
-                  deckMode: options?.deckMode || (count > 4 ? 'double' : 'single'),
+                  deckMode: count > 4 ? (options?.deckMode || 'single') : 'single',
                 });
                 setGameStateBigtwo(stateBigtwo);
               } else if (chosenGame === 'game41') {
@@ -1258,10 +1418,18 @@ export default function App() {
           seats={seats}
         />
 
+        {/* Floating AI Bot Thinking Pill */}
+        {botThinking && (
+          <div className="bot-thinking-banner" role="status">
+            <span className="bot-thinking-spinner">{botThinking.avatar || '🤖'}</span>
+            <span><strong>{botThinking.name}</strong> sedang memilih langkah...</span>
+          </div>
+        )}
+
         {activeGameType === 'bigtwo' ? (
           <TableBigTwo
             gameState={gameStateBigtwo}
-            myPlayerId={myPlayerId}
+            myPlayerId={isMultiplayerMode ? myPlayerId : isSingleMode ? SINGLE_HUMAN_ID : gameStateBigtwo.currentPlayer}
             isMyTurn={isMyTurnBigtwo}
             onPlayCombo={handlePlayBigTwoCombo}
             onPass={handlePassBigTwo}
@@ -1275,7 +1443,7 @@ export default function App() {
             onDrawCard={handleDrawCard41}
             onDiscardCard={handleDiscardCard41}
             isMyTurn={isMyTurn41}
-            myPlayerId={myPlayerId}
+            myPlayerId={isMultiplayerMode ? myPlayerId : isSingleMode ? SINGLE_HUMAN_ID : gameState41.currentPlayer}
             isMultiplayer={isMultiplayerMode}
             onOpenRules={() => setShowRules41Modal(true)}
           />
