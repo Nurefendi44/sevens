@@ -945,7 +945,7 @@ export default function App() {
         setBotThinking(null);
       }
     } else if (activeGameType === 'game41') {
-      if (gameState41.status === 'GAME_OVER') return;
+      if (gameState41.gameStatus === 'GAME_OVER' || gameState41.gameStatus === 'game_over') return;
       const currentId = gameState41.currentPlayer;
       if (isBotPlayer(gameState41, currentId)) {
         const botObj = gameState41.players.find((p) => p.id === currentId);
@@ -968,10 +968,10 @@ export default function App() {
       }
     } else {
       // Sevens
-      if (gameState.status === GAME_STATUS.FINISHED) return;
+      if (gameState.gameStatus === GAME_STATUS.GAME_OVER) return;
       const currentId = gameState.currentPlayer;
       if (isBotPlayer(gameState, currentId)) {
-        const botObj = gameState.players.find((p) => p.id === currentId);
+        const botObj = gameState.players?.find((p) => p.id === currentId);
         setBotThinking(botObj);
         timer = setTimeout(() => {
           const move = chooseSevensBotMove(gameState, currentId);
@@ -994,10 +994,12 @@ export default function App() {
     gameMode,
     activeGameType,
     gameState.currentPlayer,
-    gameState.status,
+    gameState.gameStatus,
+    gameState.turnNumber,
     gameState41.currentPlayer,
     gameState41.turnPhase,
-    gameState41.status,
+    gameState41.gameStatus,
+    gameState41.turnNumber,
     gameStateBigtwo.currentPlayer,
     gameStateBigtwo.gameStatus,
     gameStateBigtwo.currentTrick,
