@@ -17,17 +17,19 @@ export default function Table41({
 }) {
   const [selectedCard, setSelectedCard] = useState(null);
 
-  if (!gameState) return null;
+  if (!gameState || !gameState.players || !Array.isArray(gameState.players) || gameState.players.length === 0 || !gameState.hands) {
+    return null;
+  }
 
-  const currentTurnPlayer = gameState.players.find((p) => p.id === gameState.currentPlayer);
+  const currentTurnPlayer = gameState.players.find((p) => p.id === gameState.currentPlayer) || gameState.players[0];
 
   // In local pass-and-play, bottom player perspective follows whose turn it is
   const myPlayer = isMultiplayer
-    ? (gameState.players.find((p) => p.id === myPlayerId) || gameState.players[0])
-    : (gameState.players.find((p) => p.id === gameState.currentPlayer) || gameState.players[0]);
+    ? (gameState.players.find((p) => p.id === myPlayerId) || gameState.players[0] || { id: myPlayerId, name: 'Pemain' })
+    : (gameState.players.find((p) => p.id === gameState.currentPlayer) || gameState.players[0] || { id: 'player_1', name: 'Pemain' });
 
-  const myHand = gameState.hands[myPlayer.id] || [];
-  const opponentPlayers = gameState.players.filter((p) => p.id !== myPlayer.id);
+  const myHand = (myPlayer?.id && gameState.hands && gameState.hands[myPlayer.id]) || [];
+  const opponentPlayers = (gameState.players || []).filter((p) => p.id !== myPlayer?.id);
 
   const drawPileCount = gameState.drawPile?.length || 0;
   const passedDiscard = gameState.passedDiscard;

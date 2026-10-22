@@ -243,13 +243,13 @@ export default function App() {
           if (room.game_state) {
             if (room.game_state.gameType === 'bigtwo') {
               setActiveGameType('bigtwo');
-              setGameStateBigtwo(room.game_state);
+              if (room.game_state.players) setGameStateBigtwo(room.game_state);
             } else if (room.game_state.gameType === 'game41') {
               setActiveGameType('game41');
-              setGameState41(room.game_state);
+              if (room.game_state.players) setGameState41(room.game_state);
             } else {
               setActiveGameType('sevens');
-              setGameState(room.game_state);
+              if (room.game_state.players) setGameState(room.game_state);
             }
           }
           // Only show toast if user reconnected cleanly
@@ -280,23 +280,27 @@ export default function App() {
 
         if (nextState.gameType === 'bigtwo') {
           setActiveGameType('bigtwo');
-          setGameStateBigtwo(nextState);
+          if (nextState.players) {
+            setGameStateBigtwo(nextState);
+          }
           return;
         }
 
         if (nextState.gameType === 'game41') {
           setActiveGameType('game41');
-          if (nextState.turnNumber !== prevTurnNumberRef.current && nextState.lastAction) {
-            const action = nextState.lastAction;
-            if (action.type === 'DRAW') {
-              audio.playCardSound();
-            } else if (action.type === 'DISCARD') {
-              if (action.is41) audio.victorySound();
-              else audio.closeCardSound();
+          if (nextState.players) {
+            if (nextState.turnNumber !== prevTurnNumberRef.current && nextState.lastAction) {
+              const action = nextState.lastAction;
+              if (action.type === 'DRAW') {
+                audio.playCardSound();
+              } else if (action.type === 'DISCARD') {
+                if (action.is41) audio.victorySound();
+                else audio.closeCardSound();
+              }
             }
+            prevTurnNumberRef.current = nextState.turnNumber;
+            setGameState41(nextState);
           }
-          prevTurnNumberRef.current = nextState.turnNumber;
-          setGameState41(nextState);
           return;
         }
 
@@ -401,13 +405,13 @@ export default function App() {
       if (res.room.game_state) {
         if (res.room.game_state.gameType === 'bigtwo') {
           setActiveGameType('bigtwo');
-          setGameStateBigtwo(res.room.game_state);
+          if (res.room.game_state.players) setGameStateBigtwo(res.room.game_state);
         } else if (res.room.game_state.gameType === 'game41') {
           setActiveGameType('game41');
-          setGameState41(res.room.game_state);
+          if (res.room.game_state.players) setGameState41(res.room.game_state);
         } else {
           setActiveGameType('sevens');
-          setGameState(res.room.game_state);
+          if (res.room.game_state.players) setGameState(res.room.game_state);
         }
       }
       if (typeof window !== 'undefined' && window.history) {
@@ -427,13 +431,13 @@ export default function App() {
       if (res.room.game_state) {
         if (res.room.game_state.gameType === 'bigtwo') {
           setActiveGameType('bigtwo');
-          setGameStateBigtwo(res.room.game_state);
+          if (res.room.game_state.players) setGameStateBigtwo(res.room.game_state);
         } else if (res.room.game_state.gameType === 'game41') {
           setActiveGameType('game41');
-          setGameState41(res.room.game_state);
+          if (res.room.game_state.players) setGameState41(res.room.game_state);
         } else {
           setActiveGameType('sevens');
-          setGameState(res.room.game_state);
+          if (res.room.game_state.players) setGameState(res.room.game_state);
         }
       }
       if (typeof window !== 'undefined' && window.history) {
