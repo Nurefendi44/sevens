@@ -128,6 +128,8 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
     startingPlayerId = players[randomIdx].id;
   }
 
+  const startingPlayer = players.find((p) => p.id === startingPlayerId) || players[0];
+
   const isFromPreviousWinner = Boolean(
     configOverrides.startingPlayerId && players.some((p) => p.id === configOverrides.startingPlayerId)
   );
