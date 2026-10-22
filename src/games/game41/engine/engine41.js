@@ -16,7 +16,8 @@ export const DEFAULT_CONFIG_41 = {
  * Initializes a new Kartu 41 match.
  */
 export function initGame41(config = DEFAULT_CONFIG_41, customPlayers = null) {
-  const playerCount = Math.max(4, Math.min(6, config.playerCount || 4));
+  const desiredCount = customPlayers ? customPlayers.length : (config.playerCount || 4);
+  const playerCount = Math.max(2, Math.min(6, desiredCount));
 
   // Default avatars & seats
   const defaultAvatars = ['👑', '⚡', '🌟', '💎', '🔥', '🎲'];

@@ -70,6 +70,7 @@ export default function MultiplayerLobby({
   activeGameType = 'sevens',
 }) {
   const [selectedPlayerCount, setSelectedPlayerCount] = useState(4);
+  const [deckMode, setDeckMode] = useState('double');
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
@@ -140,7 +141,7 @@ export default function MultiplayerLobby({
     }
     setErrorMsg('');
     setIsLoading(true);
-    const res = await onCreateRoom(usernameInput.trim(), selectedPlayerCount, activeGameType);
+    const res = await onCreateRoom(usernameInput.trim(), selectedPlayerCount, activeGameType, { deckMode });
     setIsLoading(false);
     if (!res.success) {
       if (
@@ -202,11 +203,19 @@ export default function MultiplayerLobby({
             <div className="multiplayer-brand-icon">
               <Users size={32} />
             </div>
-            <h2>{activeGameType === 'game41' ? '🃏 REMI 41 ONLINE MULTIPLAYER' : '♠ SEVENS ONLINE MULTIPLAYER'}</h2>
+            <h2>
+              {activeGameType === 'bigtwo'
+                ? '💎 BIG TWO (CAPSA BANTING) ONLINE'
+                : activeGameType === 'game41'
+                ? '🃏 REMI 41 ONLINE MULTIPLAYER'
+                : '♠ SEVENS ONLINE MULTIPLAYER'}
+            </h2>
             <p>
-              {activeGameType === 'game41'
-                ? 'Mainkan kartu Remi 41 bersama teman secara realtime (4, 5, atau 6 Pemain)'
-                : 'Mainkan kartu Tujuh Sekop bersama teman secara realtime (4, 5, atau 6 Pemain)'}
+              {activeGameType === 'bigtwo'
+                ? 'Mainkan kartu Big Two (Capsa Banting) bersama teman secara realtime (2 s/d 6 Pemain)'
+                : activeGameType === 'game41'
+                ? 'Mainkan kartu Remi 41 bersama teman secara realtime (2 s/d 6 Pemain)'
+                : 'Mainkan kartu Tujuh Sekop bersama teman secara realtime (2 s/d 6 Pemain)'}
             </p>
           </div>
 
@@ -321,9 +330,9 @@ export default function MultiplayerLobby({
 
               {/* Player Count Picker */}
               <div className="lobby-count-picker">
-                <span className="picker-title">Kapasitas Pemain:</span>
+                <span className="picker-title">Kapasitas Maksimal Pemain:</span>
                 <div className="lobby-count-options">
-                  {[4, 5, 6].map((num) => (
+                  {[2, 3, 4, 5, 6].map((num) => (
                     <button
                       key={num}
                       type="button"
@@ -332,11 +341,48 @@ export default function MultiplayerLobby({
                     >
                       <span style={{ fontWeight: 800 }}>{num} Orang</span>
                       <small>
-                        {num === 4 ? '13 kartu/orang' : num === 5 ? '10 kartu • ♠7,♥7 meja' : '8 kartu • semua 7 meja'}
+                        {num === 2
+                          ? (activeGameType === 'bigtwo' ? '13 kartu • 1 vs 1' : activeGameType === 'game41' ? '4 kartu • 1 vs 1' : '26 kartu/orang')
+                          : num === 3
+                          ? (activeGameType === 'bigtwo' ? '13 kartu/orang' : activeGameType === 'game41' ? '4 kartu/orang' : '17 kartu • ♠7 meja')
+                          : num === 4
+                          ? (activeGameType === 'bigtwo' ? '13 kartu/orang' : activeGameType === 'game41' ? '4 kartu/orang' : '13 kartu/orang')
+                          : num === 5
+                          ? (activeGameType === 'bigtwo' ? (deckMode === 'double' ? '13 kartu (Double)' : '10 kartu (Single)') : activeGameType === 'game41' ? '4 kartu/orang' : '10 kartu • ♠7,♥7 meja')
+                          : (activeGameType === 'bigtwo' ? (deckMode === 'double' ? '13 kartu (Double)' : '8 kartu (Single)') : activeGameType === 'game41' ? '4 kartu/orang' : '8 kartu • semua 7 meja')}
                       </small>
                     </button>
                   ))}
                 </div>
+
+                {/* Deck Mode selector for Big Two when > 4 players */}
+                {activeGameType === 'bigtwo' && selectedPlayerCount > 4 && (
+                  <div style={{ marginTop: '0.75rem', background: 'rgba(0,0,0,0.25)', padding: '0.6rem 0.8rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#fbbf24', fontWeight: 700, marginBottom: '0.4rem' }}>
+                      Pilihan Deck ({selectedPlayerCount} Pemain):
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        type="button"
+                        className={`btn-lobby-count ${deckMode === 'single' ? 'active' : ''}`}
+                        style={{ flex: 1, padding: '0.4rem' }}
+                        onClick={() => setDeckMode('single')}
+                      >
+                        <span style={{ fontWeight: 800 }}>Single Deck</span>
+                        <small>52 Kartu</small>
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn-lobby-count ${deckMode === 'double' ? 'active' : ''}`}
+                        style={{ flex: 1, padding: '0.4rem' }}
+                        onClick={() => setDeckMode('double')}
+                      >
+                        <span style={{ fontWeight: 800 }}>Double Deck</span>
+                        <small>104 Kartu</small>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <button
@@ -374,9 +420,9 @@ export default function MultiplayerLobby({
   const myPlayer = players.find((p) => p.id === myPlayerId) || {};
   const isReady = Boolean(myPlayer.isReady);
   const targetPlayerCount = room.game_state?.config?.playerCount || 4;
-  const canStart = players.length === targetPlayerCount;
+  const canStart = players.length >= 2;
 
-  // Fill up to targetPlayerCount slots (4, 5, or 6)
+  // Fill up to targetPlayerCount slots (2 to 6)
   const slots = Array.from({ length: targetPlayerCount }).map((_, idx) => players[idx] || null);
 
   return (
@@ -436,7 +482,7 @@ export default function MultiplayerLobby({
         </div>
 
         <p className="lobby-helper-text">
-          Ajak teman bergabung dengan <strong>Kode Room: {room.code}</strong> atau klik tombol <strong>Bagikan Link</strong> di atas. Mode <strong>{targetPlayerCount} Pemain</strong> ({targetPlayerCount === 4 ? '13 kartu/orang' : targetPlayerCount === 5 ? '10 kartu/orang • ♠7 & ♥7 otomatis di meja' : '8 kartu/orang • Semua 7 otomatis di meja'}). Permainan siap dimulai jika {targetPlayerCount} pemain telah berkumpul.
+          Ajak teman bergabung dengan <strong>Kode Room: {room.code}</strong> atau klik tombol <strong>Bagikan Link</strong> di atas. Kapasitas room <strong>{targetPlayerCount} Pemain</strong>. Permainan bisa langsung dimulai begitu ada minimal <strong>2 pemain</strong> bergabung (tidak harus menunggu slot penuh)!
         </p>
 
         {errorMsg && (
@@ -518,9 +564,11 @@ export default function MultiplayerLobby({
               >
                 <Play size={18} />
                 <span>
-                  {canStart
-                    ? 'Mulai Permainan (Start Game)'
-                    : `Menunggu ${targetPlayerCount - players.length} Pemain Lagi (${players.length}/${targetPlayerCount})`}
+                  {players.length < 2
+                    ? `Menunggu Pemain Lain (${players.length}/${targetPlayerCount})`
+                    : players.length === targetPlayerCount
+                    ? `Mulai Permainan (${players.length} Pemain - Lengkap)`
+                    : `Mulai Permainan Sekarang (${players.length}/${targetPlayerCount} Pemain)`}
                 </span>
               </button>
             )}

@@ -25,6 +25,7 @@ export default function ModeSelectionScreen({
   const [currentStep, setCurrentStep] = useState('catalog');
   const [activeGame, setActiveGame] = useState(selectedGame || 'sevens');
   const [offlinePlayerCount, setOfflinePlayerCount] = useState(4);
+  const [deckMode, setDeckMode] = useState('double');
 
   const handlePickGame = (gameId) => {
     setActiveGame(gameId);
@@ -74,7 +75,7 @@ export default function ModeSelectionScreen({
                 onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handlePickGame('sevens')}
               >
                 <div className="catalog-card-header">
-                  <span className="catalog-badge badge-gold">4 - 6 Pemain</span>
+                  <span className="catalog-badge badge-gold">2 - 6 Pemain</span>
                   <span className="catalog-suit-symbol">♠</span>
                 </div>
 
@@ -90,7 +91,7 @@ export default function ModeSelectionScreen({
                   </p>
 
                   <div className="catalog-features-tags">
-                    <span className="feature-pill">4 - 6 Pemain</span>
+                    <span className="feature-pill">2 - 6 Pemain</span>
                     <span className="feature-pill">Online & Offline</span>
                     <span className="feature-pill">Penalti 6 & 8</span>
                   </div>
@@ -113,7 +114,7 @@ export default function ModeSelectionScreen({
                 onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handlePickGame('game41')}
               >
                 <div className="catalog-card-header">
-                  <span className="catalog-badge badge-emerald">4 - 6 Pemain</span>
+                  <span className="catalog-badge badge-emerald">2 - 6 Pemain</span>
                   <span className="catalog-suit-symbol">🃏</span>
                 </div>
 
@@ -129,7 +130,7 @@ export default function ModeSelectionScreen({
                   </p>
 
                   <div className="catalog-features-tags">
-                    <span className="feature-pill">4 - 6 Pemain</span>
+                    <span className="feature-pill">2 - 6 Pemain</span>
                     <span className="feature-pill">Oper Buangan</span>
                     <span className="feature-pill">Instant Win 41</span>
                   </div>
@@ -143,38 +144,41 @@ export default function ModeSelectionScreen({
                 </div>
               </div>
 
-              {/* CARD 3: TEXAS HOLD'EM POKER (COMING SOON) */}
-              <div className="game-catalog-card disabled-card card-poker" aria-disabled="true">
+              {/* CARD 3: BIG TWO (CAPSA BANTING) */}
+              <div
+                className="game-catalog-card active-card card-bigtwo"
+                onClick={() => handlePickGame('bigtwo')}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handlePickGame('bigtwo')}
+              >
                 <div className="catalog-card-header">
-                  <span className="catalog-badge badge-purple">
-                    <Lock size={12} style={{ marginRight: '4px' }} />
-                    Coming Soon
-                  </span>
+                  <span className="catalog-badge badge-purple">2 - 6 Pemain</span>
                   <span className="catalog-suit-symbol">♦</span>
                 </div>
 
                 <div className="catalog-icon-wrapper">
-                  <span className="catalog-hero-icon">👑</span>
+                  <span className="catalog-hero-icon">💎</span>
                 </div>
 
                 <div className="catalog-card-body">
-                  <h3 className="catalog-card-title">Texas Poker</h3>
-                  <span className="catalog-card-subtitle">NO-LIMIT HOLD'EM</span>
+                  <h3 className="catalog-card-title">Big Two</h3>
+                  <span className="catalog-card-subtitle">CAPSA BANTING</span>
                   <p className="catalog-card-desc">
-                    Permainan poker legendaris dunia. Adu strategi taruhan chip, raise, bluffing, dan taklukkan meja lawan Anda!
+                    Adu taktik menghabiskan kartu lebih dulu! Mainkan Single, Pair, Triple, dan 5 Kartu Poker (Straight s/d Four of a Kind). Angka 2 tertinggi!
                   </p>
 
                   <div className="catalog-features-tags">
-                    <span className="feature-pill">2 - 9 Pemain</span>
-                    <span className="feature-pill">Turnamen Chip</span>
-                    <span className="feature-pill">Bluffing & All-in</span>
+                    <span className="feature-pill">2 - 6 Pemain</span>
+                    <span className="feature-pill">Four of a Kind</span>
+                    <span className="feature-pill">Single / Double Deck</span>
                   </div>
                 </div>
 
                 <div className="catalog-card-footer">
-                  <button type="button" className="btn-catalog-play btn-disabled" disabled>
-                    <span>Segera Hadir</span>
-                    <Lock size={14} />
+                  <button type="button" className="btn-catalog-play btn-purple">
+                    <span>Pilih Big Two</span>
+                    <ArrowRight size={16} />
                   </button>
                 </div>
               </div>
@@ -197,7 +201,11 @@ export default function ModeSelectionScreen({
               </button>
 
               <span className="game-active-indicator-tag">
-                {isSevens ? '♠️ Tujuh Sekop Terpilih' : '🃏 Remi 41 Terpilih'}
+                {isSevens
+                  ? '♠️ Tujuh Sekop Terpilih'
+                  : activeGame === 'bigtwo'
+                  ? '💎 Big Two (Capsa Banting) Terpilih'
+                  : '🃏 Remi 41 Terpilih'}
               </span>
             </div>
 
@@ -210,6 +218,15 @@ export default function ModeSelectionScreen({
                   </h1>
                   <p className="mode-main-subtitle">
                     Rangkai kartu dari angka 7 hingga As. Pilih mode bermain bersama teman di bawah ini:
+                  </p>
+                </>
+              ) : activeGame === 'bigtwo' ? (
+                <>
+                  <h1 className="mode-main-title">
+                    BIG TWO <span className="mode-title-gold">CAPSA BANTING</span>
+                  </h1>
+                  <p className="mode-main-subtitle">
+                    Banting kartu lebih cepat untuk menang! Angka 2 tertinggi, Four of a Kind (5 kartu), bebas double pair.
                   </p>
                 </>
               ) : (
@@ -229,13 +246,13 @@ export default function ModeSelectionScreen({
               {/* CARD 1: MAIN ONLINE (MULTIPLAYER) */}
               <div
                 className="mode-card mode-card-online"
-                onClick={() => onSelectMode('multiplayer', null, activeGame)}
+                onClick={() => onSelectMode('multiplayer', null, activeGame, { deckMode })}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    onSelectMode('multiplayer', null, activeGame);
+                    onSelectMode('multiplayer', null, activeGame, { deckMode });
                   }
                 }}
               >
@@ -267,7 +284,7 @@ export default function ModeSelectionScreen({
                     </li>
                     <li>
                       <span className="perk-bullet">✦</span>
-                      <span>Sinkronisasi meja dan giliran realtime (4 - 6 Pemain)</span>
+                      <span>Sinkronisasi meja dan giliran realtime (2 - 6 Pemain)</span>
                     </li>
                   </ul>
                 </div>
@@ -283,13 +300,13 @@ export default function ModeSelectionScreen({
               {/* CARD 2: MAIN OFFLINE (SIMULASI / PASS-AND-PLAY) */}
               <div
                 className="mode-card mode-card-offline"
-                onClick={() => onSelectMode('local', offlinePlayerCount, activeGame)}
+                onClick={() => onSelectMode('local', offlinePlayerCount, activeGame, { deckMode })}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    onSelectMode('local', offlinePlayerCount, activeGame);
+                    onSelectMode('local', offlinePlayerCount, activeGame, { deckMode });
                   }
                 }}
               >
@@ -310,14 +327,14 @@ export default function ModeSelectionScreen({
                 </div>
 
                 <div className="mode-card-body">
-                  {/* Player Count Selector Buttons (4, 5, or 6 players) */}
+                  {/* Player Count Selector Buttons (2, 3, 4, 5, or 6 players) */}
                   <div
                     className="offline-player-selector"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <label className="selector-title">Pilih Jumlah Pemain:</label>
                     <div className="player-count-buttons">
-                      {[4, 5, 6].map((count) => (
+                      {[2, 3, 4, 5, 6].map((count) => (
                         <button
                           key={count}
                           type="button"
@@ -338,11 +355,74 @@ export default function ModeSelectionScreen({
                           <span>Setiap pemain dapat <strong>8 kartu</strong> (semua angka 7 tertata di meja)</span>
                         ) : offlinePlayerCount === 5 ? (
                           <span>Setiap pemain dapat <strong>10 kartu</strong> (7♠ dan 7♥ tertata di meja)</span>
+                        ) : offlinePlayerCount === 3 ? (
+                          <span>Setiap pemain dapat <strong>17 kartu</strong> (7♠ otomatis tertata di meja)</span>
+                        ) : offlinePlayerCount === 2 ? (
+                          <span>Setiap pemain dapat <strong>26 kartu</strong> (Head-to-Head 1 vs 1)</span>
                         ) : (
                           <span>Setiap pemain dapat <strong>13 kartu</strong> penuh</span>
                         )
+                      ) : activeGame === 'bigtwo' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <span>
+                            {offlinePlayerCount <= 4
+                              ? `Setiap pemain dapat 13 kartu (Single Deck 52 kartu). 3♦ jalan pertama.`
+                              : deckMode === 'double'
+                              ? `Mode Double Deck (104 kartu) • 13 kartu per orang.`
+                              : `Mode Single Deck (52 kartu) • ${offlinePlayerCount === 5 ? '10' : '8'} kartu per orang.`}
+                          </span>
+
+                          {/* Deck Mode Toggle for > 4 players */}
+                          {offlinePlayerCount > 4 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                              <span style={{ fontSize: '0.78rem', color: '#fbbf24', fontWeight: 700 }}>Pilihan Deck:</span>
+                              <button
+                                type="button"
+                                style={{
+                                  padding: '2px 8px',
+                                  fontSize: '0.75rem',
+                                  borderRadius: '6px',
+                                  background: deckMode === 'single' ? '#38bdf8' : 'rgba(255,255,255,0.1)',
+                                  color: deckMode === 'single' ? '#000' : '#fff',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeckMode('single');
+                                }}
+                              >
+                                Single Deck (52)
+                              </button>
+                              <button
+                                type="button"
+                                style={{
+                                  padding: '2px 8px',
+                                  fontSize: '0.75rem',
+                                  borderRadius: '6px',
+                                  background: deckMode === 'double' ? '#38bdf8' : 'rgba(255,255,255,0.1)',
+                                  color: deckMode === 'double' ? '#000' : '#fff',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeckMode('double');
+                                }}
+                              >
+                                Double Deck (104)
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       ) : (
-                        <span>Setiap pemain memegang <strong>4 kartu</strong> di tangan</span>
+                        offlinePlayerCount === 2 ? (
+                          <span>Mode 1 vs 1: Masing-masing pemain memegang <strong>4 kartu</strong></span>
+                        ) : (
+                          <span>Setiap pemain memegang <strong>4 kartu</strong> di tangan</span>
+                        )
                       )}
                     </div>
                   </div>

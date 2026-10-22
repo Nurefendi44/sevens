@@ -35,13 +35,24 @@ export default function ShuffleDealingAnimation({
   const dealIntervalRef = useRef(null);
   const revealIntervalRef = useRef(null);
 
-  // Dynamic hand size based on active game (8 for 6p, 10 for 5p, 13 for 4p)
+  // Calculate dynamic seats & targets
+  const activeTargets = [];
+  if (seats.bottom) activeTargets.push('bottom');
+  if (seats.left) activeTargets.push('left');
+  if (seats.topPlayers && seats.topPlayers.length > 1) {
+    seats.topPlayers.forEach((_, i) => activeTargets.push(`top_${i}`));
+  } else if (seats.top) {
+    activeTargets.push('top');
+  }
+  if (seats.right) activeTargets.push('right');
+
+  const targets = activeTargets.length > 0 ? activeTargets : ['bottom', 'top'];
+  const playerCount = targets.length;
+
+  // Dynamic hand size based on active game (e.g. 26 for 2p, 17 for 3p, 13 for 4p, 10 for 5p, 8 for 6p)
   const cardsPerHand = playerHand && playerHand.length > 0
     ? playerHand.length
-    : (seats.topPlayers?.length === 3 ? 8 : seats.topPlayers?.length === 2 ? 10 : 13);
-  const playerCount = seats.topPlayers && seats.topPlayers.length > 0
-    ? seats.topPlayers.length + 3
-    : 4;
+    : (playerCount === 2 ? 26 : playerCount === 3 ? 17 : playerCount === 5 ? 10 : playerCount === 6 ? 8 : 13);
   const totalCards = cardsPerHand * playerCount;
 
   // Hand cards to display for user
@@ -158,9 +169,7 @@ export default function ShuffleDealingAnimation({
       // =======================================================================
       setPhase('dealing');
       let currentCardIndex = 0;
-      const targets = seats.topPlayers && seats.topPlayers.length > 1
-        ? ['bottom', 'left', ...seats.topPlayers.map((_, i) => `top_${i}`), 'right']
-        : ['bottom', 'left', 'top', 'right'];
+      const dealTargets = targets;
 
       dealIntervalRef.current = setInterval(() => {
         if (currentCardIndex >= totalCards) {

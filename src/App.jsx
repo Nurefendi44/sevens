@@ -38,6 +38,11 @@ import GameOver41Modal from './games/game41/components/GameOver41Modal.jsx';
 import RulesGuide41Modal from './games/game41/components/RulesGuide41Modal.jsx';
 import { initGame41, drawCard41, discardCard41 } from './games/game41/engine/engine41.js';
 
+import TableBigTwo from './games/bigtwo/components/TableBigTwo.jsx';
+import GameOverBigTwoModal from './games/bigtwo/components/GameOverBigTwoModal.jsx';
+import RulesGuideBigTwoModal from './games/bigtwo/components/RulesGuideBigTwoModal.jsx';
+import { initBigTwo, playComboBigTwo, passTurnBigTwo } from './games/bigtwo/engine/bigtwoEngine.js';
+
 import './styles/multiplayer.css';
 
 
@@ -205,9 +210,13 @@ export default function App() {
     return 'sevens';
   });
 
-  // Game 41 State (4-6 players)
+  // Game 41 State (2-6 players)
   const [gameState41, setGameState41] = useState(() => initGame41({ playerCount: 4 }));
   const [showRules41Modal, setShowRules41Modal] = useState(false);
+
+  // Big Two State (2-6 players)
+  const [gameStateBigtwo, setGameStateBigtwo] = useState(() => initBigTwo({ playerCount: 4 }));
+  const [showRulesBigtwoModal, setShowRulesBigtwoModal] = useState(false);
 
   useEffect(() => {
     if (typeof localStorage !== 'undefined') {
@@ -232,7 +241,10 @@ export default function App() {
             setMyPlayerId(session.playerId);
           }
           if (room.game_state) {
-            if (room.game_state.gameType === 'game41') {
+            if (room.game_state.gameType === 'bigtwo') {
+              setActiveGameType('bigtwo');
+              setGameStateBigtwo(room.game_state);
+            } else if (room.game_state.gameType === 'game41') {
               setActiveGameType('game41');
               setGameState41(room.game_state);
             } else {
@@ -265,6 +277,12 @@ export default function App() {
 
       if (updatedRoom.game_state) {
         const nextState = updatedRoom.game_state;
+
+        if (nextState.gameType === 'bigtwo') {
+          setActiveGameType('bigtwo');
+          setGameStateBigtwo(nextState);
+          return;
+        }
 
         if (nextState.gameType === 'game41') {
           setActiveGameType('game41');
@@ -375,13 +393,16 @@ export default function App() {
   // ---------------------------------------------------------------------------
   // MULTIPLAYER HANDLERS
   // ---------------------------------------------------------------------------
-  const handleCreateRoom = async (username, maxPlayers = 4, gameType = activeGameType) => {
+  const handleCreateRoom = async (username, maxPlayers = 4, gameType = activeGameType, options = {}) => {
     const res = await multiplayerAdapter.createRoom(username, maxPlayers, gameType);
     if (res.success) {
       setCurrentRoom(res.room);
       setMyPlayerId(res.player.id);
       if (res.room.game_state) {
-        if (res.room.game_state.gameType === 'game41') {
+        if (res.room.game_state.gameType === 'bigtwo') {
+          setActiveGameType('bigtwo');
+          setGameStateBigtwo(res.room.game_state);
+        } else if (res.room.game_state.gameType === 'game41') {
           setActiveGameType('game41');
           setGameState41(res.room.game_state);
         } else {
@@ -404,7 +425,10 @@ export default function App() {
       setCurrentRoom(res.room);
       setMyPlayerId(res.player.id);
       if (res.room.game_state) {
-        if (res.room.game_state.gameType === 'game41') {
+        if (res.room.game_state.gameType === 'bigtwo') {
+          setActiveGameType('bigtwo');
+          setGameStateBigtwo(res.room.game_state);
+        } else if (res.room.game_state.gameType === 'game41') {
           setActiveGameType('game41');
           setGameState41(res.room.game_state);
         } else {
@@ -428,12 +452,21 @@ export default function App() {
 
   const handleStartGame = async () => {
     if (!currentRoom?.code) return;
+    const isBigTwo = activeGameType === 'bigtwo' || currentRoom.game_state?.gameType === 'bigtwo';
     const isGame41 = activeGameType === 'game41' || currentRoom.game_state?.gameType === 'game41';
-    const configToUse = isGame41 ? { gameType: 'game41' } : gameConfig;
-    const res = await multiplayerAdapter.startGame(currentRoom.code, myPlayerId, configToUse, isGame41 ? 'game41' : 'sevens');
+    const configToUse = isBigTwo
+      ? { gameType: 'bigtwo', ...currentRoom.game_state?.config }
+      : isGame41
+      ? { gameType: 'game41' }
+      : gameConfig;
+    const determinedGame = isBigTwo ? 'bigtwo' : isGame41 ? 'game41' : 'sevens';
+    const res = await multiplayerAdapter.startGame(currentRoom.code, myPlayerId, configToUse, determinedGame);
     if (res.success) {
       setCurrentRoom(res.room);
-      if (isGame41) {
+      if (isBigTwo) {
+        setActiveGameType('bigtwo');
+        setGameStateBigtwo(res.gameState);
+      } else if (isGame41) {
         setActiveGameType('game41');
         setGameState41(res.gameState);
       } else {
@@ -702,6 +735,64 @@ export default function App() {
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // BIG TWO (CAPSA BANTING) ACTIONS
+  // ---------------------------------------------------------------------------
+  const isMyTurnBigtwo = isMultiplayerMode
+    ? gameStateBigtwo.currentPlayer === myPlayerId
+    : true;
+
+  const handlePlayBigTwoCombo = async (selectedCards) => {
+    const actingPlayerId = isMultiplayerMode ? myPlayerId : gameStateBigtwo.currentPlayer;
+    const res = playComboBigTwo(gameStateBigtwo, actingPlayerId, selectedCards);
+    if (res.success) {
+      setGameStateBigtwo(res.gameState);
+      audio.playCardSound();
+      if (res.gameState.gameStatus === 'GAME_OVER') {
+        audio.victorySound();
+      }
+      if (isMultiplayerMode && currentRoom?.code) {
+        await multiplayerAdapter.syncGameState(currentRoom.code, res.gameState);
+      }
+    } else {
+      showToast(res.error);
+    }
+  };
+
+  const handlePassBigTwo = async () => {
+    const actingPlayerId = isMultiplayerMode ? myPlayerId : gameStateBigtwo.currentPlayer;
+    const res = passTurnBigTwo(gameStateBigtwo, actingPlayerId);
+    if (res.success) {
+      setGameStateBigtwo(res.gameState);
+      audio.closeCardSound();
+      if (isMultiplayerMode && currentRoom?.code) {
+        await multiplayerAdapter.syncGameState(currentRoom.code, res.gameState);
+      }
+    } else {
+      showToast(res.error);
+    }
+  };
+
+  const handleRestartBigTwo = async (configOverrides = {}) => {
+    if (gameMode === 'multiplayer' && currentRoom?.code) {
+      const isHost = currentRoom.host_id === myPlayerId;
+      if (!isHost) {
+        showToast('Hanya Host yang dapat mengocok ulang dan memulai game baru.');
+        return;
+      }
+      const res = await multiplayerAdapter.restartGame(currentRoom.code, myPlayerId, { gameType: 'bigtwo', ...configOverrides });
+      if (res.success) {
+        setGameStateBigtwo(res.gameState);
+        showToast('Permainan Big Two baru dimulai!');
+      }
+    } else {
+      const count = gameStateBigtwo.players?.length || 4;
+      const nextState = initBigTwo({ playerCount: count, deckMode: gameStateBigtwo.config.deckMode });
+      setGameStateBigtwo(nextState);
+      showToast('Permainan Big Two baru dimulai!');
+    }
+  };
+
   // Find active turn player's name
   const currentTurnPlayer = playersList.find((p) => p.id === gameState?.currentPlayer);
   const currentTurnPlayerName = currentTurnPlayer?.name || 'Pemain Lain';
@@ -753,13 +844,19 @@ export default function App() {
         <ModeSelectionScreen
           selectedGame={activeGameType}
           onSelectGame={(game) => setActiveGameType(game)}
-          onSelectMode={(mode, playerCount, game) => {
+          onSelectMode={(mode, playerCount, game, options = {}) => {
             const chosenGame = game || activeGameType;
             setActiveGameType(chosenGame);
 
             if (mode === 'local') {
               const count = playerCount || 4;
-              if (chosenGame === 'game41') {
+              if (chosenGame === 'bigtwo') {
+                const stateBigtwo = initBigTwo({
+                  playerCount: count,
+                  deckMode: options?.deckMode || (count > 4 ? 'double' : 'single'),
+                });
+                setGameStateBigtwo(stateBigtwo);
+              } else if (chosenGame === 'game41') {
                 const state41 = initGame41({ playerCount: count });
                 setGameState41(state41);
               } else {
@@ -774,7 +871,8 @@ export default function App() {
             }
           }}
           onOpenRules={(game) => {
-            if (game === 'game41') setShowRules41Modal(true);
+            if (game === 'bigtwo') setShowRulesBigtwoModal(true);
+            else if (game === 'game41') setShowRules41Modal(true);
             else setShowRulesModal(true);
           }}
         />
@@ -782,6 +880,7 @@ export default function App() {
         {/* Rules Guide Modals */}
         {showRulesModal && <RulesGuideModal onClose={() => setShowRulesModal(false)} />}
         {showRules41Modal && <RulesGuide41Modal onClose={() => setShowRules41Modal(false)} />}
+        {showRulesBigtwoModal && <RulesGuideBigTwoModal isOpen={showRulesBigtwoModal} onClose={() => setShowRulesBigtwoModal(false)} />}
       </div>
     );
   }
@@ -830,12 +929,14 @@ export default function App() {
             title="Kembali ke Menu Utama / Ganti Game"
             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', display: 'flex', alignItems: 'center', gap: '8px', color: 'inherit' }}
           >
-            <span>{activeGameType === 'game41' ? '🃏' : '♠'}</span>
-            <span>{activeGameType === 'game41' ? 'REMI 41' : 'SEVENS'}</span>
+            <span>{activeGameType === 'bigtwo' ? '💎' : activeGameType === 'game41' ? '🃏' : '♠'}</span>
+            <span>{activeGameType === 'bigtwo' ? 'BIG TWO' : activeGameType === 'game41' ? 'REMI 41' : 'SEVENS'}</span>
           </button>
 
           <span className="brand-tag desktop-only">
-            {activeGameType === 'game41'
+            {activeGameType === 'bigtwo'
+              ? `Capsa Banting • ${gameStateBigtwo.players?.length || 4} Pemain${gameStateBigtwo.deckMode === 'double' ? ' (Double Deck)' : ''}`
+              : activeGameType === 'game41'
               ? `Kartu 41 • ${gameState41.players?.length || 4} Pemain`
               : `Tujuh Sekop • ${gameState.players?.length || 4} Pemain`}
           </span>
@@ -982,7 +1083,8 @@ export default function App() {
           <button
             className="btn-header"
             onClick={() => {
-              if (activeGameType === 'game41') setShowRules41Modal(true);
+              if (activeGameType === 'bigtwo') setShowRulesBigtwoModal(true);
+              else if (activeGameType === 'game41') setShowRules41Modal(true);
               else setShowRulesModal(true);
             }}
             title="Buku Aturan Permainan"
@@ -1025,7 +1127,8 @@ export default function App() {
             <button
               className="btn-header btn-gold"
               onClick={() => {
-                if (activeGameType === 'game41') handleRestart41();
+                if (activeGameType === 'bigtwo') handleRestartBigTwo();
+                else if (activeGameType === 'game41') handleRestart41();
                 else handleRestart();
               }}
               title="Kocok ulang dan mulai game baru"
@@ -1077,7 +1180,17 @@ export default function App() {
           seats={seats}
         />
 
-        {activeGameType === 'game41' ? (
+        {activeGameType === 'bigtwo' ? (
+          <TableBigTwo
+            gameState={gameStateBigtwo}
+            myPlayerId={myPlayerId}
+            isMyTurn={isMyTurnBigtwo}
+            onPlayCombo={handlePlayBigTwoCombo}
+            onPass={handlePassBigTwo}
+            isMultiplayer={isMultiplayerMode}
+            onOpenRules={() => setShowRulesBigtwoModal(true)}
+          />
+        ) : activeGameType === 'game41' ? (
           <Table41
             gameState={gameState41}
             onDrawCard={handleDrawCard41}
@@ -1304,13 +1417,14 @@ export default function App() {
         onCopyRoomCode={handleCopyTopBarCode}
         onShareRoomLink={handleShareTopBarLink}
         copiedRoomCode={copiedRoomCode}
-        gameState={activeGameType === 'game41' ? gameState41 : gameState}
+        gameState={activeGameType === 'bigtwo' ? gameStateBigtwo : activeGameType === 'game41' ? gameState41 : gameState}
         showOpponents={showOpponents}
         onToggleShowOpponents={handleToggleShowOpponents}
         boardLayout={boardLayout}
         onToggleBoardLayout={handleToggleBoardLayout}
         onOpenRules={() => {
-          if (activeGameType === 'game41') setShowRules41Modal(true);
+          if (activeGameType === 'bigtwo') setShowRulesBigtwoModal(true);
+          else if (activeGameType === 'game41') setShowRules41Modal(true);
           else setShowRulesModal(true);
         }}
         onOpenConfig={() => setShowConfigModal(true)}
@@ -1318,7 +1432,8 @@ export default function App() {
         isMuted={isMuted}
         onToggleSound={handleToggleSound}
         onRestart={() => {
-          if (activeGameType === 'game41') handleRestart41();
+          if (activeGameType === 'bigtwo') handleRestartBigTwo();
+          else if (activeGameType === 'game41') handleRestart41();
           else handleRestart();
         }}
         isHost={isHost}
@@ -1378,9 +1493,25 @@ export default function App() {
         />
       )}
 
+      {/* Big Two Game Over Modal */}
+      {activeGameType === 'bigtwo' && gameStateBigtwo.gameStatus === 'GAME_OVER' && (
+        <GameOverBigTwoModal
+          gameState={gameStateBigtwo}
+          onRestart={handleRestartBigTwo}
+          isMultiplayer={isMultiplayerMode}
+          isHost={isHost}
+        />
+      )}
+
       {/* Rules Guide Modals */}
       {showRulesModal && <RulesGuideModal onClose={() => setShowRulesModal(false)} />}
       {showRules41Modal && <RulesGuide41Modal onClose={() => setShowRules41Modal(false)} />}
+      {showRulesBigtwoModal && (
+        <RulesGuideBigTwoModal
+          isOpen={showRulesBigtwoModal}
+          onClose={() => setShowRulesBigtwoModal(false)}
+        />
+      )}
 
       {/* Settings / Config Modal */}
       {showConfigModal && (

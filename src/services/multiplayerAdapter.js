@@ -8,6 +8,7 @@ import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 import { initGame } from '../engine/gameEngine.js';
 import { GAME_STATUS } from '../engine/constants.js';
 import { initGame41 } from '../games/game41/engine/engine41.js';
+import { initBigTwo } from '../games/bigtwo/engine/bigtwoEngine.js';
 
 export const AVATARS = ['👤', '🦊', '🐼', '🦁', '🐯', '🐨'];
 export const SEAT_POSITIONS = ['bottom', 'left', 'top', 'right', 'top_left', 'top_right'];
@@ -96,14 +97,40 @@ export function getRelativeSeats(players = [], viewerPlayerId) {
   const safeIdx = myIndex !== -1 ? myIndex : 0;
   const count = players.length;
 
-  if (count <= 4) {
-    const topPlayer = players[(safeIdx + 2) % count] || null;
+  // 2 Players: Head-to-Head (Viewer at Bottom, Opponent directly at Top)
+  if (count === 2) {
+    const opponent = players[(safeIdx + 1) % 2] || null;
     return {
       bottom: players[safeIdx],
-      left: players[(safeIdx + 1) % count] || null,
+      left: null,
+      top: opponent,
+      topPlayers: opponent ? [opponent] : [],
+      right: null,
+    };
+  }
+
+  // 3 Players: Triangle (Viewer at Bottom, Next player at Left, Previous player at Right)
+  if (count === 3) {
+    const pLeft = players[(safeIdx + 1) % 3] || null;
+    const pRight = players[(safeIdx + 2) % 3] || null;
+    return {
+      bottom: players[safeIdx],
+      left: pLeft,
+      top: null,
+      topPlayers: [],
+      right: pRight,
+    };
+  }
+
+  // 4 Players: Standard Cross
+  if (count === 4) {
+    const topPlayer = players[(safeIdx + 2) % 4] || null;
+    return {
+      bottom: players[safeIdx],
+      left: players[(safeIdx + 1) % 4] || null,
       top: topPlayer,
       topPlayers: topPlayer ? [topPlayer] : [],
-      right: players[(safeIdx + 3) % count] || null,
+      right: players[(safeIdx + 3) % 4] || null,
     };
   }
 
@@ -168,7 +195,7 @@ export const multiplayerAdapter = {
     const name = hostName.trim() || 'Host';
     const code = generateRoomCode();
     const playerId = getLocalPlayerId();
-    const targetMax = [4, 5, 6].includes(Number(maxPlayers)) ? Number(maxPlayers) : 4;
+    const targetMax = [2, 3, 4, 5, 6].includes(Number(maxPlayers)) ? Number(maxPlayers) : 4;
 
     const hostPlayer = {
       id: playerId,
@@ -326,19 +353,20 @@ export const multiplayerAdapter = {
     }
 
     const players = room.players || [];
-    const maxPlayers = room.game_state?.config?.playerCount || configOverrides?.playerCount || 4;
-    if (players.length !== maxPlayers) {
+    if (players.length < 2) {
       return {
         success: false,
-        error: `Permainan membutuhkan tepat ${maxPlayers} pemain untuk dimulai (saat ini ${players.length}/${maxPlayers})!`,
+        error: `Permainan membutuhkan minimal 2 pemain untuk dimulai (saat ini baru ${players.length} pemain)!`,
       };
     }
+
+    const actualPlayerCount = players.length;
 
     // Format players into Engine structure
     const formattedPlayers = players.map((p, idx) => ({
       id: p.id,
       name: p.name,
-      seat: SEAT_POSITIONS[idx],
+      seat: SEAT_POSITIONS[idx] || `seat_${idx + 1}`,
       isHuman: true,
       avatar: p.avatar,
       isHost: p.isHost,
@@ -347,10 +375,12 @@ export const multiplayerAdapter = {
     // Initialize state from decoupled Game Engine with correct player count & gameType
     const determinedGameType = configOverrides?.gameType || room.game_state?.gameType || 'sevens';
     let gameState;
-    if (determinedGameType === 'game41') {
-      gameState = initGame41({ ...configOverrides, playerCount: maxPlayers }, formattedPlayers);
+    if (determinedGameType === 'bigtwo') {
+      gameState = initBigTwo({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
+    } else if (determinedGameType === 'game41') {
+      gameState = initGame41({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
     } else {
-      gameState = initGame({ ...configOverrides, playerCount: maxPlayers }, formattedPlayers);
+      gameState = initGame({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
     }
 
     const { data: updatedRoom, error: updateErr } = await supabase
@@ -408,19 +438,25 @@ export const multiplayerAdapter = {
     const formattedPlayers = (room.players || []).map((p, idx) => ({
       id: p.id,
       name: p.name,
-      seat: SEAT_POSITIONS[idx],
+      seat: SEAT_POSITIONS[idx] || `seat_${idx + 1}`,
       isHuman: true,
       avatar: p.avatar,
       isHost: p.isHost,
     }));
 
-    const maxPlayers = formattedPlayers.length;
+    if (formattedPlayers.length < 2) {
+      return { success: false, error: 'Minimal 2 pemain untuk memulai ulang permainan.' };
+    }
+
+    const actualPlayerCount = formattedPlayers.length;
     const determinedGameType = configOverrides?.gameType || room.game_state?.gameType || 'sevens';
     let nextGameState;
-    if (determinedGameType === 'game41') {
-      nextGameState = initGame41({ ...configOverrides, playerCount: maxPlayers }, formattedPlayers);
+    if (determinedGameType === 'bigtwo') {
+      nextGameState = initBigTwo({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
+    } else if (determinedGameType === 'game41') {
+      nextGameState = initGame41({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
     } else {
-      nextGameState = initGame({ ...configOverrides, playerCount: maxPlayers }, formattedPlayers);
+      nextGameState = initGame({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
     }
 
     await supabase

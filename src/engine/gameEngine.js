@@ -18,7 +18,7 @@ import { createConfig } from './config.js';
 export function initGame(configOverrides = {}, customPlayers = null) {
   const config = createConfig(configOverrides);
 
-  const playerCount = (customPlayers && Array.isArray(customPlayers) && customPlayers.length >= 4)
+  const playerCount = (customPlayers && Array.isArray(customPlayers) && customPlayers.length >= 2)
     ? customPlayers.length
     : (config.playerCount || 4);
 
@@ -31,7 +31,7 @@ export function initGame(configOverrides = {}, customPlayers = null) {
     { id: 'player_6', name: 'Player 6 (Barat Daya)', seat: 'seat_6', isHuman: true, avatar: '🐨' },
   ];
 
-  const players = (customPlayers && Array.isArray(customPlayers) && customPlayers.length >= 4)
+  const players = (customPlayers && Array.isArray(customPlayers) && customPlayers.length >= 2)
     ? customPlayers
     : defaultAllPlayers.slice(0, playerCount);
 
@@ -48,7 +48,15 @@ export function initGame(configOverrides = {}, customPlayers = null) {
   let systemTableCards = [];
   let firstMoveMade = false;
 
-  if (playerCount === 5) {
+  if (playerCount === 3) {
+    // 3 PEMAIN: ♠7 otomatis tertata di meja oleh sistem (sisa 51 kartu dibagikan, 17 kartu per pemain)
+    const spades7 = deck.find(c => c.suit === SUITS.SPADES && c.rank === 7);
+    deck = deck.filter(c => !(c.suit === SUITS.SPADES && c.rank === 7));
+
+    board[SUITS.SPADES] = { suit: SUITS.SPADES, isOpen: true, minRank: 7, maxRank: 7, playedCards: [spades7], isCompleted: false, closedAt: null, hasAce: false };
+    systemTableCards = [spades7];
+    firstMoveMade = true;
+  } else if (playerCount === 5) {
     // 5 PEMAIN: ♠7 dan ♥7 otomatis tertata di meja oleh sistem (sisa 50 kartu dibagikan, 10 kartu per pemain)
     const spades7 = deck.find(c => c.suit === SUITS.SPADES && c.rank === 7);
     const hearts7 = deck.find(c => c.suit === SUITS.HEARTS && c.rank === 7);
@@ -76,10 +84,10 @@ export function initGame(configOverrides = {}, customPlayers = null) {
   const hands = dealCards(shuffledDeck, playerIds);
 
   let startingPlayerId;
-  if (playerCount === 4) {
+  if (playerCount === 2 || playerCount === 4) {
     startingPlayerId = findStartingPlayer(hands, config.starterCard);
   } else {
-    // 5 atau 6 pemain: ♠7 sudah di meja oleh sistem, giliran dimulai oleh player pertama
+    // 3, 5, atau 6 pemain: ♠7 sudah di meja oleh sistem, giliran dimulai oleh player pertama
     startingPlayerId = playerIds[0];
   }
 
@@ -90,10 +98,14 @@ export function initGame(configOverrides = {}, customPlayers = null) {
     faults[p.id] = [];
   });
 
-  const startingPlayer = players.find(p => p.id === startingPlayerId);
+  const startingPlayer = players.find(p => p.id === startingPlayerId) || players[0];
 
   let welcomeMessage = `Permainan dimulai (${playerCount} pemain). Giliran ${startingPlayer.name}.`;
-  if (playerCount === 5) {
+  if (playerCount === 2) {
+    welcomeMessage = `Permainan 2 Pemain dimulai (26 kartu per pemain). Giliran pertama: ${startingPlayer.name} (pemegang ♠7).`;
+  } else if (playerCount === 3) {
+    welcomeMessage = `Permainan 3 Pemain dimulai. ♠7 otomatis tertata di meja oleh sistem (17 kartu per pemain). Giliran pertama: ${startingPlayer.name}.`;
+  } else if (playerCount === 5) {
     welcomeMessage = `Permainan 5 Pemain dimulai. ♠7 dan ♥7 otomatis tertata di meja oleh sistem (10 kartu per pemain). Giliran pertama: ${startingPlayer.name}.`;
   } else if (playerCount === 6) {
     welcomeMessage = `Permainan 6 Pemain dimulai. Semua kartu 7 otomatis tertata di meja oleh sistem (8 kartu per pemain). Giliran pertama: ${startingPlayer.name}.`;
