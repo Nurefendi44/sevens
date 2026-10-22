@@ -1,10 +1,11 @@
 import React, { useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { Trophy, RotateCcw } from 'lucide-react';
+import { Trophy, RotateCcw, Home } from 'lucide-react';
 
 export default function GameOverModal({
   gameState,
   onRestart,
+  onBackToMenu,
   isMultiplayer = false,
   isHost = true,
 }) {
@@ -185,7 +186,13 @@ export default function GameOverModal({
           </div>
         </div>
 
-        <div className="modal-footer">
+        <div className="modal-footer" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+          {onBackToMenu && (
+            <button className="btn-header" onClick={onBackToMenu}>
+              <Home size={15} />
+              <span>Menu Utama</span>
+            </button>
+          )}
           {(!isMultiplayer || isHost) ? (
             <button className="btn-header btn-gold" onClick={onRestart}>
               <RotateCcw size={16} />

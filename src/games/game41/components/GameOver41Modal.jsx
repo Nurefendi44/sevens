@@ -5,13 +5,25 @@ import CardView from '../../../components/CardView.jsx';
 export default function GameOver41Modal({
   gameState,
   onPlayAgain,
+  onRestart,
   onBackToMenu,
+  isMultiplayer = false,
+  isHost = true,
 }) {
-  if (!gameState || gameState.gameStatus !== 'game_over') return null;
+  if (!gameState || (gameState.gameStatus !== 'game_over' && gameState.gameStatus !== 'GAME_OVER')) return null;
 
   const winner = gameState.winner;
   const rankings = gameState.rankings || [];
   const is41Murni = gameState.endReason === '41_MURNI';
+
+  const handleRestartClick = () => {
+    if (onPlayAgain) onPlayAgain();
+    else if (onRestart) onRestart();
+  };
+
+  const handleMenuClick = () => {
+    if (onBackToMenu) onBackToMenu();
+  };
 
   return (
     <div className="modal-backdrop">
@@ -103,15 +115,21 @@ export default function GameOver41Modal({
         </div>
 
         {/* Footer Actions */}
-        <div className="modal-footer" style={{ justifyContent: 'center', gap: '1rem' }}>
-          <button className="btn-header" onClick={onBackToMenu}>
+        <div className="modal-footer" style={{ justifyContent: 'center', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="btn-header" onClick={handleMenuClick} style={{ cursor: 'pointer' }}>
             <Home size={15} />
-            <span>Pilihan Game</span>
+            <span>Menu Utama</span>
           </button>
-          <button className="btn-header btn-gold" onClick={onPlayAgain}>
-            <RotateCcw size={15} />
-            <span>Kocok Ulang & Main Lagi</span>
-          </button>
+          {(!isMultiplayer || isHost) ? (
+            <button className="btn-header btn-gold" onClick={handleRestartClick} style={{ cursor: 'pointer' }}>
+              <RotateCcw size={15} />
+              <span>{isMultiplayer ? 'Main Lagi (Host)' : 'Kocok Ulang & Main Lagi'}</span>
+            </button>
+          ) : (
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic', padding: '0.5rem' }}>
+              Menunggu Host untuk memulai babak berikutnya...
+            </div>
+          )}
         </div>
       </div>
     </div>

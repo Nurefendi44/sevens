@@ -4,13 +4,25 @@ import { Trophy, RotateCcw, Home, Sparkles } from 'lucide-react';
 export default function GameOverBigTwoModal({
   gameState,
   onPlayAgain,
+  onRestart,
   onBackToMenu,
+  isMultiplayer = false,
+  isHost = true,
 }) {
   if (!gameState || gameState.gameStatus !== 'GAME_OVER') return null;
 
   const winnerId = gameState.winner;
   const winnerPlayer = gameState.players.find((p) => p.id === winnerId);
   const rankings = gameState.rankings || [];
+
+  const handleRestartClick = () => {
+    if (onPlayAgain) onPlayAgain();
+    else if (onRestart) onRestart();
+  };
+
+  const handleMenuClick = () => {
+    if (onBackToMenu) onBackToMenu();
+  };
 
   return (
     <div className="modal-backdrop">
@@ -80,21 +92,27 @@ export default function GameOverBigTwoModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="modal-footer" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={onPlayAgain}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(135deg, #0284c7, #2563eb)' }}
-          >
-            <RotateCcw size={16} />
-            <span>Main Lagi (Play Again)</span>
-          </button>
+        <div className="modal-footer" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
+          {(!isMultiplayer || isHost) ? (
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleRestartClick}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(135deg, #0284c7, #2563eb)', cursor: 'pointer' }}
+            >
+              <RotateCcw size={16} />
+              <span>{isMultiplayer ? 'Main Lagi (Host)' : 'Main Lagi (Play Again)'}</span>
+            </button>
+          ) : (
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic', padding: '0.5rem' }}>
+              Menunggu Host untuk memulai babak berikutnya...
+            </div>
+          )}
           <button
             type="button"
             className="btn-secondary"
-            onClick={onBackToMenu}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            onClick={handleMenuClick}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
           >
             <Home size={16} />
             <span>Menu Utama</span>

@@ -803,6 +803,8 @@ export default function App() {
         setGameState41(res.gameState);
         setIsDealingAnimationActive(true);
         showToast('Permainan Kartu 41 baru dimulai!');
+      } else {
+        showToast(res.error || 'Gagal memulai ulang permainan.');
       }
     } else if (gameMode === 'single') {
       const count = gameState41.players?.length || 2;
@@ -893,6 +895,8 @@ export default function App() {
       if (res.success) {
         setGameStateBigtwo(res.gameState);
         showToast('Permainan Big Two baru dimulai!');
+      } else {
+        showToast(res.error || 'Gagal memulai ulang permainan.');
       }
     } else if (gameMode === 'single') {
       const count = gameStateBigtwo.players?.length || 2;
@@ -1011,12 +1015,34 @@ export default function App() {
 
   // Return to Mode Selection Screen (Home)
   const handleBackToModeSelect = () => {
+    const isGameOver =
+      (activeGameType === 'bigtwo' && gameStateBigtwo.gameStatus === 'GAME_OVER') ||
+      (activeGameType === 'game41' && (gameState41.gameStatus === 'game_over' || gameState41.gameStatus === 'GAME_OVER')) ||
+      (activeGameType === 'sevens' && gameState.gameStatus === GAME_STATUS.GAME_OVER);
+
     if (isMultiplayerMode && currentRoom) {
-      if (confirm('Keluar dari room online dan kembali ke menu pemilihan mode?')) {
+      if (isGameOver || confirm('Keluar dari room online dan kembali ke menu pemilihan mode?')) {
         handleLeaveRoom();
+        if (activeGameType === 'bigtwo') {
+          setGameStateBigtwo(initBigTwo({ playerCount: gameStateBigtwo.players?.length || 4 }));
+        } else if (activeGameType === 'game41') {
+          setGameState41(initGame41({ playerCount: gameState41.players?.length || 4 }));
+        } else {
+          setGameState(initGame({ playerCount: gameState.players?.length || 4 }));
+        }
         setGameMode(null);
       }
     } else {
+      if (activeGameType === 'bigtwo') {
+        const count = gameStateBigtwo.players?.length || 2;
+        setGameStateBigtwo(initBigTwo({ playerCount: count }));
+      } else if (activeGameType === 'game41') {
+        const count = gameState41.players?.length || 2;
+        setGameState41(initGame41({ playerCount: count }));
+      } else {
+        const count = gameState.players?.length || 4;
+        setGameState(initGame({ playerCount: count }));
+      }
       setGameMode(null);
     }
   };
@@ -1726,17 +1752,21 @@ export default function App() {
         <GameOverModal
           gameState={gameState}
           onRestart={() => handleRestart()}
+          onBackToMenu={handleBackToModeSelect}
           isMultiplayer={isMultiplayerMode}
           isHost={isHost}
         />
       )}
 
       {/* Game 41 Game Over Modal */}
-      {activeGameType === 'game41' && gameState41.gameStatus === 'GAME_OVER' && (
+      {activeGameType === 'game41' && (gameState41.gameStatus === 'game_over' || gameState41.gameStatus === 'GAME_OVER') && (
         <GameOver41Modal
           gameState={gameState41}
           onRestart={handleRestart41}
+          onPlayAgain={handleRestart41}
+          onBackToMenu={handleBackToModeSelect}
           isMultiplayer={isMultiplayerMode}
+          isHost={isHost}
         />
       )}
 
@@ -1745,6 +1775,8 @@ export default function App() {
         <GameOverBigTwoModal
           gameState={gameStateBigtwo}
           onRestart={handleRestartBigTwo}
+          onPlayAgain={handleRestartBigTwo}
+          onBackToMenu={handleBackToModeSelect}
           isMultiplayer={isMultiplayerMode}
           isHost={isHost}
         />
