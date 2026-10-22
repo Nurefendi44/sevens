@@ -1267,6 +1267,7 @@ export default function App() {
             onPass={handlePassBigTwo}
             isMultiplayer={isMultiplayerMode}
             onOpenRules={() => setShowRulesBigtwoModal(true)}
+            onError={showToast}
           />
         ) : activeGameType === 'game41' ? (
           <Table41

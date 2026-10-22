@@ -48,11 +48,14 @@
 
 .card-corner.top-left {
   align-self: flex-start;
+  z-index: 2;
+  pointer-events: none;
 }
 
 .card-corner.bottom-right {
   align-self: flex-end;
   transform: rotate(180deg);
+  pointer-events: none;
 }
 
 .card-rank {

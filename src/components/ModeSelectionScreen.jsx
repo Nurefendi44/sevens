@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Globe,
   Gamepad2,
@@ -78,7 +78,61 @@ export default function ModeSelectionScreen({
   const [activeGame, setActiveGame] = useState(selectedGame || 'sevens');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [offlinePlayerCount, setOfflinePlayerCount] = useState(4);
-  const [deckMode, setDeckMode] = useState('double');
+  const [deckMode, setDeckMode] = useState('single');
+
+  // Mobile bottom sheet drag-down-to-close gesture handling
+  const [dragOffsetY, setDragOffsetY] = useState(0);
+  const [isDraggingSheet, setIsDraggingSheet] = useState(false);
+  const dragStartYRef = useRef(0);
+  const currentDragYRef = useRef(0);
+  const sheetRef = useRef(null);
+
+  const handleTouchStart = (e) => {
+    const touch = e.touches[0];
+    dragStartYRef.current = touch.clientY;
+    currentDragYRef.current = touch.clientY;
+    setIsDraggingSheet(true);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDraggingSheet) return;
+    const touch = e.touches[0];
+    currentDragYRef.current = touch.clientY;
+    const deltaY = touch.clientY - dragStartYRef.current;
+
+    // Only allow dragging downwards
+    if (deltaY > 0) {
+      setDragOffsetY(deltaY);
+    } else {
+      setDragOffsetY(0);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDraggingSheet) return;
+    setIsDraggingSheet(false);
+    const deltaY = currentDragYRef.current - dragStartYRef.current;
+
+    // If dragged down by more than 75px, close modal with smooth slide
+    if (deltaY > 75) {
+      setDragOffsetY(window.innerHeight);
+      setTimeout(() => {
+        setIsModalOpen(false);
+        setDragOffsetY(0);
+      }, 180);
+    } else {
+      // Snap back to open position
+      setDragOffsetY(0);
+    }
+  };
+
+  // Reset drag position when modal opens or closes
+  useEffect(() => {
+    if (!isModalOpen) {
+      setDragOffsetY(0);
+      setIsDraggingSheet(false);
+    }
+  }, [isModalOpen]);
 
   const currentGameObj =
     GAME_CATALOG.find((g) => g.id === activeGame) || GAME_CATALOG[0];
@@ -134,29 +188,60 @@ export default function ModeSelectionScreen({
     }
 
     if (activeGame === 'bigtwo') {
-      if (offlinePlayerCount <= 4) {
+      if (offlinePlayerCount === 2) {
         return (
           <span>
-            Setiap pemain dapat <strong>13 kartu</strong> (Single Deck 52 kartu). Pemegang{' '}
+            Single Deck (52 kartu) • Duel 1 vs 1: Setiap pemain dapat <strong>26 kartu</strong> penuh. Pemegang{' '}
             <strong>3♦</strong> jalan pertama.
           </span>
         );
       }
-      return (
-        <span>
-          {deckMode === 'double' ? (
-            <>
-              Mode <strong>Double Deck (104 kartu)</strong> • Setiap pemain dapat{' '}
-              <strong>13 kartu</strong>.
-            </>
-          ) : (
-            <>
-              Mode <strong>Single Deck (52 kartu)</strong> • Setiap pemain dapat{' '}
-              <strong>{offlinePlayerCount === 5 ? '10' : '8'} kartu</strong>.
-            </>
-          )}
-        </span>
-      );
+      if (offlinePlayerCount === 3) {
+        return (
+          <span>
+            Single Deck (52 kartu) • 3 Pemain: Setiap pemain dapat <strong>17–18 kartu</strong> (semua 52 kartu dibagi habis). Pemegang{' '}
+            <strong>3♦</strong> jalan pertama.
+          </span>
+        );
+      }
+      if (offlinePlayerCount === 4) {
+        return (
+          <span>
+            Single Deck (52 kartu) • Standar 4 Pemain: Setiap pemain dapat <strong>13 kartu</strong> penuh. Pemegang{' '}
+            <strong>3♦</strong> jalan pertama.
+          </span>
+        );
+      }
+      if (offlinePlayerCount === 5) {
+        return (
+          <span>
+            {deckMode === 'double' ? (
+              <>
+                Mode <strong>Double Deck (104 kartu)</strong> • 5 Pemain: Setiap pemain dapat <strong>20–21 kartu</strong> (dibagi habis).
+              </>
+            ) : (
+              <>
+                Mode <strong>Single Deck (52 kartu)</strong> • 5 Pemain: Setiap pemain dapat <strong>10–11 kartu</strong> (dibagi habis).
+              </>
+            )}
+          </span>
+        );
+      }
+      if (offlinePlayerCount === 6) {
+        return (
+          <span>
+            {deckMode === 'double' ? (
+              <>
+                Mode <strong>Double Deck (104 kartu)</strong> • 6 Pemain: Setiap pemain dapat <strong>17–18 kartu</strong> (dibagi habis).
+              </>
+            ) : (
+              <>
+                Mode <strong>Single Deck (52 kartu)</strong> • 6 Pemain: Setiap pemain dapat <strong>8–9 kartu</strong> (dibagi habis).
+              </>
+            )}
+          </span>
+        );
+      }
     }
 
     // Remi 41
@@ -302,16 +387,42 @@ export default function ModeSelectionScreen({
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-game-title"
+          style={{
+            opacity: dragOffsetY > 0 ? Math.max(0.15, 1 - dragOffsetY / 350) : undefined,
+            transition: isDraggingSheet ? 'none' : 'opacity 0.2s ease',
+          }}
         >
           <div
+            ref={sheetRef}
             className={`mode-modal-sheet theme-${currentGameObj.theme}`}
             onClick={(e) => e.stopPropagation()}
+            style={{
+              transform: dragOffsetY > 0 ? `translateY(${dragOffsetY}px)` : undefined,
+              transition: isDraggingSheet ? 'none' : 'transform 0.22s cubic-bezier(0.2, 0.9, 0.4, 1)',
+            }}
           >
-            {/* Indikator Geser untuk Mobile Bottom Sheet */}
-            <div className="sheet-drag-handle" aria-hidden="true" />
+            {/* Indikator Geser untuk Mobile Bottom Sheet (Dapat di-drag ke bawah atau diklik) */}
+            <div
+              className="sheet-drag-handle"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              onClick={() => setIsModalOpen(false)}
+              role="button"
+              tabIndex={0}
+              aria-label="Tarik ke bawah atau klik untuk menutup"
+              title="Tarik ke bawah atau klik untuk menutup"
+            >
+              <div className="sheet-drag-bar" />
+            </div>
 
-            {/* Header Modal */}
-            <div className="mode-modal-header">
+            {/* Header Modal - juga mendukung drag ke bawah untuk menutup */}
+            <div
+              className="mode-modal-header"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
               <div className="modal-game-identity">
                 <div className="modal-mini-fan" aria-hidden="true">
                   {currentGameObj.fannedCards.slice(1).map((c, idx) => (
@@ -424,7 +535,7 @@ export default function ModeSelectionScreen({
                 className="mode-card mode-card-offline"
                 onClick={() =>
                   onSelectMode('local', offlinePlayerCount, activeGame, {
-                    deckMode,
+                    deckMode: offlinePlayerCount > 4 ? deckMode : 'single',
                   })
                 }
                 role="button"
@@ -433,7 +544,7 @@ export default function ModeSelectionScreen({
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
                     onSelectMode('local', offlinePlayerCount, activeGame, {
-                      deckMode,
+                      deckMode: offlinePlayerCount > 4 ? deckMode : 'single',
                     });
                   }
                 }}

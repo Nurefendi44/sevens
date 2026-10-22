@@ -542,11 +542,32 @@
 
 .sheet-drag-handle {
   display: none;
+  width: 100%;
+  padding: 8px 0 14px 0;
+  margin: -4px auto 0.4rem;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.sheet-drag-handle:active {
+  cursor: grabbing;
+}
+
+.sheet-drag-bar {
   width: 44px;
   height: 5px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.2);
-  margin: 0 auto 1rem;
+  background: rgba(255, 255, 255, 0.35);
+  margin: 0 auto;
+  transition: background 0.2s ease, width 0.2s ease;
+}
+
+.sheet-drag-handle:hover .sheet-drag-bar,
+.sheet-drag-handle:active .sheet-drag-bar {
+  background: rgba(255, 255, 255, 0.75);
+  width: 56px;
 }
 
 /* Header Modal */
@@ -983,7 +1004,9 @@
   }
 
   .sheet-drag-handle {
-    display: block;
+    display: flex;
+    justify-content: center;
+    align-items: center;
   }
 
   .mode-cards-grid {

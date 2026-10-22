@@ -187,7 +187,7 @@ export const multiplayerAdapter = {
   /**
    * Creates a new room as Host with configurable player count (4, 5, or 6) and gameType
    */
-  async createRoom(hostName, maxPlayers = 4, gameType = 'sevens') {
+  async createRoom(hostName, maxPlayers = 4, gameType = 'sevens', options = {}) {
     if (!supabase) {
       return { success: false, error: 'Supabase belum terkonfigurasi pada .env file.' };
     }
@@ -196,6 +196,7 @@ export const multiplayerAdapter = {
     const code = generateRoomCode();
     const playerId = getLocalPlayerId();
     const targetMax = [2, 3, 4, 5, 6].includes(Number(maxPlayers)) ? Number(maxPlayers) : 4;
+    const effectiveDeckMode = targetMax > 4 ? (options?.deckMode || 'single') : 'single';
 
     const hostPlayer = {
       id: playerId,
@@ -214,7 +215,13 @@ export const multiplayerAdapter = {
         host_id: playerId,
         status: 'lobby',
         players: [hostPlayer],
-        game_state: { config: { playerCount: targetMax }, gameType },
+        game_state: {
+          config: {
+            playerCount: targetMax,
+            deckMode: effectiveDeckMode,
+          },
+          gameType,
+        },
       })
       .select()
       .single();
@@ -376,7 +383,10 @@ export const multiplayerAdapter = {
     const determinedGameType = configOverrides?.gameType || room.game_state?.gameType || 'sevens';
     let gameState;
     if (determinedGameType === 'bigtwo') {
-      gameState = initBigTwo({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
+      const effectiveDeckMode = actualPlayerCount > 4
+        ? (configOverrides.deckMode || room.game_state?.config?.deckMode || 'single')
+        : 'single';
+      gameState = initBigTwo({ ...configOverrides, playerCount: actualPlayerCount, deckMode: effectiveDeckMode }, formattedPlayers);
     } else if (determinedGameType === 'game41') {
       gameState = initGame41({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
     } else {
@@ -452,7 +462,10 @@ export const multiplayerAdapter = {
     const determinedGameType = configOverrides?.gameType || room.game_state?.gameType || 'sevens';
     let nextGameState;
     if (determinedGameType === 'bigtwo') {
-      nextGameState = initBigTwo({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
+      const effectiveDeckMode = actualPlayerCount > 4
+        ? (configOverrides.deckMode || room.game_state?.config?.deckMode || 'single')
+        : 'single';
+      nextGameState = initBigTwo({ ...configOverrides, playerCount: actualPlayerCount, deckMode: effectiveDeckMode }, formattedPlayers);
     } else if (determinedGameType === 'game41') {
       nextGameState = initGame41({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
     } else {

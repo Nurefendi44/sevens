@@ -31,8 +31,10 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
   const desiredCount = customPlayers ? customPlayers.length : (configOverrides.playerCount || 4);
   const playerCount = Math.max(2, Math.min(6, desiredCount));
 
-  // Determine deck mode (For > 4 players, default to double if chosen, otherwise single)
-  let deckMode = configOverrides.deckMode || (playerCount > 4 ? 'double' : 'single');
+  // Determine deck mode:
+  // For 4 players or fewer, ALWAYS use Single Deck (52 cards).
+  // Double Deck (104 cards) is strictly and only allowed for > 4 players (5 or 6 players) if explicitly chosen.
+  const deckMode = playerCount > 4 && configOverrides.deckMode === 'double' ? 'double' : 'single';
 
   const config = {
     ...DEFAULT_CONFIG_BIGTWO,
