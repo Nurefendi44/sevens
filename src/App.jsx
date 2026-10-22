@@ -43,6 +43,8 @@ import GameOverBigTwoModal from './games/bigtwo/components/GameOverBigTwoModal.j
 import RulesGuideBigTwoModal from './games/bigtwo/components/RulesGuideBigTwoModal.jsx';
 import { initBigTwo, playComboBigTwo, passTurnBigTwo } from './games/bigtwo/engine/bigtwoEngine.js';
 
+import ActionAnnouncementPopup from './components/ActionAnnouncementPopup.jsx';
+
 import './styles/multiplayer.css';
 
 
@@ -218,6 +220,9 @@ export default function App() {
   const [gameStateBigtwo, setGameStateBigtwo] = useState(() => initBigTwo({ playerCount: 4 }));
   const [showRulesBigtwoModal, setShowRulesBigtwoModal] = useState(false);
 
+  // Real-time Action Announcement Pop-up State
+  const [recentActionPopup, setRecentActionPopup] = useState(null);
+
   useEffect(() => {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('sevens_active_game_type', activeGameType);
@@ -282,6 +287,11 @@ export default function App() {
           setActiveGameType('bigtwo');
           if (nextState.players) {
             setGameStateBigtwo(nextState);
+            if (nextState.lastAction) {
+              setRecentActionPopup(nextState.lastAction);
+              if (nextState.lastAction.type === 'PLAY_COMBO') audio.playCardSound();
+              else if (nextState.lastAction.type === 'PASS') audio.closeCardSound();
+            }
           }
           return;
         }
@@ -289,6 +299,9 @@ export default function App() {
         if (nextState.gameType === 'game41') {
           setActiveGameType('game41');
           if (nextState.players) {
+            if (nextState.lastAction) {
+              setRecentActionPopup(nextState.lastAction);
+            }
             if (nextState.turnNumber !== prevTurnNumberRef.current && nextState.lastAction) {
               const action = nextState.lastAction;
               if (action.type === 'DRAW') {
@@ -310,6 +323,9 @@ export default function App() {
         }
 
         // Play audio feedback if a move was made by other players
+        if (nextState.lastAction) {
+          setRecentActionPopup(nextState.lastAction);
+        }
         if (nextState.turnNumber !== prevTurnNumberRef.current && nextState.lastAction) {
           const action = nextState.lastAction;
           if (action.type === 'PLAY') {
@@ -624,6 +640,16 @@ export default function App() {
       setGameState(result.state);
       setSelectedCard(null);
       setPendingAceChoiceCard(null);
+      const actorName = gameState.players.find((p) => p.id === actingPlayerId)?.name || 'Pemain';
+      const actorAvatar = gameState.players.find((p) => p.id === actingPlayerId)?.avatar || '♠';
+      setRecentActionPopup({
+        type: 'PLAY',
+        playerId: actingPlayerId,
+        playerName: actorName,
+        avatar: actorAvatar,
+        card,
+        message: `${actorName} memainkan ${card.label}${card.symbol}`,
+      });
       if (card.rank === 7) {
         audio.sevenChime();
       } else {
@@ -657,6 +683,16 @@ export default function App() {
       setGameState(result.state);
       setSelectedCard(null);
       audio.closeCardSound();
+      const actorName = gameState.players.find((p) => p.id === actingPlayerId)?.name || 'Pemain';
+      const actorAvatar = gameState.players.find((p) => p.id === actingPlayerId)?.avatar || '🔒';
+      setRecentActionPopup({
+        type: 'PASS',
+        playerId: actingPlayerId,
+        playerName: actorName,
+        avatar: actorAvatar,
+        card,
+        message: `${actorName} menutup kartu ${card.label}${card.symbol}`,
+      });
 
       if (isMultiplayerMode && currentRoom?.code) {
         await multiplayerAdapter.syncGameState(currentRoom.code, result.state);
@@ -704,6 +740,16 @@ export default function App() {
     const res = discardCard41(gameState41, actingPlayerId, card);
     if (res.success) {
       setGameState41(res.state);
+      const actorName = gameState41.players.find((p) => p.id === actingPlayerId)?.name || 'Pemain';
+      const actorAvatar = gameState41.players.find((p) => p.id === actingPlayerId)?.avatar || '🃏';
+      setRecentActionPopup({
+        type: 'DISCARD',
+        playerId: actingPlayerId,
+        playerName: actorName,
+        avatar: actorAvatar,
+        card,
+        message: `${actorName} membuang ${card.label}${card.symbol}`,
+      });
       if (res.is41) {
         audio.victorySound();
       } else {
@@ -741,16 +787,35 @@ export default function App() {
 
   // ---------------------------------------------------------------------------
   // BIG TWO (CAPSA BANTING) ACTIONS
-  // ---------------------------------------------------------------------------
   const isMyTurnBigtwo = isMultiplayerMode
     ? gameStateBigtwo.currentPlayer === myPlayerId
     : true;
+
+  // Sound chime whenever user's turn arrives in multiplayer mode
+  const activeIsMyTurn = isMultiplayerMode
+    ? (activeGameType === 'bigtwo'
+        ? gameStateBigtwo.currentPlayer === myPlayerId
+        : activeGameType === 'game41'
+        ? gameState41?.currentPlayer === myPlayerId
+        : gameState?.currentPlayer === myPlayerId)
+    : false;
+
+  const prevIsMyTurnRef = useRef(false);
+  useEffect(() => {
+    if (isMultiplayerMode && activeIsMyTurn && !prevIsMyTurnRef.current) {
+      audio.sevenChime();
+    }
+    prevIsMyTurnRef.current = activeIsMyTurn;
+  }, [activeIsMyTurn, isMultiplayerMode]);
 
   const handlePlayBigTwoCombo = async (selectedCards) => {
     const actingPlayerId = isMultiplayerMode ? myPlayerId : gameStateBigtwo.currentPlayer;
     const res = playComboBigTwo(gameStateBigtwo, actingPlayerId, selectedCards);
     if (res.success) {
       setGameStateBigtwo(res.gameState);
+      if (res.gameState.lastAction) {
+        setRecentActionPopup(res.gameState.lastAction);
+      }
       audio.playCardSound();
       if (res.gameState.gameStatus === 'GAME_OVER') {
         audio.victorySound();
@@ -768,6 +833,9 @@ export default function App() {
     const res = passTurnBigTwo(gameStateBigtwo, actingPlayerId);
     if (res.success) {
       setGameStateBigtwo(res.gameState);
+      if (res.gameState.lastAction) {
+        setRecentActionPopup(res.gameState.lastAction);
+      }
       audio.closeCardSound();
       if (isMultiplayerMode && currentRoom?.code) {
         await multiplayerAdapter.syncGameState(currentRoom.code, res.gameState);
@@ -897,6 +965,12 @@ export default function App() {
 
   return (
     <div className="app-container">
+      {/* Real-time Action Announcement Pop-up (Who played / discarded / passed what) */}
+      <ActionAnnouncementPopup
+        action={recentActionPopup}
+        onDismiss={() => setRecentActionPopup(null)}
+      />
+
       {/* Toast Alert */}
       {toastMessage && (
         <div

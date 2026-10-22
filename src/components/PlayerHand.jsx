@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import CardView from './CardView.jsx';
 import { cardEquals } from '../engine/deck.js';
-import { ArrowUpDown, Lock, ChevronDown, ChevronUp, Eye } from 'lucide-react';
+import { ArrowUpDown, Lock, ChevronDown, ChevronUp, Eye, LayoutGrid, Layers } from 'lucide-react';
 import { getCardBasePenalty } from '../engine/scoring.js';
 
 export default function PlayerHand({
@@ -19,6 +19,7 @@ export default function PlayerHand({
   config = null,
 }) {
   const [showClosedDetails, setShowClosedDetails] = useState(false);
+  const [isGridView, setIsGridView] = useState(false);
   const isSelectedInHand = selectedCard && hand.some(c => cardEquals(c, selectedCard));
 
   const totalClosedPenalty = closedCards.reduce((sum, c) => {
@@ -65,6 +66,16 @@ export default function PlayerHand({
           >
             <ArrowUpDown size={13} />
             <span>Urut: {sortBy === 'suit' ? 'Suit' : 'Rank'}</span>
+          </button>
+
+          {/* Grid/Fan View Toggle */}
+          <button
+            className={`toggle-chip ${isGridView ? 'active' : ''}`}
+            onClick={() => setIsGridView(!isGridView)}
+            title="Beralih antara tampilan kisi (grid) dan kipas (fan)"
+          >
+            {isGridView ? <Layers size={13} /> : <LayoutGrid size={13} />}
+            <span>{isGridView ? 'Kipas' : 'Grid'}</span>
           </button>
         </div>
       </div>
@@ -122,8 +133,8 @@ export default function PlayerHand({
         </div>
       )}
 
-      {/* Cards Fan / Row - All cards visually equal, NO hints */}
-      <div className="hand-cards-container">
+      {/* Cards Fan / Row / Grid - All cards visually equal, NO hints */}
+      <div className={`hand-cards-container ${isGridView ? 'hand-cards-grid' : ''}`}>
         {hand.length === 0 ? (
           <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', padding: '1.5rem' }}>
             Tangan kosong. Semua kartu telah dimainkan atau ditutup.

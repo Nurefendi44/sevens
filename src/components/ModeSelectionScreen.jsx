@@ -1,19 +1,73 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Globe,
   Gamepad2,
   ArrowRight,
-  ArrowLeft,
   BookOpen,
   Wifi,
   WifiOff,
-  Flame,
-  Sparkles,
   Crown,
+  Users,
+  Sparkles,
   Layers,
-  Lock,
+  X,
+  CheckCircle2,
 } from 'lucide-react';
 import '../styles/modeSelection.css';
+
+const GAME_CATALOG = [
+  {
+    id: 'sevens',
+    title: 'Tujuh Sekop',
+    subtitle: 'SEVENS CARD GAME',
+    theme: 'gold',
+    playersLabel: '2 - 6 Pemain',
+    cornerSuit: '♠',
+    description:
+      'Rangkai kartu secara taktis dari angka 7 hingga As. Pasang perangkap kartu angka 6 & 8 dan hindari menutup kartu poin besar!',
+    tags: ['Strategi Urutan', 'Penalti 6 & 8', 'Online & Offline'],
+    ctaText: 'Main Tujuh Sekop',
+    fannedCards: [
+      { rank: '6', suit: '♠', color: 'dark' },
+      { rank: '7', suit: '♠', color: 'gold-highlight' },
+      { rank: '8', suit: '♥', color: 'red' },
+    ],
+  },
+  {
+    id: 'game41',
+    title: 'Remi 41',
+    subtitle: 'KARTU 41 INDONESIA',
+    theme: 'emerald',
+    playersLabel: '2 - 6 Pemain',
+    cornerSuit: '♥',
+    description:
+      'Kumpulkan 4 kartu bernilai 41 poin dari satu kembang. Oper kartu buangan ke lawan, raih skor tertinggi, atau menang instan 41 Murni!',
+    tags: ['Oper Buangan', 'Instant Win 41', 'Satu Kembang'],
+    ctaText: 'Main Remi 41',
+    fannedCards: [
+      { rank: '10', suit: '♥', color: 'red' },
+      { rank: 'K', suit: '♥', color: 'red' },
+      { rank: 'A', suit: '♥', color: 'gold-highlight' },
+    ],
+  },
+  {
+    id: 'bigtwo',
+    title: 'Big Two',
+    subtitle: 'CAPSA BANTING',
+    theme: 'purple',
+    playersLabel: '2 - 6 Pemain',
+    cornerSuit: '♦',
+    description:
+      'Adu taktik habiskan kartu paling cepat! Kombinasikan Single, Pair, Triple, hingga 5 Kartu Poker. Angka 2 adalah raja tertinggi!',
+    tags: ['Kombinasi Poker', 'Angka 2 Tertinggi', 'Single / Double Deck'],
+    ctaText: 'Main Big Two',
+    fannedCards: [
+      { rank: '2', suit: '♣', color: 'dark' },
+      { rank: '2', suit: '♥', color: 'red' },
+      { rank: '2', suit: '♠', color: 'gold-highlight' },
+    ],
+  },
+];
 
 export default function ModeSelectionScreen({
   selectedGame = 'sevens',
@@ -21,24 +75,104 @@ export default function ModeSelectionScreen({
   onSelectMode,
   onOpenRules,
 }) {
-  // Navigation step: 'catalog' (3 Game Cards) | 'config' (Player count & Online/Offline mode)
-  const [currentStep, setCurrentStep] = useState('catalog');
   const [activeGame, setActiveGame] = useState(selectedGame || 'sevens');
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [offlinePlayerCount, setOfflinePlayerCount] = useState(4);
   const [deckMode, setDeckMode] = useState('double');
+
+  const currentGameObj =
+    GAME_CATALOG.find((g) => g.id === activeGame) || GAME_CATALOG[0];
 
   const handlePickGame = (gameId) => {
     setActiveGame(gameId);
     if (onSelectGame) onSelectGame(gameId);
-    setCurrentStep('config');
+    setIsModalOpen(true);
   };
 
-  const isSevens = activeGame === 'sevens';
+  // Tutup modal dengan tombol Escape
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isModalOpen) {
+        setIsModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen]);
+
+  const renderDealInfo = () => {
+    if (activeGame === 'sevens') {
+      if (offlinePlayerCount === 6)
+        return (
+          <span>
+            Setiap pemain dapat <strong>8 kartu</strong> (semua angka 7 otomatis di meja)
+          </span>
+        );
+      if (offlinePlayerCount === 5)
+        return (
+          <span>
+            Setiap pemain dapat <strong>10 kartu</strong> (7♠ & 7♥ otomatis di meja)
+          </span>
+        );
+      if (offlinePlayerCount === 3)
+        return (
+          <span>
+            Setiap pemain dapat <strong>17 kartu</strong> (7♠ otomatis di meja)
+          </span>
+        );
+      if (offlinePlayerCount === 2)
+        return (
+          <span>
+            Duel 1 vs 1 • Setiap pemain dapat <strong>26 kartu</strong>
+          </span>
+        );
+      return (
+        <span>
+          Standar Klasik • Setiap pemain dapat <strong>13 kartu</strong> penuh
+        </span>
+      );
+    }
+
+    if (activeGame === 'bigtwo') {
+      if (offlinePlayerCount <= 4) {
+        return (
+          <span>
+            Setiap pemain dapat <strong>13 kartu</strong> (Single Deck 52 kartu). Pemegang{' '}
+            <strong>3♦</strong> jalan pertama.
+          </span>
+        );
+      }
+      return (
+        <span>
+          {deckMode === 'double' ? (
+            <>
+              Mode <strong>Double Deck (104 kartu)</strong> • Setiap pemain dapat{' '}
+              <strong>13 kartu</strong>.
+            </>
+          ) : (
+            <>
+              Mode <strong>Single Deck (52 kartu)</strong> • Setiap pemain dapat{' '}
+              <strong>{offlinePlayerCount === 5 ? '10' : '8'} kartu</strong>.
+            </>
+          )}
+        </span>
+      );
+    }
+
+    // Remi 41
+    return (
+      <span>
+        Setiap pemain memegang <strong>4 kartu</strong> di tangan • Kumpulkan skor{' '}
+        <strong>41 satu kembang</strong>!
+      </span>
+    );
+  };
 
   return (
     <div className="mode-selection-overlay">
-      {/* Ambient Floating Playing Card Suits */}
+      {/* Ornamen Latar Meja Kasino */}
       <div className="mode-bg-decor" aria-hidden="true">
+        <div className="felt-radial-spotlight" />
         <span className="decor-suit decor-suit-1">♠</span>
         <span className="decor-suit decor-suit-2">♥</span>
         <span className="decor-suit decor-suit-3">♦</span>
@@ -47,206 +181,191 @@ export default function ModeSelectionScreen({
 
       <div className="mode-selection-container">
         {/* ===================================================================
-            STEP 1: 3-CARD GAME CATALOG (SEVENS, REMI 41, POKER COMING SOON)
+            HEADER PORTAL
             =================================================================== */}
-        {currentStep === 'catalog' ? (
-          <>
-            <header className="mode-selection-header">
-              <div className="catalog-top-pill">
-                <Crown size={14} color="#fbbf24" />
-                <span>PORTAL GAME KARTU</span>
-              </div>
-              <h1 className="mode-main-title">
-                ROYAL CARD <span className="mode-title-gold">PORTAL</span>
-              </h1>
-              <p className="mode-main-subtitle">
-                Pilih permainan kartu favorit Anda untuk dimainkan bersama teman secara online atau pass & play offline.
-              </p>
-            </header>
+        <header className="mode-selection-header">
+          <div className="catalog-top-pill">
+            <Crown size={14} className="pill-crown-icon" />
+            <span>ROYAL TABLETOP LOUNGE</span>
+          </div>
 
-            {/* 3 Game Cards Grid */}
-            <div className="game-catalog-grid">
-              {/* CARD 1: SEVENS (TUJUH SEKOP) */}
-              <div
-                className="game-catalog-card active-card card-sevens"
-                onClick={() => handlePickGame('sevens')}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handlePickGame('sevens')}
-              >
-                <div className="catalog-card-header">
-                  <span className="catalog-badge badge-gold">2 - 6 Pemain</span>
-                  <span className="catalog-suit-symbol">♠</span>
-                </div>
+          <h1 className="mode-main-title">
+            ROYAL CARD <span className="mode-title-gold">PORTAL</span>
+          </h1>
 
-                <div className="catalog-icon-wrapper">
-                  <span className="catalog-hero-icon">♠️</span>
-                </div>
+          <p className="mode-main-subtitle">
+            Pilih permainan kartu favorit Anda. Mainkan secara <strong>Realtime Online</strong>{' '}
+            bersama teman atau <strong>Pass & Play Offline</strong> dalam satu perangkat.
+          </p>
+        </header>
 
-                <div className="catalog-card-body">
-                  <h3 className="catalog-card-title">Tujuh Sekop</h3>
-                  <span className="catalog-card-subtitle">SEVENS CARD GAME</span>
-                  <p className="catalog-card-desc">
-                    Rangkai kartu secara taktis dari angka 7 hingga As. Pasang perangkap kartu angka 6 & 8 dan hindari menutup kartu poin besar!
-                  </p>
+        {/* ===================================================================
+            KATALOG 3 GAME KARTU DENGAN ILUSTRASI KARTU 3D
+            =================================================================== */}
+        <div className="game-catalog-grid">
+          {GAME_CATALOG.map((game) => (
+            <div
+              key={game.id}
+              className={`game-catalog-card theme-${game.theme} ${
+                activeGame === game.id ? 'is-selected-card' : ''
+              }`}
+              onClick={() => handlePickGame(game.id)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handlePickGame(game.id);
+                }
+              }}
+            >
+              {/* Glow Aksen Kartu */}
+              <div className="card-ambient-glow" aria-hidden="true" />
 
-                  <div className="catalog-features-tags">
-                    <span className="feature-pill">2 - 6 Pemain</span>
-                    <span className="feature-pill">Online & Offline</span>
-                    <span className="feature-pill">Penalti 6 & 8</span>
-                  </div>
-                </div>
+              {/* Baris Atas: Jumlah Pemain + Tombol Cepat Buku Panduan */}
+              <div className="catalog-card-header">
+                <span className={`catalog-badge badge-${game.theme}`}>
+                  <Users size={12} />
+                  <span>{game.playersLabel}</span>
+                </span>
 
-                <div className="catalog-card-footer">
-                  <button type="button" className="btn-catalog-play btn-gold">
-                    <span>Pilih Tujuh Sekop</span>
-                    <ArrowRight size={16} />
-                  </button>
-                </div>
-              </div>
-
-              {/* CARD 2: REMI 41 (KARTU 41) */}
-              <div
-                className="game-catalog-card active-card card-game41"
-                onClick={() => handlePickGame('game41')}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handlePickGame('game41')}
-              >
-                <div className="catalog-card-header">
-                  <span className="catalog-badge badge-emerald">2 - 6 Pemain</span>
-                  <span className="catalog-suit-symbol">🃏</span>
-                </div>
-
-                <div className="catalog-icon-wrapper">
-                  <span className="catalog-hero-icon">🃏</span>
-                </div>
-
-                <div className="catalog-card-body">
-                  <h3 className="catalog-card-title">Remi 41</h3>
-                  <span className="catalog-card-subtitle">KARTU 41 INDONESIA</span>
-                  <p className="catalog-card-desc">
-                    Kumpulkan 4 kartu bernilai 41 poin dari satu suit. Buang kartu ke pemain berikutnya, raih kombinasi tertinggi, atau 41 Murni instan!
-                  </p>
-
-                  <div className="catalog-features-tags">
-                    <span className="feature-pill">2 - 6 Pemain</span>
-                    <span className="feature-pill">Oper Buangan</span>
-                    <span className="feature-pill">Instant Win 41</span>
-                  </div>
-                </div>
-
-                <div className="catalog-card-footer">
-                  <button type="button" className="btn-catalog-play btn-emerald">
-                    <span>Pilih Remi 41</span>
-                    <ArrowRight size={16} />
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className="btn-card-rules-mini"
+                  title={`Aturan Main ${game.title}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onOpenRules) onOpenRules(game.id);
+                  }}
+                >
+                  <BookOpen size={13} />
+                  <span>Aturan</span>
+                </button>
               </div>
 
-              {/* CARD 3: BIG TWO (CAPSA BANTING) */}
-              <div
-                className="game-catalog-card active-card card-bigtwo"
-                onClick={() => handlePickGame('bigtwo')}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handlePickGame('bigtwo')}
-              >
-                <div className="catalog-card-header">
-                  <span className="catalog-badge badge-purple">2 - 6 Pemain</span>
-                  <span className="catalog-suit-symbol">♦</span>
+              {/* Ilustrasi Tumpukan Kartu Remi 3D (Fanned Cards) */}
+              <div className="catalog-fanned-stage" aria-hidden="true">
+                <div className="fanned-cards-group">
+                  {game.fannedCards.map((c, idx) => (
+                    <div
+                      key={idx}
+                      className={`mini-playing-card card-pos-${idx} card-tone-${c.color}`}
+                    >
+                      <span className="mini-card-corner">
+                        <strong>{c.rank}</strong>
+                        <small>{c.suit}</small>
+                      </span>
+                      <span className="mini-card-center-suit">{c.suit}</span>
+                    </div>
+                  ))}
+                </div>
+                <span className="stage-watermark-suit">{game.cornerSuit}</span>
+              </div>
+
+              {/* Konten Teks & Fitur */}
+              <div className="catalog-card-body">
+                <div className="catalog-title-group">
+                  <span className="catalog-card-subtitle">{game.subtitle}</span>
+                  <h2 className="catalog-card-title">{game.title}</h2>
                 </div>
 
-                <div className="catalog-icon-wrapper">
-                  <span className="catalog-hero-icon">💎</span>
-                </div>
+                <p className="catalog-card-desc">{game.description}</p>
 
-                <div className="catalog-card-body">
-                  <h3 className="catalog-card-title">Big Two</h3>
-                  <span className="catalog-card-subtitle">CAPSA BANTING</span>
-                  <p className="catalog-card-desc">
-                    Adu taktik menghabiskan kartu lebih dulu! Mainkan Single, Pair, Triple, dan 5 Kartu Poker (Straight s/d Four of a Kind). Angka 2 tertinggi!
-                  </p>
-
-                  <div className="catalog-features-tags">
-                    <span className="feature-pill">2 - 6 Pemain</span>
-                    <span className="feature-pill">Four of a Kind</span>
-                    <span className="feature-pill">Single / Double Deck</span>
-                  </div>
+                <div className="catalog-features-tags">
+                  {game.tags.map((tag) => (
+                    <span key={tag} className="feature-pill">
+                      {tag}
+                    </span>
+                  ))}
                 </div>
+              </div>
 
-                <div className="catalog-card-footer">
-                  <button type="button" className="btn-catalog-play btn-purple">
-                    <span>Pilih Big Two</span>
-                    <ArrowRight size={16} />
-                  </button>
-                </div>
+              {/* Tombol Aksi */}
+              <div className="catalog-card-footer">
+                <button type="button" className={`btn-catalog-play btn-${game.theme}`}>
+                  <span>{game.ctaText}</span>
+                  <ArrowRight size={17} className="btn-arrow-icon" />
+                </button>
               </div>
             </div>
-          </>
-        ) : (
-          /* ===================================================================
-             STEP 2: GAME CONFIGURATION (MODE: ONLINE VS OFFLINE PASS & PLAY)
-             =================================================================== */
-          <>
-            {/* Top Back Navigation to Game Catalog */}
-            <div className="mode-back-nav">
-              <button
-                type="button"
-                className="btn-back-to-catalog"
-                onClick={() => setCurrentStep('catalog')}
-              >
-                <ArrowLeft size={16} />
-                <span>Pilih Permainan Lain</span>
-              </button>
+          ))}
+        </div>
+      </div>
 
-              <span className="game-active-indicator-tag">
-                {isSevens
-                  ? '♠️ Tujuh Sekop Terpilih'
-                  : activeGame === 'bigtwo'
-                  ? '💎 Big Two (Capsa Banting) Terpilih'
-                  : '🃏 Remi 41 Terpilih'}
-              </span>
+      {/* ===================================================================
+          MODAL / BOTTOM SHEET KONFIGURASI MODE & JUMLAH PEMAIN
+          =================================================================== */}
+      {isModalOpen && (
+        <div
+          className="mode-modal-backdrop"
+          onClick={() => setIsModalOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-game-title"
+        >
+          <div
+            className={`mode-modal-sheet theme-${currentGameObj.theme}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Indikator Geser untuk Mobile Bottom Sheet */}
+            <div className="sheet-drag-handle" aria-hidden="true" />
+
+            {/* Header Modal */}
+            <div className="mode-modal-header">
+              <div className="modal-game-identity">
+                <div className="modal-mini-fan" aria-hidden="true">
+                  {currentGameObj.fannedCards.slice(1).map((c, idx) => (
+                    <div
+                      key={idx}
+                      className={`modal-tiny-card card-tone-${c.color}`}
+                    >
+                      <span>{c.rank}</span>
+                      <small>{c.suit}</small>
+                    </div>
+                  ))}
+                </div>
+
+                <div>
+                  <div className="modal-game-badge-row">
+                    <span className={`catalog-badge badge-${currentGameObj.theme}`}>
+                      {currentGameObj.subtitle}
+                    </span>
+                  </div>
+                  <h2 id="modal-game-title" className="modal-game-title">
+                    Pilih Mode Bermain — <span>{currentGameObj.title}</span>
+                  </h2>
+                </div>
+              </div>
+
+              <div className="modal-header-actions">
+                <button
+                  type="button"
+                  className="btn-modal-rules"
+                  onClick={() => onOpenRules && onOpenRules(activeGame)}
+                >
+                  <BookOpen size={15} />
+                  <span>Panduan & Aturan</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-modal-close"
+                  onClick={() => setIsModalOpen(false)}
+                  aria-label="Tutup"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
-            {/* Brand Header for Config */}
-            <header className="mode-selection-header">
-              {isSevens ? (
-                <>
-                  <h1 className="mode-main-title">
-                    SEVENS <span className="mode-title-gold">TUJUH SEKOP</span>
-                  </h1>
-                  <p className="mode-main-subtitle">
-                    Rangkai kartu dari angka 7 hingga As. Pilih mode bermain bersama teman di bawah ini:
-                  </p>
-                </>
-              ) : activeGame === 'bigtwo' ? (
-                <>
-                  <h1 className="mode-main-title">
-                    BIG TWO <span className="mode-title-gold">CAPSA BANTING</span>
-                  </h1>
-                  <p className="mode-main-subtitle">
-                    Banting kartu lebih cepat untuk menang! Angka 2 tertinggi, Four of a Kind (5 kartu), bebas double pair.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <h1 className="mode-main-title">
-                    REMI 41 <span className="mode-title-gold">EMPAT SATU</span>
-                  </h1>
-                  <p className="mode-main-subtitle">
-                    Kumpulkan 4 kartu bernilai 41 poin dari suit sama. Oper buangan ke pemain berikutnya!
-                  </p>
-                </>
-              )}
-            </header>
-
-            {/* 2 Interactive Mode Cards Grid */}
+            {/* Grid Pilihan Mode: Online vs Offline Pass & Play */}
             <div className="mode-cards-grid">
-              {/* CARD 1: MAIN ONLINE (MULTIPLAYER) */}
+              {/* OPSI 1: MAIN ONLINE (MULTIPLAYER) */}
               <div
                 className="mode-card mode-card-online"
-                onClick={() => onSelectMode('multiplayer', null, activeGame, { deckMode })}
+                onClick={() =>
+                  onSelectMode('multiplayer', null, activeGame, { deckMode })
+                }
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
@@ -257,34 +376,37 @@ export default function ModeSelectionScreen({
                 }}
               >
                 <div className="mode-card-top">
-                  <div className="mode-card-header-row">
-                    <span className="mode-card-badge badge-online">
-                      <Wifi size={13} />
-                      <span>Realtime Online</span>
-                    </span>
-                  </div>
+                  <span className="mode-card-badge badge-online">
+                    <Wifi size={13} />
+                    <span>Realtime Multiplayer</span>
+                  </span>
 
-                  <div className="mode-card-icon-bubble bubble-online">
-                    <Globe size={40} className="icon-pulse" />
+                  <div className="mode-card-title-row">
+                    <div className="mode-card-icon-bubble bubble-online">
+                      <Globe size={28} className="icon-pulse" />
+                    </div>
+                    <div>
+                      <h3 className="mode-card-title">Main Online</h3>
+                      <p className="mode-card-subtitle">
+                        Mabar Jarak Jauh (Beda Perangkat)
+                      </p>
+                    </div>
                   </div>
-
-                  <h2 className="mode-card-title">Main Online</h2>
-                  <p className="mode-card-subtitle">Bersama Teman Jarak Jauh</p>
                 </div>
 
                 <div className="mode-card-body">
                   <ul className="mode-perks-list">
                     <li>
-                      <span className="perk-bullet">✦</span>
+                      <CheckCircle2 size={15} className="perk-check online-check" />
                       <span>Buat room privat atau gabung via kode 6 digit</span>
                     </li>
                     <li>
-                      <span className="perk-bullet">✦</span>
-                      <span>Bagikan tautan / share link instan via WA</span>
+                      <CheckCircle2 size={15} className="perk-check online-check" />
+                      <span>Bagikan tautan undangan instan ke WhatsApp</span>
                     </li>
                     <li>
-                      <span className="perk-bullet">✦</span>
-                      <span>Sinkronisasi meja dan giliran realtime (2 - 6 Pemain)</span>
+                      <CheckCircle2 size={15} className="perk-check online-check" />
+                      <span>Sinkronisasi meja otomatis (2 – 6 Pemain)</span>
                     </li>
                   </ul>
                 </div>
@@ -292,182 +414,139 @@ export default function ModeSelectionScreen({
                 <div className="mode-card-footer">
                   <button type="button" className="btn-mode-action btn-online">
                     <span>Masuk Lobby Online</span>
-                    <ArrowRight size={16} />
+                    <ArrowRight size={17} />
                   </button>
                 </div>
               </div>
 
-              {/* CARD 2: MAIN OFFLINE (SIMULASI / PASS-AND-PLAY) */}
+              {/* OPSI 2: MAIN OFFLINE (PASS & PLAY 1 PERANGKAT) */}
               <div
                 className="mode-card mode-card-offline"
-                onClick={() => onSelectMode('local', offlinePlayerCount, activeGame, { deckMode })}
+                onClick={() =>
+                  onSelectMode('local', offlinePlayerCount, activeGame, {
+                    deckMode,
+                  })
+                }
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    onSelectMode('local', offlinePlayerCount, activeGame, { deckMode });
+                    onSelectMode('local', offlinePlayerCount, activeGame, {
+                      deckMode,
+                    });
                   }
                 }}
               >
                 <div className="mode-card-top">
-                  <div className="mode-card-header-row">
-                    <span className="mode-card-badge badge-offline">
-                      <WifiOff size={13} />
-                      <span>Pass-and-Play Offline</span>
-                    </span>
-                  </div>
+                  <span className="mode-card-badge badge-offline">
+                    <WifiOff size={13} />
+                    <span>Pass & Play Offline</span>
+                  </span>
 
-                  <div className="mode-card-icon-bubble bubble-offline">
-                    <Gamepad2 size={40} />
+                  <div className="mode-card-title-row">
+                    <div className="mode-card-icon-bubble bubble-offline">
+                      <Gamepad2 size={28} />
+                    </div>
+                    <div>
+                      <h3 className="mode-card-title">Main Offline</h3>
+                      <p className="mode-card-subtitle">
+                        1 HP / Laptop Bergantian Tanpa Internet
+                      </p>
+                    </div>
                   </div>
-
-                  <h2 className="mode-card-title">Main Offline</h2>
-                  <p className="mode-card-subtitle">1 Perangkat Bersama</p>
                 </div>
 
-                <div className="mode-card-body">
-                  {/* Player Count Selector Buttons (2, 3, 4, 5, or 6 players) */}
-                  <div
-                    className="offline-player-selector"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <label className="selector-title">Pilih Jumlah Pemain:</label>
+                <div
+                  className="mode-card-body"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Pemilih Jumlah Pemain */}
+                  <div className="offline-player-selector">
+                    <div className="selector-header-row">
+                      <label className="selector-title">
+                        <Users size={14} />
+                        <span>Jumlah Pemain</span>
+                      </label>
+                      <span className="selector-active-pill">
+                        {offlinePlayerCount} Orang
+                      </span>
+                    </div>
+
                     <div className="player-count-buttons">
                       {[2, 3, 4, 5, 6].map((count) => (
                         <button
                           key={count}
                           type="button"
-                          className={`btn-player-pill ${offlinePlayerCount === count ? 'active' : ''}`}
+                          className={`btn-player-pill ${
+                            offlinePlayerCount === count ? 'active' : ''
+                          }`}
                           onClick={(e) => {
                             e.stopPropagation();
                             setOfflinePlayerCount(count);
                           }}
                         >
-                          {count} Pemain
+                          <span className="count-num">{count}</span>
+                          <span className="count-unit">Pemain</span>
                         </button>
                       ))}
                     </div>
 
-                    <div className="player-count-detail-note">
-                      {isSevens ? (
-                        offlinePlayerCount === 6 ? (
-                          <span>Setiap pemain dapat <strong>8 kartu</strong> (semua angka 7 tertata di meja)</span>
-                        ) : offlinePlayerCount === 5 ? (
-                          <span>Setiap pemain dapat <strong>10 kartu</strong> (7♠ dan 7♥ tertata di meja)</span>
-                        ) : offlinePlayerCount === 3 ? (
-                          <span>Setiap pemain dapat <strong>17 kartu</strong> (7♠ otomatis tertata di meja)</span>
-                        ) : offlinePlayerCount === 2 ? (
-                          <span>Setiap pemain dapat <strong>26 kartu</strong> (Head-to-Head 1 vs 1)</span>
-                        ) : (
-                          <span>Setiap pemain dapat <strong>13 kartu</strong> penuh</span>
-                        )
-                      ) : activeGame === 'bigtwo' ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <span>
-                            {offlinePlayerCount <= 4
-                              ? `Setiap pemain dapat 13 kartu (Single Deck 52 kartu). 3♦ jalan pertama.`
-                              : deckMode === 'double'
-                              ? `Mode Double Deck (104 kartu) • 13 kartu per orang.`
-                              : `Mode Single Deck (52 kartu) • ${offlinePlayerCount === 5 ? '10' : '8'} kartu per orang.`}
-                          </span>
-
-                          {/* Deck Mode Toggle for > 4 players */}
-                          {offlinePlayerCount > 4 && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                              <span style={{ fontSize: '0.78rem', color: '#fbbf24', fontWeight: 700 }}>Pilihan Deck:</span>
-                              <button
-                                type="button"
-                                style={{
-                                  padding: '2px 8px',
-                                  fontSize: '0.75rem',
-                                  borderRadius: '6px',
-                                  background: deckMode === 'single' ? '#38bdf8' : 'rgba(255,255,255,0.1)',
-                                  color: deckMode === 'single' ? '#000' : '#fff',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  fontWeight: 700,
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDeckMode('single');
-                                }}
-                              >
-                                Single Deck (52)
-                              </button>
-                              <button
-                                type="button"
-                                style={{
-                                  padding: '2px 8px',
-                                  fontSize: '0.75rem',
-                                  borderRadius: '6px',
-                                  background: deckMode === 'double' ? '#38bdf8' : 'rgba(255,255,255,0.1)',
-                                  color: deckMode === 'double' ? '#000' : '#fff',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  fontWeight: 700,
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDeckMode('double');
-                                }}
-                              >
-                                Double Deck (104)
-                              </button>
-                            </div>
-                          )}
+                    {/* Opsi Single / Double Deck khusus Big Two > 4 Pemain */}
+                    {activeGame === 'bigtwo' && offlinePlayerCount > 4 && (
+                      <div className="deck-mode-selector">
+                        <span className="deck-mode-label">
+                          <Layers size={13} />
+                          <span>Tipe Deck:</span>
+                        </span>
+                        <div className="deck-toggle-group">
+                          <button
+                            type="button"
+                            className={`btn-deck-toggle ${
+                              deckMode === 'single' ? 'active' : ''
+                            }`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeckMode('single');
+                            }}
+                          >
+                            Single (52 Kartu)
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn-deck-toggle ${
+                              deckMode === 'double' ? 'active' : ''
+                            }`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeckMode('double');
+                            }}
+                          >
+                            Double (104 Kartu)
+                          </button>
                         </div>
-                      ) : (
-                        offlinePlayerCount === 2 ? (
-                          <span>Mode 1 vs 1: Masing-masing pemain memegang <strong>4 kartu</strong></span>
-                        ) : (
-                          <span>Setiap pemain memegang <strong>4 kartu</strong> di tangan</span>
-                        )
-                      )}
+                      </div>
+                    )}
+
+                    {/* Info Pembagian Kartu */}
+                    <div className="player-count-detail-note">
+                      <Sparkles size={14} className="note-sparkle-icon" />
+                      {renderDealInfo()}
                     </div>
                   </div>
-
-                  <ul className="mode-perks-list">
-                    <li>
-                      <span className="perk-bullet">✦</span>
-                      <span>Bermain bersama 1 HP / komputer bergantian</span>
-                    </li>
-                    <li>
-                      <span className="perk-bullet">✦</span>
-                      <span>Animasi kocok kartu & pembagian kartu otomatis</span>
-                    </li>
-                    <li>
-                      <span className="perk-bullet">✦</span>
-                      <span>Tidak memerlukan koneksi internet</span>
-                    </li>
-                  </ul>
                 </div>
 
                 <div className="mode-card-footer">
                   <button type="button" className="btn-mode-action btn-offline">
                     <span>Mulai Main ({offlinePlayerCount} Pemain)</span>
-                    <ArrowRight size={16} />
+                    <ArrowRight size={17} />
                   </button>
                 </div>
               </div>
             </div>
-
-            {/* Quick Rules Guide Button */}
-            <div className="mode-footer-help">
-              <button
-                type="button"
-                className="btn-rules-preview"
-                onClick={() => onOpenRules && onOpenRules(activeGame)}
-              >
-                <BookOpen size={16} />
-                <span>
-                  {isSevens ? 'Buku Panduan & Aturan Tujuh Sekop' : 'Buku Panduan & Aturan Remi 41'}
-                </span>
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

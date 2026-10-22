@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import CardView from '../../../components/CardView.jsx';
-import { evaluateCombo, canBeatCombo, sortBigTwoCards } from '../engine/handEvaluator.js';
-import { Play, SkipForward, RotateCcw, HelpCircle, Flame, Layers } from 'lucide-react';
+import { evaluateCombo, canBeatCombo } from '../engine/handEvaluator.js';
+import { Play, SkipForward, RotateCcw, HelpCircle, Flame, LayoutGrid, Layers } from 'lucide-react';
 import '../../../styles/bigtwo.css';
 
 export default function TableBigTwo({
@@ -14,6 +14,7 @@ export default function TableBigTwo({
   onOpenRules,
 }) {
   const [selectedCards, setSelectedCards] = useState([]);
+  const [isGridView, setIsGridView] = useState(false);
 
   if (!gameState || !gameState.players || !Array.isArray(gameState.players) || gameState.players.length === 0 || !gameState.hands) {
     return null;
@@ -69,9 +70,21 @@ export default function TableBigTwo({
     setSelectedCards([]);
   };
 
+  // Dynamic overlap calculation for fan view so cards never overflow even with 26 cards
+  const getFanOverlapMargin = (count) => {
+    if (count > 22) return -38;
+    if (count > 16) return -32;
+    if (count > 12) return -26;
+    if (count > 8) return -20;
+    return -14;
+  };
+
+  const fanMargin = getFanOverlapMargin(myHand.length);
+
   return (
     <div className="bigtwo-table-felt">
-      <div className="bigtwo-watermark">BIG TWO • CAPSA BANTING</div>
+      <div className="bigtwo-felt-overlay" />
+      <div className="bigtwo-watermark">BIG TWO</div>
 
       {/* TOP: Opponents Row */}
       <div className="bigtwo-opponents-row">
@@ -82,113 +95,178 @@ export default function TableBigTwo({
           return (
             <div
               key={p.id}
-              className={`bigtwo-seat-pod ${isOpponentTurn ? 'active-turn' : ''}`}
+              className={`bigtwo-opponent-card ${isOpponentTurn ? 'active-turn' : ''}`}
             >
-              <span style={{ fontSize: '1.25rem' }}>{p.avatar}</span>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <strong style={{ fontSize: '0.8rem', color: isOpponentTurn ? '#38bdf8' : '#f8fafc' }}>
-                  {p.name}
-                </strong>
-                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                  {oppCardCount} kartu tersisa
-                </span>
+              <div className="bigtwo-opp-header">
+                <span className="opp-avatar">{p.avatar || '🤖'}</span>
+                <span className="opp-name">{p.name} : <strong>{oppCardCount} cards</strong></span>
+                {isOpponentTurn && <span className="turn-indicator-badge">Berpikir...</span>}
               </div>
 
-              {/* Mini Face-down Cards Fan */}
-              <div className="seat-cards-mini-fan">
-                {Array.from({ length: Math.min(oppCardCount, 6) }).map((_, idx) => (
-                  <div key={idx} className="mini-card-back" />
+              {/* Fan of Face-Down Cards for Opponent */}
+              <div className="bigtwo-opp-cards-fan">
+                {Array.from({ length: Math.min(oppCardCount, 16) }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="bigtwo-mini-card-back"
+                    style={{ marginLeft: idx === 0 ? 0 : '-11px' }}
+                  />
                 ))}
+                {oppCardCount > 16 && (
+                  <span className="opp-more-cards">+{oppCardCount - 16}</span>
+                )}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* CENTER ARENA: Current Trick on Table */}
+      {/* CENTER ARENA: Current Table Trick */}
       <div className="bigtwo-center-arena">
         {isFreeTurn ? (
           <div className="trick-empty-slate">
-            <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#38bdf8' }}>
-              ✦ GILIRAN BEBAS ✦
-            </span>
-            <span>Semua pemain telah pass atau ronde baru dimulai.</span>
-            <small style={{ color: '#94a3b8' }}>Keluarkan kombinasi apa saja (Single, Pair, Triple, atau 5 Kartu)!</small>
+            <span className="free-turn-badge">✦ GILIRAN BEBAS ✦</span>
+            <span className="free-turn-text">Meja bersih! Anda bebas mengeluarkan kombinasi apa saja (Single, Pair, Triple, atau 5 Kartu).</span>
           </div>
         ) : (
-          <>
+          <div className="trick-active-box">
             <div className="trick-meta-banner">
-              <span>Kartu dari <strong>{currentTrick.playedByName}</strong>:</span>
+              <span>Current combo dari <strong>{currentTrick.playedByName}</strong>:</span>
               <span className="trick-combo-badge">{tableCombo?.type?.replace(/_/g, ' ')}</span>
-              <span>{tableCombo?.label}</span>
+              <strong style={{ color: '#fbbf24' }}>{tableCombo?.label}</strong>
             </div>
 
             <div className="trick-cards-display">
               {currentTrick.cards.map((card, idx) => (
-                <CardView
-                  key={card.id || idx}
-                  card={card}
-                  isPlayable={false}
-                  size="medium"
-                />
+                <div key={card.id || idx} className="table-card-item">
+                  <CardView
+                    card={card}
+                    isPlayable={false}
+                    size="medium"
+                  />
+                </div>
               ))}
             </div>
-          </>
+          </div>
         )}
       </div>
 
-      {/* BOTTOM: Player Tray & Controls */}
-      <div className="bigtwo-tray">
-        <div className="bigtwo-tray-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span style={{ fontSize: '1.25rem' }}>{myPlayer.avatar}</span>
-            <div>
-              <strong style={{ color: isMyTurn ? '#38bdf8' : '#e2e8f0', fontSize: '0.95rem' }}>
-                {myPlayer.name} {isMultiplayer && '(Anda)'}
-              </strong>
-              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                {myHand.length} kartu di tangan
-                {gameState.config.deckMode === 'double' && (
-                  <span style={{ marginLeft: '6px', color: '#a855f7' }}>• Double Deck (104 kartu)</span>
-                )}
-              </div>
-            </div>
-          </div>
+      {/* PROMINENT TURN ANNOUNCEMENT (When it's My Turn) */}
+      {isMyTurn && (
+        <div className="bigtwo-your-turn-banner animate-pulse-glow">
+          <span className="turn-fire">🔥</span>
+          <span>GILIRAN ANDA!</span>
+          <span className="turn-tip desktop-only">— Pilih kartu di bawah lalu klik Keluarkan</span>
+        </div>
+      )}
 
-          {/* Live Hand Evaluation Badge */}
-          <div className={`bigtwo-hand-analyzer ${selectedEval?.isValid ? 'is-valid' : ''}`}>
-            {selectedCards.length === 0 ? (
-              <span>Pilih kartu di bawah untuk dimainkan</span>
-            ) : selectedEval?.isValid ? (
+      {/* FLOATING ACTION BOX (Take your action!) */}
+      <div className={`bigtwo-action-box ${isMyTurn ? 'is-my-turn' : ''}`}>
+        <div className="action-box-header">
+          <strong>Take your action!</strong>
+          <span>Select cards in your hand to play or pass!</span>
+        </div>
+
+        {/* Live combo analyzer feedback */}
+        {selectedCards.length > 0 && (
+          <div className={`action-combo-analyzer ${selectedEval?.isValid ? 'valid' : 'invalid'}`}>
+            {selectedEval?.isValid ? (
               <>
                 <Flame size={14} color="#38bdf8" />
-                <strong>{selectedEval.label}</strong>
+                <span>{selectedEval.label}</span>
                 {beatCheck.canBeat ? (
-                  <span style={{ color: '#34d399', fontWeight: 700 }}>(Siap Dimainkan ✅)</span>
+                  <span className="beat-status beat-ok">✅ Siap dikeluarkan</span>
                 ) : (
-                  <span style={{ color: '#f87171' }}>({beatCheck.reason || 'Kalah dari meja ❌'})</span>
+                  <span className="beat-status beat-fail">❌ {beatCheck.reason || 'Kalah dari meja'}</span>
                 )}
               </>
             ) : (
-              <span style={{ color: '#f87171' }}>{selectedEval?.error || 'Kombinasi tidak valid'}</span>
+              <span className="beat-status beat-fail">⚠️ {selectedEval?.error || 'Kombinasi tidak sah'}</span>
             )}
           </div>
+        )}
+
+        <div className="action-box-buttons">
+          <button
+            type="button"
+            className="btn-action-play"
+            disabled={!isMyTurn || !selectedEval?.isValid || !beatCheck.canBeat}
+            onClick={handlePlay}
+          >
+            <Play size={16} fill="currentColor" />
+            <span>Play a combo ({selectedCards.length})</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn-action-pass"
+            disabled={!isMyTurn || isFreeTurn}
+            onClick={handlePassClick}
+            title={isFreeTurn ? 'Meja kosong, wajib mengeluarkan kartu' : 'Lewat giliran'}
+          >
+            <SkipForward size={16} />
+            <span>Pass</span>
+          </button>
+
+          {selectedCards.length > 0 && (
+            <button
+              type="button"
+              className="btn-action-deselect"
+              onClick={handleClearSelection}
+            >
+              <RotateCcw size={14} />
+              <span>Deselect all</span>
+            </button>
+          )}
 
           {onOpenRules && (
             <button
               type="button"
-              className="btn-bigtwo btn-bigtwo-reset"
+              className="btn-action-rules"
               onClick={onOpenRules}
-              style={{ padding: '0.35rem 0.8rem', fontSize: '0.78rem' }}
+              title="Lihat Panduan Aturan"
             >
-              <HelpCircle size={14} />
-              <span>Panduan Aturan</span>
+              <HelpCircle size={15} />
             </button>
           )}
         </div>
+      </div>
 
-        {/* Player's Cards Fan */}
-        <div className="bigtwo-cards-row">
+      {/* BOTTOM: Player Tray & Hand Controls */}
+      <div className="bigtwo-tray">
+        <div className="bigtwo-tray-header">
+          <div className="tray-hand-info">
+            <span className="tray-avatar">{myPlayer.avatar || '👑'}</span>
+            <span className="tray-label">
+              Your hand (<strong>{myHand.length} cards</strong>):
+            </span>
+
+            {/* Quick Deselect All Button */}
+            {selectedCards.length > 0 && (
+              <button
+                type="button"
+                className="btn-deselect-pill"
+                onClick={handleClearSelection}
+              >
+                Deselect all
+              </button>
+            )}
+          </div>
+
+          {/* Toggle Hand Grid View Button (Matching reference design) */}
+          <button
+            type="button"
+            className={`btn-toggle-grid ${isGridView ? 'active-grid' : ''}`}
+            onClick={() => setIsGridView(!isGridView)}
+            title="Beralih antara tampilan kisi (grid) dan baris kipas (fan)"
+          >
+            {isGridView ? <Layers size={16} /> : <LayoutGrid size={16} />}
+            <span>Toggle hand grid view</span>
+          </button>
+        </div>
+
+        {/* PLAYER CARDS CONTAINER: Mode Fan OR Mode Grid */}
+        <div className={`bigtwo-cards-container ${isGridView ? 'mode-grid' : 'mode-fan'}`}>
           {myHand.map((card, idx) => {
             const isSelected = selectedCards.some(
               (c) => c.id === card.id || (c.rank === card.rank && c.suit === card.suit)
@@ -198,53 +276,18 @@ export default function TableBigTwo({
               <div
                 key={card.id || idx}
                 className={`bigtwo-card-slot ${isSelected ? 'selected' : ''}`}
-                style={{ zIndex: idx + 1 }}
+                style={!isGridView ? { marginLeft: idx === 0 ? 0 : `${fanMargin}px`, zIndex: idx + 1 } : {}}
                 onClick={() => toggleSelectCard(card)}
               >
                 <CardView
                   card={card}
                   isPlayable={isMyTurn}
                   isSelected={isSelected}
-                  size="large"
+                  size={isGridView ? 'medium' : 'large'}
                 />
               </div>
             );
           })}
-        </div>
-
-        {/* Interactive Controls */}
-        <div className="bigtwo-controls-bar">
-          <button
-            type="button"
-            className="btn-bigtwo btn-bigtwo-play"
-            disabled={!isMyTurn || !selectedEval?.isValid || !beatCheck.canBeat}
-            onClick={handlePlay}
-          >
-            <Play size={16} />
-            <span>Keluarkan Kartu ({selectedCards.length})</span>
-          </button>
-
-          <button
-            type="button"
-            className="btn-bigtwo btn-bigtwo-pass"
-            disabled={!isMyTurn || isFreeTurn}
-            onClick={handlePassClick}
-            title={isFreeTurn ? 'Meja kosong, Anda tidak boleh pass' : 'Lewat (Pass) giliran ini'}
-          >
-            <SkipForward size={16} />
-            <span>Lewat (Pass)</span>
-          </button>
-
-          {selectedCards.length > 0 && (
-            <button
-              type="button"
-              className="btn-bigtwo btn-bigtwo-reset"
-              onClick={handleClearSelection}
-            >
-              <RotateCcw size={14} />
-              <span>Batal Pilihan</span>
-            </button>
-          )}
         </div>
       </div>
     </div>

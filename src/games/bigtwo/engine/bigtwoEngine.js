@@ -66,30 +66,20 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
     fullDeck = shuffleDeck(createDeck(), 5);
   }
 
-  // Determine cards dealt per player
-  let cardsPerHand = 13;
-  if (config.deckMode === 'single') {
-    if (playerCount === 5) cardsPerHand = 10;
-    else if (playerCount === 6) cardsPerHand = 8;
-    else cardsPerHand = 13;
-  } else {
-    // Double deck: 13 cards each for everyone
-    cardsPerHand = 13;
-  }
-
-  // Deal cards to each player with anti-twin distribution:
-  // In Double Deck mode, ensures no player holds twin identical cards (same rank and suit) in their hand.
+  // Deal cards to each player round-robin until deck is completely exhausted (kartu dibagi habis)
+  // Single Deck (52 cards): 2p = 26 cards each, 3p = 18/17/17 cards, 4p = 13 cards each, etc.
+  // Double Deck (104 cards): 2p = 52 cards each, 4p = 26 cards each, etc.
   const hands = {};
   players.forEach((p) => {
     hands[p.id] = [];
   });
 
   const availableDeck = [...fullDeck];
-  for (let r = 0; r < cardsPerHand; r++) {
-    players.forEach((p) => {
-      if (availableDeck.length === 0) return;
+  while (availableDeck.length > 0) {
+    for (const p of players) {
+      if (availableDeck.length === 0) break;
 
-      // Check cards player p already holds to avoid duplicate identical cards in the same hand
+      // In Double Deck mode, ensure no player holds twin identical cards in their hand
       const existingKeys = new Set(hands[p.id].map((c) => `${c.suit}-${c.rank}`));
       const nonTwinIndex = availableDeck.findIndex((c) => !existingKeys.has(`${c.suit}-${c.rank}`));
 
@@ -98,7 +88,7 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
       } else {
         hands[p.id].push(availableDeck.pop());
       }
-    });
+    }
   }
 
   // Sort each player's hand by Big Two rank (3..2)
@@ -245,6 +235,17 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
       })
       .sort((a, b) => a.remainingCards - b.remainingCards);
 
+    const actionPayload = {
+      type: 'PLAY_COMBO',
+      playerId,
+      playerName,
+      avatar: gameState.players.find((p) => p.id === playerId)?.avatar || '👤',
+      cards: selectedCards,
+      combo,
+      message: `${playerName} mengeluarkan ${combo.label}`,
+      timestamp: Date.now(),
+    };
+
     const finishedState = {
       ...gameState,
       hands: updatedHands,
@@ -255,6 +256,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
         playedByName: playerName,
       },
       lastPlayedCombo: combo,
+      lastAction: actionPayload,
       gameStatus: GAME_STATUS_BIGTWO.GAME_OVER,
       winner: playerId,
       rankings,
@@ -274,6 +276,17 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
   const playerIdx = gameState.players.findIndex((p) => p.id === playerId);
   const nextPlayer = gameState.players[(playerIdx + 1) % gameState.players.length];
 
+  const actionPayload = {
+    type: 'PLAY_COMBO',
+    playerId,
+    playerName,
+    avatar: gameState.players.find((p) => p.id === playerId)?.avatar || '👤',
+    cards: selectedCards,
+    combo,
+    message: `${playerName} mengeluarkan ${combo.label}`,
+    timestamp: Date.now(),
+  };
+
   const nextState = {
     ...gameState,
     hands: updatedHands,
@@ -284,6 +297,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
       playedByName: playerName,
     },
     lastPlayedCombo: combo,
+    lastAction: actionPayload,
     trickLeaderId: playerId,
     consecutivePassCount: 0,
     isFirstPlayOfGame: false,
@@ -344,6 +358,14 @@ export function passTurnBigTwo(gameState, playerId) {
       },
       consecutivePassCount: 0,
       currentPlayer: leaderPlayer.id,
+      lastAction: {
+        type: 'PASS',
+        playerId,
+        playerName,
+        avatar: gameState.players.find((p) => p.id === playerId)?.avatar || '👤',
+        message: `${playerName} Lewat (Pass). Meja dibersihkan! Giliran Bebas untuk ${leaderPlayer.name}.`,
+        timestamp: Date.now(),
+      },
       history: [
         ...gameState.history,
         {
@@ -361,6 +383,14 @@ export function passTurnBigTwo(gameState, playerId) {
     ...gameState,
     consecutivePassCount: newPassCount,
     currentPlayer: nextPlayer.id,
+    lastAction: {
+      type: 'PASS',
+      playerId,
+      playerName,
+      avatar: gameState.players.find((p) => p.id === playerId)?.avatar || '👤',
+      message: `${playerName} Lewat (Pass)`,
+      timestamp: Date.now(),
+    },
     history: [
       ...gameState.history,
       {

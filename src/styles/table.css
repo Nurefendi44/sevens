@@ -978,6 +978,17 @@
   }
 }
 
+.hand-cards-container.hand-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 240px;
+  padding: 1rem 0.75rem;
+  justify-items: center;
+}
+
 /* Action Controls Bar */
 .action-controls-bar {
   display: flex;
