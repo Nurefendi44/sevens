@@ -408,6 +408,38 @@
   gap: 0.4rem;
 }
 
+.game41-history-tabs {
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.history-tab-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 0.725rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.history-tab-btn:hover {
+  color: #f1f5f9;
+}
+
+.history-tab-btn.active {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+}
+
 .my-history-badge {
   background: #f59e0b;
   color: #0f172a;

@@ -17,19 +17,28 @@ import { SUITS } from '../../../engine/constants.js';
  */
 export function getCardValue41(card) {
   if (!card) return 0;
-  return CARD_VALUES_41[card.rank] || card.rank;
+  if (CARD_VALUES_41[card.rank] !== undefined) return CARD_VALUES_41[card.rank];
+  if (card.label && CARD_VALUES_41[card.label] !== undefined) return CARD_VALUES_41[card.label];
+  if (typeof card.value === 'number') return card.value;
+  return Number(card.rank) || 0;
 }
 
 /**
  * Calculates current score and optimal dominant suit for a hand.
+ * Formula: (Total poin kartu dengan suit terbanyak/tertinggi) - (Total poin kartu beda suit)
+ * Contoh: 10 Sekop (10) + 9 Sekop (9) + 8 Sekop (8) - 10 Hati (10) = 27 - 10 = 17 poin.
+ * 
  * @param {Array<Object>} hand (usually 4 cards, or 5 cards during draw phase)
- * @returns {Object} { bestSuit, bestScore, is41, suitBreakdown, dominantCards }
+ * @returns {Object} { bestSuit, bestScore, dominantPoints, penaltyPoints, formula, is41, suitBreakdown, dominantCards }
  */
 export function calculateHandScore41(hand = []) {
   if (!hand || hand.length === 0) {
     return {
       bestSuit: null,
       bestScore: 0,
+      dominantPoints: 0,
+      penaltyPoints: 0,
+      formula: '0 pts',
       is41: false,
       suitBreakdown: {},
       dominantCards: [],
@@ -56,6 +65,8 @@ export function calculateHandScore41(hand = []) {
   let bestSuit = null;
   let bestScore = -Infinity;
   let dominantCards = [];
+  let dominantPoints = 0;
+  let penaltyPoints = 0;
 
   for (const suit of suitsList) {
     const cardsOfSuit = suitCards[suit];
@@ -75,24 +86,65 @@ export function calculateHandScore41(hand = []) {
       bestScore = netScore;
       bestSuit = suit;
       dominantCards = cardsOfSuit;
+      dominantPoints = suitPoints;
+      penaltyPoints = otherPoints;
     } else if (netScore === bestScore) {
       // Tie breaker: suit with more cards wins
       if (cardsOfSuit.length > (suitBreakdown[bestSuit]?.count || 0)) {
         bestSuit = suit;
         dominantCards = cardsOfSuit;
+        dominantPoints = suitPoints;
+        penaltyPoints = otherPoints;
       }
     }
   }
 
+  const finalScore = bestScore === -Infinity ? 0 : bestScore;
+  const formula = penaltyPoints > 0
+    ? `${dominantPoints} - ${penaltyPoints} = ${finalScore} pts`
+    : `${dominantPoints} pts`;
+
   // 41 Murni: exactly 4 cards, all of the same suit, and bestScore === 41
-  const is41 = hand.length === 4 && dominantCards.length === 4 && bestScore === 41;
+  const is41 = hand.length === 4 && dominantCards.length === 4 && finalScore === 41;
 
   return {
     bestSuit,
-    bestScore: bestScore === -Infinity ? 0 : bestScore,
+    bestScore: finalScore,
+    dominantPoints,
+    penaltyPoints,
+    formula,
     is41,
     suitBreakdown,
     dominantCards,
+  };
+}
+
+/**
+ * Finds the optimal 4-card subset when a player is holding 5 cards during DISCARD phase.
+ * Evaluates all 5 possibilities and returns the highest scoring subset.
+ */
+export function getBest4CardEvaluation(hand = []) {
+  if (!hand || hand.length <= 4) {
+    return calculateHandScore41(hand);
+  }
+
+  let bestEval = null;
+  let recommendedDiscard = null;
+
+  for (let i = 0; i < hand.length; i++) {
+    const candidateDiscard = hand[i];
+    const subset = hand.filter((_, idx) => idx !== i);
+    const evaluation = calculateHandScore41(subset);
+
+    if (!bestEval || evaluation.bestScore > bestEval.bestScore) {
+      bestEval = evaluation;
+      recommendedDiscard = candidateDiscard;
+    }
+  }
+
+  return {
+    ...bestEval,
+    recommendedDiscard,
   };
 }
 

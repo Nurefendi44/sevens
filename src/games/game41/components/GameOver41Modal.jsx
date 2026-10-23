@@ -150,14 +150,21 @@ export default function GameOver41Modal({
                           41 MURNI
                         </span>
                       )}
-                      <span style={{
-                        fontFamily: 'var(--font-mono, monospace)',
-                        fontSize: '1.1rem',
-                        fontWeight: 900,
-                        color: isBustedCloser ? '#f87171' : isWinner ? '#fbbf24' : '#e2e8f0',
-                      }}>
-                        {r.score} poin
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                        <span style={{
+                          fontFamily: 'var(--font-mono, monospace)',
+                          fontSize: '1.1rem',
+                          fontWeight: 900,
+                          color: isBustedCloser ? '#f87171' : isWinner ? '#fbbf24' : '#e2e8f0',
+                        }}>
+                          {r.score} poin
+                        </span>
+                        {r.evaluation?.formula && (
+                          <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontFamily: 'var(--font-mono, monospace)' }}>
+                            {r.bestSuit} • {r.evaluation.formula}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 

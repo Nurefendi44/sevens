@@ -69,8 +69,8 @@ if (evalScattered.bestScore !== -19) throw new Error(`FAIL: Expected score -19, 
 console.log('✓ Scoring engine passes all edge cases!');
 
 console.log('\n=== TEST 3: TURN FLOW (DRAW & DISCARD) ===');
-const state = initGame41({ playerCount: 4 });
-const p1 = state.players[0].id;
+const state = initGame41({ playerCount: 4, firstPlayerId: 'player_1' });
+const p1 = 'player_1';
 
 // Player 1 draws from stock
 const drawRes = drawCard41(state, p1, 'stock');
@@ -88,7 +88,7 @@ if (discardRes.state.turnPhase !== 'DRAW') throw new Error('FAIL: Expected next 
 console.log('✓ Turn flow (draw 5th card -> discard to 4 cards -> next turn) verified!');
 
 console.log('\n=== TEST 4: INSTANT WIN 41 MURNI DETECTION ===');
-const winGame = initGame41({ playerCount: 4 });
+const winGame = initGame41({ playerCount: 4, firstPlayerId: 'player_1' });
 // Setup Player 1 hand so when they draw and discard, they achieve 41
 winGame.hands['player_1'] = [
   { suit: SUITS.SPADES, rank: 1, label: 'A', symbol: '♠' },
@@ -120,5 +120,61 @@ if (winDiscardRes.state.winner.id !== 'player_1') {
   throw new Error('FAIL: Expected Player 1 to be the winner!');
 }
 console.log('✓ 41 Murni Instant Win successfully detected and ended game!');
+
+console.log('\n=== TEST 5: USER EXAMPLE SCORING (10♠, 9♠, 8♠, 10♥ = 17) & DISCARD TRACKING ===');
+const handUserExample = [
+  { suit: SUITS.SPADES, rank: 10, label: '10', symbol: '♠' },
+  { suit: SUITS.SPADES, rank: 9, label: '9', symbol: '♠' },
+  { suit: SUITS.SPADES, rank: 8, label: '8', symbol: '♠' },
+  { suit: SUITS.HEARTS, rank: 10, label: '10', symbol: '♥' },
+];
+const evalUserExample = calculateHandScore41(handUserExample);
+console.log('User example eval score:', evalUserExample.bestScore, 'formula:', evalUserExample.formula);
+if (evalUserExample.bestScore !== 17) {
+  throw new Error(`FAIL: Expected score 17 for [10♠, 9♠, 8♠, 10♥], got ${evalUserExample.bestScore}`);
+}
+if (evalUserExample.dominantPoints !== 27 || evalUserExample.penaltyPoints !== 10) {
+  throw new Error(`FAIL: Expected 27 dominant and 10 penalty, got ${evalUserExample.dominantPoints} and ${evalUserExample.penaltyPoints}`);
+}
+console.log('✓ User example 10♠, 9♠, 8♠, 10♥ evaluated to exactly 17 points (27 - 10 = 17 pts)!');
+
+// Test Discard Tracking: P1 discards -> P2 takes it -> verify P1's outgoing history shows takenByNextPlayer: true
+const trackGame = initGame41({ playerCount: 4, firstPlayerId: 'player_1' });
+const player1Id = 'player_1';
+const player2Id = 'player_2';
+const player3Id = 'player_3';
+
+const d1 = drawCard41(trackGame, player1Id, 'stock');
+if (!d1.success) throw new Error('d1 failed: ' + d1.error);
+const cardDiscardedByP1 = d1.state.hands[player1Id][0];
+const disc1 = discardCard41(d1.state, player1Id, cardDiscardedByP1);
+if (!disc1.success) throw new Error('disc1 failed: ' + disc1.error);
+
+// P1's outgoing discard history should have takenByNextPlayer: null (pending)
+const p1PendingEntry = disc1.state.playerDiscardHistory[player1Id][0];
+if (p1PendingEntry.takenByNextPlayer !== null) {
+  throw new Error('FAIL: Expected pending discard to have takenByNextPlayer: null');
+}
+
+// P2 takes the discard from P1
+const d2 = drawCard41(disc1.state, player2Id, 'discard');
+if (!d2.success) throw new Error('d2 failed: ' + d2.error);
+const p1UpdatedEntry = d2.state.playerDiscardHistory[player1Id][0];
+if (p1UpdatedEntry.takenByNextPlayer !== true || p1UpdatedEntry.takenByPlayerName !== disc1.state.players[1].name) {
+  throw new Error('FAIL: Expected p1 discard entry to have takenByNextPlayer: true and takenByPlayerName');
+}
+console.log('✓ Discard tracking when taken by next player verified!');
+
+// P2 discards a card -> P3 takes from stock (skips P2's discard)
+const cardDiscardedByP2 = d2.state.hands[player2Id][0];
+const disc2 = discardCard41(d2.state, player2Id, cardDiscardedByP2);
+if (!disc2.success) throw new Error('disc2 failed: ' + disc2.error);
+const d3 = drawCard41(disc2.state, player3Id, 'stock');
+if (!d3.success) throw new Error('d3 failed: ' + d3.error);
+const p2UpdatedEntry = d3.state.playerDiscardHistory[player2Id][0];
+if (p2UpdatedEntry.takenByNextPlayer !== false) {
+  throw new Error('FAIL: Expected p2 discard entry to have takenByNextPlayer: false when skipped');
+}
+console.log('✓ Discard tracking when skipped by next player verified!');
 
 console.log('\n🎉 ALL KARTU 41 TESTS PASSED WITH 100% SUCCESS! 🎉');

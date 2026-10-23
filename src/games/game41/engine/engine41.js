@@ -191,6 +191,24 @@ export function drawCard41(gameState, playerId, source = DRAW_SOURCE_41.STOCK) {
     nextDiscardsToPlayer[playerId] = currentDiscardsToMe;
   }
 
+  // Update status in previous player's outgoing discard history ("kartu yang dibuang oleh player itu")
+  const nextPlayerDiscardHistory = { ...(gameState.playerDiscardHistory || {}) };
+  const fromPlayerId = gameState.passedDiscard?.fromPlayerId;
+  if (fromPlayerId && nextPlayerDiscardHistory[fromPlayerId]) {
+    const fromHistory = [...nextPlayerDiscardHistory[fromPlayerId]];
+    if (fromHistory.length > 0) {
+      const lastIdx = fromHistory.length - 1;
+      const prevEntry = fromHistory[lastIdx];
+      fromHistory[lastIdx] = {
+        ...(typeof prevEntry === 'object' && prevEntry.card ? prevEntry : { card: prevEntry }),
+        takenByNextPlayer: source === DRAW_SOURCE_41.DISCARD,
+        takenByPlayerName: source === DRAW_SOURCE_41.DISCARD ? playerName : null,
+        skippedByPlayerName: source === DRAW_SOURCE_41.STOCK ? playerName : null,
+      };
+      nextPlayerDiscardHistory[fromPlayerId] = fromHistory;
+    }
+  }
+
   const nextState = {
     ...gameState,
     drawPile: nextDrawPile,
@@ -198,6 +216,7 @@ export function drawCard41(gameState, playerId, source = DRAW_SOURCE_41.STOCK) {
     graveyard: nextGraveyard,
     passedDiscard: null, // Consumed or archived
     discardsToPlayer: nextDiscardsToPlayer,
+    playerDiscardHistory: nextPlayerDiscardHistory,
     hands: nextHands,
     turnPhase: TURN_PHASE_41.DISCARD,
     lastAction: {
@@ -245,11 +264,25 @@ export function discardCard41(gameState, playerId, cardToDiscard) {
 
   const nextHand = currentHand.filter((_, idx) => idx !== cardIndex);
   const nextDiscardPile = [...gameState.discardPile, cardToDiscard];
+
+  const currentPlayerIndex = gameState.players.findIndex((p) => p.id === playerId);
+  const nextPlayerIndex = (currentPlayerIndex + 1) % gameState.players.length;
+  const nextPlayer = gameState.players[nextPlayerIndex];
+
+  const discardEntry = {
+    card: cardToDiscard,
+    toPlayerId: nextPlayer ? nextPlayer.id : null,
+    toPlayerName: nextPlayer ? nextPlayer.name : null,
+    turn: gameState.turnNumber,
+    takenByNextPlayer: null, // Pending until next player draws
+    takenByPlayerName: null,
+  };
+
   const nextPlayerDiscardHistory = {
     ...(gameState.playerDiscardHistory || {}),
     [playerId]: [
       ...((gameState.playerDiscardHistory && gameState.playerDiscardHistory[playerId]) || []),
-      cardToDiscard,
+      discardEntry,
     ],
   };
 
@@ -326,10 +359,6 @@ export function discardCard41(gameState, playerId, cardToDiscard) {
   }
 
   // 3. Normal turn progression: Next player's turn
-  const currentPlayerIndex = gameState.players.findIndex((p) => p.id === playerId);
-  const nextPlayerIndex = (currentPlayerIndex + 1) % gameState.players.length;
-  const nextPlayer = gameState.players[nextPlayerIndex];
-
   const nextPassedDiscard = {
     card: cardToDiscard,
     fromPlayerId: playerId,
@@ -410,7 +439,14 @@ export function closeHand41(gameState, playerId, cardToDiscard = null) {
     if (cardIndex !== -1) {
       nextHand = nextHand.filter((_, idx) => idx !== cardIndex);
       nextDiscardPile.push(cardToDiscard);
-      currentDiscards.push(cardToDiscard);
+      currentDiscards.push({
+        card: cardToDiscard,
+        toPlayerId: null,
+        toPlayerName: 'Meja Tutup',
+        turn: gameState.turnNumber,
+        takenByNextPlayer: false,
+        takenByPlayerName: null,
+      });
       nextPlayerDiscardHistory[playerId] = currentDiscards;
     }
   }

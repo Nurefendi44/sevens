@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import CardView from '../../../components/CardView.jsx';
 import { cardEquals } from '../../../engine/deck.js';
-import { calculateHandScore41 } from '../engine/scoring41.js';
+import { calculateHandScore41, getBest4CardEvaluation } from '../engine/scoring41.js';
 import { TURN_PHASE_41, DRAW_SOURCE_41 } from '../engine/constants41.js';
 import {
   Layers,
@@ -32,6 +32,7 @@ export default function Table41({
   const [selectedCard, setSelectedCard] = useState(null);
   const [showConfirmClose, setShowConfirmClose] = useState(false);
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
+  const [activeHistoryTab, setActiveHistoryTab] = useState('outgoing'); // 'outgoing' | 'incoming'
 
   if (!gameState || !gameState.players || !Array.isArray(gameState.players) || gameState.players.length === 0 || !gameState.hands) {
     return null;
@@ -55,14 +56,32 @@ export default function Table41({
   // Private Discards PASSED TO viewing player only ("riwayat kartu yang dibuang ke saya")
   const myIncomingDiscards = (myPlayer?.id && gameState.discardsToPlayer?.[myPlayer.id]) || [];
 
+  // Private Discards MADE BY viewing player only ("riwayat kartu yang dibuang oleh player itu")
+  const myOutgoingDiscards = (myPlayer?.id && gameState.playerDiscardHistory?.[myPlayer.id]) || [];
+
   // Determine next player (who will receive my discarded card)
   const myIndex = gameState.players.findIndex((p) => p.id === myPlayer.id);
   const nextPlayer = gameState.players[(myIndex + 1) % gameState.players.length];
 
-  // Realtime Live Hand Evaluation for viewer player
-  const handEval = calculateHandScore41(myHand);
   const canDraw = isMyTurn && gameState.turnPhase === TURN_PHASE_41.DRAW;
   const canDiscard = isMyTurn && gameState.turnPhase === TURN_PHASE_41.DISCARD && selectedCard;
+
+  // Realtime Live Hand Evaluation for viewer player
+  let activeEval;
+  let evaluationMode = 'normal'; // 'normal' | 'selected' | 'best4'
+
+  if (myHand.length === 5) {
+    if (selectedCard) {
+      activeEval = calculateHandScore41(myHand.filter((c) => !cardEquals(c, selectedCard)));
+      evaluationMode = 'selected';
+    } else {
+      activeEval = getBest4CardEvaluation(myHand);
+      evaluationMode = 'best4';
+    }
+  } else {
+    activeEval = calculateHandScore41(myHand);
+    evaluationMode = 'normal';
+  }
 
   // Preview evaluation if player chooses to close hand with current discard selection
   let previewHandAfterDiscard = myHand;
@@ -71,7 +90,7 @@ export default function Table41({
   }
   const previewEval = previewHandAfterDiscard.length === 4
     ? calculateHandScore41(previewHandAfterDiscard)
-    : handEval;
+    : activeEval;
 
   const handleCardClick = (card) => {
     if (gameState.turnPhase === TURN_PHASE_41.DISCARD) {
@@ -223,7 +242,7 @@ export default function Table41({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {/* Private Incoming Discards Toggle Button */}
+            {/* Private Discard History Toggle Button */}
             <button
               className="toggle-chip history-toggle-chip"
               onClick={() => setIsHistoryExpanded((prev) => !prev)}
@@ -236,85 +255,158 @@ export default function Table41({
                 color: '#fbbf24',
                 cursor: 'pointer',
               }}
-              title="Lihat riwayat semua kartu yang dibuang/dioper ke Anda (Hanya Anda yang melihat)"
+              title="Lihat riwayat kartu buangan (Hanya Anda yang dapat melihat)"
             >
               <Lock size={12} />
-              <span>Dibuang ke Saya ({myIncomingDiscards.length})</span>
+              <span>Riwayat Buangan ({myOutgoingDiscards.length + myIncomingDiscards.length})</span>
               {isHistoryExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
             </button>
 
-            {/* Live Hand Analyzer Badge */}
-            <div className={`game41-hand-analyzer ${handEval.is41 ? 'is-41' : ''}`}>
-              {handEval.is41 ? (
+            {/* Live Hand Analyzer Badge with Transparent Formula Breakdown */}
+            <div
+              className={`game41-hand-analyzer ${activeEval.is41 ? 'is-41' : ''}`}
+              title={`Detail poin kartu: ${activeEval.formula}`}
+            >
+              {activeEval.is41 ? (
                 <>
                   <Flame size={15} color="#fbbf24" />
-                  <span>🔥 41 MURNI!</span>
+                  <span>🔥 41 MURNI! (41 pts)</span>
                 </>
               ) : (
                 <>
-                  <span>Suit:</span>
-                  <span style={{ color: '#fbbf24', textTransform: 'capitalize' }}>
-                    {handEval.bestSuit || '-'}
+                  <span style={{ opacity: 0.85, fontSize: '0.78rem' }}>Suit:</span>
+                  <span style={{ color: '#fbbf24', textTransform: 'capitalize', fontWeight: 800 }}>
+                    {activeEval.bestSuit || '-'}
                   </span>
-                  <span className="analyzer-score-badge">
-                    ({handEval.bestScore} pts)
+                  <span className="analyzer-formula-badge" style={{ color: '#cbd5e1', fontSize: '0.78rem', fontFamily: 'var(--font-mono, monospace)' }}>
+                    {activeEval.formula}
                   </span>
+                  {evaluationMode === 'selected' && (
+                    <span style={{ fontSize: '0.66rem', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.15)', padding: '1px 5px', borderRadius: '4px' }}>
+                      setelah buang
+                    </span>
+                  )}
+                  {evaluationMode === 'best4' && (
+                    <span style={{ fontSize: '0.66rem', color: '#a78bfa', background: 'rgba(167, 139, 250, 0.15)', padding: '1px 5px', borderRadius: '4px' }}>
+                      potensi terbaik
+                    </span>
+                  )}
                 </>
               )}
             </div>
           </div>
         </div>
 
-        {/* Private Discard History Panel: Cards discarded TO viewing player */}
+        {/* Private Discard History Panel: Outgoing & Incoming Discards */}
         {isHistoryExpanded && (
           <div className="game41-my-history-bar">
             <div className="my-history-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <Lock size={13} color="#fbbf24" />
-                <strong style={{ fontSize: '0.8rem', color: '#fbbf24' }}>
-                  Riwayat Kartu yang Dibuang ke Anda
-                </strong>
-                <span className="my-history-badge">{myIncomingDiscards.length}</span>
+                <div className="game41-history-tabs">
+                  <button
+                    className={`history-tab-btn ${activeHistoryTab === 'outgoing' ? 'active' : ''}`}
+                    onClick={() => setActiveHistoryTab('outgoing')}
+                  >
+                    Kartu yang Saya Buang ({myOutgoingDiscards.length})
+                  </button>
+                  <button
+                    className={`history-tab-btn ${activeHistoryTab === 'incoming' ? 'active' : ''}`}
+                    onClick={() => setActiveHistoryTab('incoming')}
+                  >
+                    Dibuang ke Saya ({myIncomingDiscards.length})
+                  </button>
+                </div>
               </div>
               <span className="my-history-hint">
-                🔒 Rahasia: Hanya Anda yang dapat melihat riwayat kartu yang dioper ke Anda
+                🔒 Rahasia: Hanya Anda yang dapat melihat riwayat kartu ini
               </span>
             </div>
 
-            {myIncomingDiscards.length > 0 ? (
-              <div className="my-history-cards-scroll">
-                {myIncomingDiscards.map((item, idx) => {
-                  const card = item.card;
-                  return (
-                    <div
-                      key={card.id ? `${card.id}-${idx}` : idx}
-                      className="my-history-card-item"
-                      title={`Kartu #${idx + 1} dari ${item.fromPlayerName || 'pemain sebelumnya'}: ${card.label}${card.symbol} (${item.taken === true ? 'Diambil ke tangan' : item.taken === false ? 'Dilewati' : 'Tersedia saat ini'})`}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '2px', padding: '0 2px' }}>
-                        <span className="history-step-num">#{idx + 1}</span>
-                        {item.taken === true ? (
-                          <span style={{ fontSize: '0.62rem', color: '#34d399', fontWeight: 800 }}>Diambil</span>
-                        ) : item.taken === false ? (
-                          <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Dilewati</span>
-                        ) : (
-                          <span style={{ fontSize: '0.62rem', color: '#fbbf24', fontWeight: 900 }}>Tersedia</span>
-                        )}
+            {/* TAB 1: Kartu yang Saya Buang (Outgoing) */}
+            {activeHistoryTab === 'outgoing' && (
+              myOutgoingDiscards.length > 0 ? (
+                <div className="my-history-cards-scroll">
+                  {myOutgoingDiscards.map((item, idx) => {
+                    const card = item.card || item;
+                    const isTaken = item.takenByNextPlayer === true;
+                    const isSkipped = item.takenByNextPlayer === false;
+                    const isPending = item.takenByNextPlayer === null;
+                    const targetName = item.toPlayerName || nextPlayer?.name || 'Pemain berikutnya';
+
+                    return (
+                      <div
+                        key={card.id ? `${card.id}-${idx}` : idx}
+                        className="my-history-card-item"
+                        title={`Buangan #${idx + 1} ke ${targetName}: ${card.label}${card.symbol} (${isTaken ? `Diambil oleh ${item.takenByPlayerName || targetName}` : isSkipped ? 'Dilewati' : 'Menunggu respon lawan'})`}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '2px', padding: '0 2px' }}>
+                          <span className="history-step-num">#{idx + 1}</span>
+                          {isTaken ? (
+                            <span style={{ fontSize: '0.62rem', color: '#34d399', fontWeight: 800 }}>Diambil</span>
+                          ) : isSkipped ? (
+                            <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Dilewati</span>
+                          ) : (
+                            <span style={{ fontSize: '0.62rem', color: '#fbbf24', fontWeight: 900 }}>Menunggu</span>
+                          )}
+                        </div>
+                        <div style={{ transform: 'scale(0.85)', transformOrigin: 'top center' }}>
+                          <CardView card={card} mini />
+                        </div>
+                        <span style={{ fontSize: '0.65rem', color: '#cbd5e1', maxWidth: '64px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {isTaken ? `oleh ${item.takenByPlayerName || targetName}` : `ke ${targetName}`}
+                        </span>
                       </div>
-                      <div style={{ transform: 'scale(0.85)', transformOrigin: 'top center' }}>
-                        <CardView card={card} mini />
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="my-history-empty">
+                  Anda belum membuang kartu pada permainan ini.
+                </div>
+              )
+            )}
+
+            {/* TAB 2: Kartu Dibuang ke Saya (Incoming) */}
+            {activeHistoryTab === 'incoming' && (
+              myIncomingDiscards.length > 0 ? (
+                <div className="my-history-cards-scroll">
+                  {myIncomingDiscards.map((item, idx) => {
+                    const card = item.card;
+                    const isTaken = item.taken === true;
+                    const isSkipped = item.taken === false;
+
+                    return (
+                      <div
+                        key={card.id ? `${card.id}-${idx}` : idx}
+                        className="my-history-card-item"
+                        title={`Kartu #${idx + 1} dari ${item.fromPlayerName || 'pemain sebelumnya'}: ${card.label}${card.symbol} (${isTaken ? 'Diambil ke tangan' : isSkipped ? 'Dilewati' : 'Tersedia saat ini'})`}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '2px', padding: '0 2px' }}>
+                          <span className="history-step-num">#{idx + 1}</span>
+                          {isTaken ? (
+                            <span style={{ fontSize: '0.62rem', color: '#34d399', fontWeight: 800 }}>Diambil</span>
+                          ) : isSkipped ? (
+                            <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Dilewati</span>
+                          ) : (
+                            <span style={{ fontSize: '0.62rem', color: '#fbbf24', fontWeight: 900 }}>Tersedia</span>
+                          )}
+                        </div>
+                        <div style={{ transform: 'scale(0.85)', transformOrigin: 'top center' }}>
+                          <CardView card={card} mini />
+                        </div>
+                        <span style={{ fontSize: '0.65rem', color: '#cbd5e1', maxWidth: '64px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.fromPlayerName || 'Lawan'}
+                        </span>
                       </div>
-                      <span style={{ fontSize: '0.65rem', color: '#cbd5e1', maxWidth: '58px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {item.fromPlayerName || 'Lawan'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="my-history-empty">
-                Belum ada kartu buangan yang dioper ke Anda pada permainan ini.
-              </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="my-history-empty">
+                  Belum ada kartu buangan yang dioper ke Anda pada permainan ini.
+                </div>
+              )
             )}
           </div>
         )}
@@ -417,7 +509,7 @@ export default function Table41({
                 <ShieldAlert size={15} />
                 <span>
                   {gameState.turnPhase === TURN_PHASE_41.DRAW
-                    ? `Tutup Kartu (${handEval.bestScore} pts)`
+                    ? `Tutup Kartu (${activeEval.bestScore} pts)`
                     : selectedCard
                     ? `Tutup Kartu (${previewEval.bestScore} pts)`
                     : 'Pilih 1 Kartu untuk Tutup'}
@@ -465,9 +557,14 @@ export default function Table41({
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Poin Akhir Anda:</span>
-                <strong style={{ color: '#fbbf24', fontSize: '1.15rem' }}>
-                  {previewEval.bestScore} Poin ({previewEval.bestSuit || '-'})
-                </strong>
+                <div style={{ textAlign: 'right' }}>
+                  <strong style={{ color: '#fbbf24', fontSize: '1.15rem' }}>
+                    {previewEval.bestScore} Poin
+                  </strong>
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                    {previewEval.bestSuit} ({previewEval.formula})
+                  </div>
+                </div>
               </div>
               {gameState.turnPhase === TURN_PHASE_41.DISCARD && selectedCard && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
