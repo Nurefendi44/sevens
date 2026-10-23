@@ -60,6 +60,37 @@ export default function RulesGuide41Modal({ onClose }) {
             </ol>
           </div>
 
+          {/* Fitur Tutup Kartu & Penalti */}
+          <div style={{ background: 'rgba(245, 158, 11, 0.08)', padding: '12px 14px', borderRadius: '8px', borderLeft: '3px solid #f59e0b' }}>
+            <h4 style={{ color: '#fbbf24', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <ShieldCheck size={16} /> FITUR TUTUP KARTU & PENALTI
+            </h4>
+            <ul style={{ margin: 0, paddingLeft: '1.25rem', color: '#fef3c7', fontSize: '0.85rem', lineHeight: '1.6' }}>
+              <li>
+                <strong>Tutup Kapan Saja:</strong> Kapanpun pemain siap pada gilirannya, pemain dapat menekan tombol <strong>Tutup Kartu</strong>.
+              </li>
+              <li>
+                <strong>Aturan Penalti Terbawah:</strong> Jika Pemain A menutup kartu misal dengan <strong>30 poin</strong>, lalu ada Pemain B yang memiliki poin <strong>di atas 30 poin</strong>, maka:
+                <br />• <strong>Pemain A otomatis KALAH</strong> dan ditempatkan di <strong>peringkat paling bawah</strong>.
+                <br />• <strong>Pemain B menang</strong> sebagai juara 1.
+                <br />• Pemain lain (misal Pemain C dengan 20 poin) <strong>tetap menang dan berada di atas Pemain A</strong>!
+              </li>
+              <li>
+                <strong>Sukses Tutup Kartu:</strong> Jika tidak ada pemain lain yang melampaui poin penutup kartu, penutup kartu langsung menjadi Juara 1!
+              </li>
+            </ul>
+          </div>
+
+          {/* Riwayat Buangan Rahasia */}
+          <div style={{ background: 'rgba(139, 92, 246, 0.08)', padding: '12px 14px', borderRadius: '8px', borderLeft: '3px solid #8b5cf6' }}>
+            <h4 style={{ color: '#a78bfa', margin: '0 0 6px 0' }}>
+              🔒 RIWAYAT BUANGAN PRIBADI (RAHASIA)
+            </h4>
+            <p style={{ margin: 0, color: '#ddd6fe', fontSize: '0.85rem', lineHeight: '1.6' }}>
+              Setiap kartu yang Anda buang otomatis tercatat pada panel <strong>"Buangan Saya"</strong>. Riwayat ini <strong>bersifat rahasia dan hanya dapat dilihat oleh Anda sendiri</strong>, pemain lawan tidak dapat melihat kartu apa saja yang sudah pernah Anda buang sebelumnya.
+            </p>
+          </div>
+
           {/* Kemenangan & Skor */}
           <div style={{ background: 'rgba(239, 68, 68, 0.08)', padding: '12px 14px', borderRadius: '8px', borderLeft: '3px solid #ef4444' }}>
             <h4 style={{ color: '#f87171', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -67,7 +98,7 @@ export default function RulesGuide41Modal({ onClose }) {
             </h4>
             <p style={{ margin: 0, color: '#fca5a5', fontSize: '0.85rem', lineHeight: '1.6' }}>
               • <strong>Instant Win (41 Murni):</strong> Jika saat buang kartu Anda mencapai tepat 41 poin dari 1 suit yang sama, Anda menang seketika!<br />
-              • <strong>Jika Dek Habis:</strong> Pemenang ditentukan oleh skor tertinggi dengan rumus:<br />
+              • <strong>Tutup Kartu / Dek Habis:</strong> Pemenang ditentukan oleh skor tertinggi dengan rumus:<br />
               <em>Skor = (Poin Suit Terbanyak) - (Poin Kartu Beda Suit)</em>.
             </p>
           </div>

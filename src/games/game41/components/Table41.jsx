@@ -3,19 +3,35 @@ import CardView from '../../../components/CardView.jsx';
 import { cardEquals } from '../../../engine/deck.js';
 import { calculateHandScore41 } from '../engine/scoring41.js';
 import { TURN_PHASE_41, DRAW_SOURCE_41 } from '../engine/constants41.js';
-import { Layers, ArrowDownToLine, Trash2, HelpCircle, Flame, ArrowRight, CornerDownRight } from 'lucide-react';
+import {
+  Layers,
+  ArrowDownToLine,
+  Trash2,
+  HelpCircle,
+  Flame,
+  ArrowRight,
+  ShieldAlert,
+  Lock,
+  ChevronDown,
+  ChevronUp,
+  X,
+  AlertTriangle,
+} from 'lucide-react';
 import '../../../styles/game41.css';
 
 export default function Table41({
   gameState,
   onDrawCard,
   onDiscardCard,
+  onCloseHand,
   isMyTurn,
   myPlayerId,
   isMultiplayer = false,
   onOpenRules,
 }) {
   const [selectedCard, setSelectedCard] = useState(null);
+  const [showConfirmClose, setShowConfirmClose] = useState(false);
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
 
   if (!gameState || !gameState.players || !Array.isArray(gameState.players) || gameState.players.length === 0 || !gameState.hands) {
     return null;
@@ -36,6 +52,9 @@ export default function Table41({
   const passedDiscard = gameState.passedDiscard;
   const isDiscardForMe = Boolean(passedDiscard && passedDiscard.card && (passedDiscard.toPlayerId === myPlayer.id));
 
+  // Private Discard History for viewing player only
+  const myDiscardHistory = (myPlayer?.id && gameState.playerDiscardHistory?.[myPlayer.id]) || [];
+
   // Determine next player (who will receive my discarded card)
   const myIndex = gameState.players.findIndex((p) => p.id === myPlayer.id);
   const nextPlayer = gameState.players[(myIndex + 1) % gameState.players.length];
@@ -45,11 +64,28 @@ export default function Table41({
   const canDraw = isMyTurn && gameState.turnPhase === TURN_PHASE_41.DRAW;
   const canDiscard = isMyTurn && gameState.turnPhase === TURN_PHASE_41.DISCARD && selectedCard;
 
+  // Preview evaluation if player chooses to close hand with current discard selection
+  let previewHandAfterDiscard = myHand;
+  if (gameState.turnPhase === TURN_PHASE_41.DISCARD && selectedCard) {
+    previewHandAfterDiscard = myHand.filter((c) => !cardEquals(c, selectedCard));
+  }
+  const previewEval = previewHandAfterDiscard.length === 4
+    ? calculateHandScore41(previewHandAfterDiscard)
+    : handEval;
+
   const handleCardClick = (card) => {
     if (gameState.turnPhase === TURN_PHASE_41.DISCARD) {
       setSelectedCard(card);
     } else {
       setSelectedCard((prev) => (cardEquals(prev, card) ? null : card));
+    }
+  };
+
+  const handleExecuteCloseHand = () => {
+    setShowConfirmClose(false);
+    const cardToThrow = gameState.turnPhase === TURN_PHASE_41.DISCARD ? selectedCard : null;
+    if (onCloseHand) {
+      onCloseHand(cardToThrow);
     }
   };
 
@@ -100,7 +136,7 @@ export default function Table41({
                 isDiscardForMe && passedDiscard?.card ? (
                   `Giliran Anda: Ambil kartu dari Dek ATAU ambil Buangan (${passedDiscard.card.label}${passedDiscard.card.symbol}) dari ${passedDiscard.fromPlayerName}`
                 ) : (
-                  'Giliran Anda: Ambil 1 kartu dari Tumpukan Dek Tertutup'
+                  'Giliran Anda: Ambil 1 kartu dari Tumpukan Dek Tertutup, atau Tutup Kartu jika siap!'
                 )
               ) : (
                 `Giliran Anda: Pilih 1 kartu di tangan untuk Dibuang ke ${nextPlayer?.name || 'pemain berikutnya'}`
@@ -186,26 +222,87 @@ export default function Table41({
             </span>
           </div>
 
-          {/* Live Hand Analyzer Badge */}
-          <div className={`game41-hand-analyzer ${handEval.is41 ? 'is-41' : ''}`}>
-            {handEval.is41 ? (
-              <>
-                <Flame size={15} color="#fbbf24" />
-                <span>🔥 41 MURNI!</span>
-              </>
-            ) : (
-              <>
-                <span>Suit Dominan:</span>
-                <span style={{ color: '#fbbf24', textTransform: 'capitalize' }}>
-                  {handEval.bestSuit || '-'}
-                </span>
-                <span className="analyzer-score-badge">
-                  ({handEval.bestScore} pts)
-                </span>
-              </>
-            )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {/* Private Discard History Toggle Button */}
+            <button
+              className="toggle-chip history-toggle-chip"
+              onClick={() => setIsHistoryExpanded((prev) => !prev)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                background: isHistoryExpanded ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.06)',
+                border: '1px solid rgba(245, 158, 11, 0.35)',
+                color: '#fbbf24',
+                cursor: 'pointer',
+              }}
+              title="Lihat history kartu yang pernah Anda buang (Hanya Anda yang melihat)"
+            >
+              <Lock size={12} />
+              <span>Buangan Saya ({myDiscardHistory.length})</span>
+              {isHistoryExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </button>
+
+            {/* Live Hand Analyzer Badge */}
+            <div className={`game41-hand-analyzer ${handEval.is41 ? 'is-41' : ''}`}>
+              {handEval.is41 ? (
+                <>
+                  <Flame size={15} color="#fbbf24" />
+                  <span>🔥 41 MURNI!</span>
+                </>
+              ) : (
+                <>
+                  <span>Suit:</span>
+                  <span style={{ color: '#fbbf24', textTransform: 'capitalize' }}>
+                    {handEval.bestSuit || '-'}
+                  </span>
+                  <span className="analyzer-score-badge">
+                    ({handEval.bestScore} pts)
+                  </span>
+                </>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Private Discard History Panel (Only visible to the individual player) */}
+        {isHistoryExpanded && (
+          <div className="game41-my-history-bar">
+            <div className="my-history-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Lock size={13} color="#fbbf24" />
+                <strong style={{ fontSize: '0.8rem', color: '#fbbf24' }}>
+                  Riwayat Kartu Buangan Anda
+                </strong>
+                <span className="my-history-badge">{myDiscardHistory.length}</span>
+              </div>
+              <span className="my-history-hint">
+                🔒 Hanya Anda yang dapat melihat daftar kartu ini
+              </span>
+            </div>
+
+            {myDiscardHistory.length > 0 ? (
+              <div className="my-history-cards-scroll">
+                {myDiscardHistory.map((card, idx) => (
+                  <div
+                    key={card.id ? `${card.id}-${idx}` : idx}
+                    className="my-history-card-item"
+                    title={`Buangan ke-${idx + 1}: ${card.label}${card.symbol}`}
+                  >
+                    <span className="history-step-num">#{idx + 1}</span>
+                    <div style={{ transform: 'scale(0.85)', transformOrigin: 'top center' }}>
+                      <CardView card={card} mini />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="my-history-empty">
+                Anda belum membuang kartu pada permainan ini.
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Hand Cards Row */}
         <div className="game41-cards-row">
@@ -287,9 +384,129 @@ export default function Table41({
                 </span>
               </button>
             )}
+
+            {/* TUTUP KARTU (KNOCK) BUTTON - Player can declare to close at any time during their turn */}
+            {isMyTurn && (
+              <button
+                className="btn-game41 btn-game41-close-hand"
+                disabled={gameState.turnPhase === TURN_PHASE_41.DISCARD && !selectedCard}
+                onClick={() => setShowConfirmClose(true)}
+                title={
+                  gameState.turnPhase === TURN_PHASE_41.DRAW
+                    ? `Tutup kartu sekarang dengan 4 kartu Anda (${handEval.bestScore} pts)`
+                    : selectedCard
+                    ? `Buang ${selectedCard.label}${selectedCard.symbol} dan tutup kartu dengan sisa (${previewEval.bestScore} pts)`
+                    : 'Pilih 1 kartu buangan terlebih dahulu untuk menutup kartu'
+                }
+              >
+                <ShieldAlert size={15} />
+                <span>
+                  {gameState.turnPhase === TURN_PHASE_41.DRAW
+                    ? `Tutup Kartu (${handEval.bestScore} pts)`
+                    : selectedCard
+                    ? `Tutup Kartu (${previewEval.bestScore} pts)`
+                    : 'Pilih 1 Kartu untuk Tutup'}
+                </span>
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {/* CONFIRMATION MODAL FOR TUTUP KARTU */}
+      {showConfirmClose && (
+        <div className="modal-backdrop" style={{ zIndex: 9999 }}>
+          <div className="modal-card" style={{ maxWidth: '480px', width: '92vw', textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.5rem' }}>
+              <div style={{
+                width: '56px',
+                height: '56px',
+                borderRadius: '50%',
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '2px solid #ef4444',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '1.8rem',
+                color: '#ef4444',
+              }}>
+                <ShieldAlert size={30} />
+              </div>
+            </div>
+
+            <h3 style={{ margin: '0 0 0.5rem 0', color: '#fbbf24', fontSize: '1.3rem' }}>
+              Yakin Ingin Menutup Kartu?
+            </h3>
+
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.05)',
+              borderRadius: '12px',
+              padding: '0.85rem 1rem',
+              margin: '0.75rem 0',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.4rem',
+              textAlign: 'left',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Poin Akhir Anda:</span>
+                <strong style={{ color: '#fbbf24', fontSize: '1.15rem' }}>
+                  {previewEval.bestScore} Poin ({previewEval.bestSuit || '-'})
+                </strong>
+              </div>
+              {gameState.turnPhase === TURN_PHASE_41.DISCARD && selectedCard && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Kartu yang Dibuang:</span>
+                  <strong style={{ color: '#f87171', fontSize: '0.9rem' }}>
+                    {selectedCard.label}{selectedCard.symbol}
+                  </strong>
+                </div>
+              )}
+            </div>
+
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              borderRadius: '8px',
+              padding: '0.75rem',
+              fontSize: '0.82rem',
+              color: '#fca5a5',
+              lineHeight: '1.5',
+              textAlign: 'left',
+              marginBottom: '1.25rem',
+            }}>
+              <strong>⚠️ ATURAN RESMI TUTUP KARTU:</strong>
+              <br />
+              Jika kartu Anda ditutup dengan <strong>{previewEval.bestScore} poin</strong>, dan ada pemain lain yang berhasil mendapatkan poin di atasnya, maka <strong>Anda otomatis KALAH di urutan paling bawah</strong>, dan pemain tersebut menjadi juara 1!
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button
+                className="btn-header"
+                onClick={() => setShowConfirmClose(false)}
+                style={{ flex: 1, padding: '0.65rem', cursor: 'pointer' }}
+              >
+                Batal (Lanjut Main)
+              </button>
+              <button
+                className="btn-header btn-gold"
+                onClick={handleExecuteCloseHand}
+                style={{
+                  flex: 1,
+                  padding: '0.65rem',
+                  background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
+                  borderColor: '#ef4444',
+                  color: '#fff',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                Ya, Tutup Kartu!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

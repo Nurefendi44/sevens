@@ -36,7 +36,7 @@ import ModeSelectionScreen from './components/ModeSelectionScreen.jsx';
 import Table41 from './games/game41/components/Table41.jsx';
 import GameOver41Modal from './games/game41/components/GameOver41Modal.jsx';
 import RulesGuide41Modal from './games/game41/components/RulesGuide41Modal.jsx';
-import { initGame41, drawCard41, discardCard41 } from './games/game41/engine/engine41.js';
+import { initGame41, drawCard41, discardCard41, closeHand41 } from './games/game41/engine/engine41.js';
 
 import TableBigTwo from './games/bigtwo/components/TableBigTwo.jsx';
 import GameOverBigTwoModal from './games/bigtwo/components/GameOverBigTwoModal.jsx';
@@ -816,6 +816,34 @@ export default function App() {
     }
   };
 
+  const handleCloseHand41 = async (card = null) => {
+    const actingPlayerId = isMultiplayerMode ? myPlayerId : gameState41.currentPlayer;
+    const res = closeHand41(gameState41, actingPlayerId, card);
+    if (res.success) {
+      setGameState41(res.state);
+      const actorName = gameState41.players.find((p) => p.id === actingPlayerId)?.name || 'Pemain';
+      const actorAvatar = gameState41.players.find((p) => p.id === actingPlayerId)?.avatar || '🃏';
+      setRecentActionPopup({
+        type: 'CLOSE_HAND',
+        playerId: actingPlayerId,
+        playerName: actorName,
+        avatar: actorAvatar,
+        card,
+        message: `${actorName} MENUTUP KARTU!`,
+      });
+      if (res.isBusted) {
+        audio.closeCardSound?.();
+      } else {
+        audio.victorySound?.();
+      }
+      if (isMultiplayerMode && currentRoom?.code) {
+        await multiplayerAdapter.syncGameState(currentRoom.code, res.state);
+      }
+    } else {
+      showToast(res.error);
+    }
+  };
+
   const handleRestart41 = async (configOverrides) => {
     if (gameMode === 'multiplayer' && currentRoom?.code) {
       const isHost = currentRoom.host_id === myPlayerId;
@@ -1100,7 +1128,11 @@ export default function App() {
           timer = setTimeout(() => {
             const move = chooseGame41BotMove(gameState41, currentId);
             setBotThinking(null);
-            handleDiscardCard41(move.card);
+            if (move?.action === 'closeHand') {
+              handleCloseHand41(move.card);
+            } else {
+              handleDiscardCard41(move.card);
+            }
           }, 650 + Math.random() * 300);
         }
       } else {
@@ -1660,6 +1692,7 @@ export default function App() {
             gameState={gameState41}
             onDrawCard={handleDrawCard41}
             onDiscardCard={handleDiscardCard41}
+            onCloseHand={handleCloseHand41}
             isMyTurn={isMyTurn41}
             myPlayerId={isMultiplayerMode ? myPlayerId : isSingleMode ? SINGLE_HUMAN_ID : gameState41.currentPlayer}
             isMultiplayer={isMultiplayerMode}

@@ -160,7 +160,11 @@ export function chooseGame41BotMove(gameState, botId) {
   }
 
   // DISCARD phase: drop the card whose removal keeps the highest score
-  return { action: 'discard', card: bestScoreAfterDiscard(hand).discard };
+  const best = bestScoreAfterDiscard(hand);
+  if (best.score >= 34) {
+    return { action: 'closeHand', card: best.discard };
+  }
+  return { action: 'discard', card: best.discard };
 }
 
 // ---------------------------------------------------------------------------

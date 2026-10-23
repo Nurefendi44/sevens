@@ -57,6 +57,11 @@ export function initGame41(config = DEFAULT_CONFIG_41, customPlayers = null) {
 
   const firstPlayerId = players[0].id;
 
+  const playerDiscardHistory = {};
+  players.forEach((p) => {
+    playerDiscardHistory[p.id] = [];
+  });
+
   const initialState = {
     gameType: 'game41',
     config: { ...config, playerCount },
@@ -65,6 +70,7 @@ export function initGame41(config = DEFAULT_CONFIG_41, customPlayers = null) {
     drawPile,
     discardPile,
     graveyard: [], // Discarded cards that were skipped / unpicked
+    playerDiscardHistory, // Private history of discarded cards per player
     passedDiscard: {
       card: initialDiscardCard,
       fromPlayerId: 'system',
@@ -77,6 +83,8 @@ export function initGame41(config = DEFAULT_CONFIG_41, customPlayers = null) {
     turnNumber: 1,
     gameStatus: GAME_STATUS_41.PLAYING,
     winner: null,
+    closerPlayerId: null,
+    isBusted: false,
     endReason: null,
     rankings: null,
     history: [
@@ -200,6 +208,14 @@ export function discardCard41(gameState, playerId, cardToDiscard) {
 
   const nextHand = currentHand.filter((_, idx) => idx !== cardIndex);
   const nextDiscardPile = [...gameState.discardPile, cardToDiscard];
+  const nextPlayerDiscardHistory = {
+    ...(gameState.playerDiscardHistory || {}),
+    [playerId]: [
+      ...((gameState.playerDiscardHistory && gameState.playerDiscardHistory[playerId]) || []),
+      cardToDiscard,
+    ],
+  };
+
   const nextHands = {
     ...gameState.hands,
     [playerId]: nextHand,
@@ -218,6 +234,7 @@ export function discardCard41(gameState, playerId, cardToDiscard) {
       ...gameState,
       hands: nextHands,
       discardPile: nextDiscardPile,
+      playerDiscardHistory: nextPlayerDiscardHistory,
       gameStatus: GAME_STATUS_41.GAME_OVER,
       winner: gameState.players.find((p) => p.id === playerId),
       endReason: '41_MURNI',
@@ -249,6 +266,7 @@ export function discardCard41(gameState, playerId, cardToDiscard) {
       ...gameState,
       hands: nextHands,
       discardPile: nextDiscardPile,
+      playerDiscardHistory: nextPlayerDiscardHistory,
       gameStatus: GAME_STATUS_41.GAME_OVER,
       winner: result.winner?.player || null,
       endReason: 'DECK_OUT',
@@ -287,6 +305,7 @@ export function discardCard41(gameState, playerId, cardToDiscard) {
     ...gameState,
     hands: nextHands,
     discardPile: nextDiscardPile,
+    playerDiscardHistory: nextPlayerDiscardHistory,
     passedDiscard: nextPassedDiscard,
     currentPlayer: nextPlayer.id,
     turnPhase: TURN_PHASE_41.DRAW,
@@ -307,4 +326,98 @@ export function discardCard41(gameState, playerId, cardToDiscard) {
   };
 
   return { success: true, state: nextState, isGameOver: false };
+}
+
+/**
+ * Declares "Tutup Kartu" (Knock/Declare).
+ * Can be called during the player's turn:
+ * - If called with 5 cards: player drops cardToDiscard first to get 4 cards, then declares.
+ * - If called with 4 cards (in DRAW phase): player directly closes hand without drawing.
+ * 
+ * Rules:
+ * If any other player has a score higher than closer, closer LOSES completely and is placed
+ * at the very bottom of rankings. The player with the highest score wins!
+ */
+export function closeHand41(gameState, playerId, cardToDiscard = null) {
+  if (gameState.gameStatus !== GAME_STATUS_41.PLAYING) {
+    return { success: false, error: 'Permainan telah selesai.' };
+  }
+
+  if (gameState.currentPlayer !== playerId) {
+    return { success: false, error: 'Bukan giliran Anda untuk menutup kartu!' };
+  }
+
+  const currentHand = gameState.hands[playerId] || [];
+  let nextHand = [...currentHand];
+  let nextDiscardPile = [...gameState.discardPile];
+  const nextPlayerDiscardHistory = { ...(gameState.playerDiscardHistory || {}) };
+  const currentDiscards = [...(nextPlayerDiscardHistory[playerId] || [])];
+
+  if (cardToDiscard) {
+    const cardIndex = nextHand.findIndex((c) => cardEquals(c, cardToDiscard));
+    if (cardIndex !== -1) {
+      nextHand = nextHand.filter((_, idx) => idx !== cardIndex);
+      nextDiscardPile.push(cardToDiscard);
+      currentDiscards.push(cardToDiscard);
+      nextPlayerDiscardHistory[playerId] = currentDiscards;
+    }
+  }
+
+  if (nextHand.length !== 4) {
+    return {
+      success: false,
+      error: `Kartu tangan harus berjumlah 4 untuk menutup kartu (saat ini ${nextHand.length} kartu). Silakan pilih kartu buangan!`,
+    };
+  }
+
+  const nextHands = {
+    ...gameState.hands,
+    [playerId]: nextHand,
+  };
+
+  const playerName = gameState.players.find((p) => p.id === playerId)?.name || playerId;
+  const closerEval = calculateHandScore41(nextHand);
+
+  // Evaluate winners with closer rules
+  const result = determineWinners41(gameState.players, nextHands, playerId);
+  const isBusted = result.isBusted;
+  const winnerPlayer = result.winner?.player || result.rankings[0]?.player;
+
+  const nextState = {
+    ...gameState,
+    hands: nextHands,
+    discardPile: nextDiscardPile,
+    playerDiscardHistory: nextPlayerDiscardHistory,
+    gameStatus: GAME_STATUS_41.GAME_OVER,
+    winner: winnerPlayer,
+    closerPlayerId: playerId,
+    isBusted,
+    endReason: isBusted ? 'FAILED_KNOCK' : 'SUCCESSFUL_KNOCK',
+    rankings: result.rankings,
+    lastAction: {
+      type: 'CLOSE_HAND',
+      playerId,
+      playerName,
+      isBusted,
+      closerScore: closerEval.bestScore,
+      winnerName: winnerPlayer?.name,
+    },
+    history: [
+      ...gameState.history,
+      {
+        turn: gameState.turnNumber,
+        message: isBusted
+          ? `⚠️ ${playerName} menutup kartu dengan ${closerEval.bestScore} poin, TETAPI KALAH dari ${winnerPlayer?.name} (${result.winner?.score} poin)! Sesuai aturan, ${playerName} kalah di urutan paling bawah.`
+          : `🏆 ${playerName} menutup kartu dengan ${closerEval.bestScore} poin dan BERHASIL MENANG!`,
+      },
+    ],
+  };
+
+  return {
+    success: true,
+    state: nextState,
+    isGameOver: true,
+    isBusted,
+    winner: winnerPlayer,
+  };
 }

@@ -98,11 +98,19 @@ export function calculateHandScore41(hand = []) {
 
 /**
  * Ranks all players and determines winner(s) at end of game.
+ * If closerPlayerId is provided (someone declared "Tutup Kartu"):
+ * - If any other player has a higher score than the closer:
+ *   The closer loses completely and is placed at the very bottom (last rank).
+ *   The other players are ranked among themselves from highest to lowest.
+ * - Otherwise (closer has highest score):
+ *   The closer wins 1st place!
+ * 
  * @param {Array<Object>} players 
  * @param {Object} hands { [playerId]: Array<Card> }
- * @returns {Array<Object>} Ranked leaderboard with detailed score breakdowns
+ * @param {string|null} closerPlayerId
+ * @returns {{ winner: Object, rankings: Array<Object>, isBusted: boolean, closerPlayer: Object|null }}
  */
-export function determineWinners41(players = [], hands = {}) {
+export function determineWinners41(players = [], hands = {}, closerPlayerId = null) {
   const playerScores = players.map((p) => {
     const playerHand = hands[p.id] || [];
     const evaluation = calculateHandScore41(playerHand);
@@ -115,21 +123,67 @@ export function determineWinners41(players = [], hands = {}) {
       bestSuit: evaluation.bestSuit,
       dominantCount: evaluation.dominantCards.length,
       evaluation,
+      isCloser: closerPlayerId ? p.id === closerPlayerId : false,
+      isBusted: false,
     };
   });
 
-  // Sort: 41 Murni first, then highest net score, then most cards of dominant suit
-  playerScores.sort((a, b) => {
+  const sortRule = (a, b) => {
     if (a.is41 && !b.is41) return -1;
     if (!a.is41 && b.is41) return 1;
     if (b.score !== a.score) return b.score - a.score;
     return b.dominantCount - a.dominantCount;
-  });
+  };
 
+  if (closerPlayerId) {
+    const closer = playerScores.find((p) => p.player.id === closerPlayerId);
+    const otherPlayers = playerScores.filter((p) => p.player.id !== closerPlayerId);
+
+    if (closer) {
+      // Check if any other player scored HIGHER than the closer
+      const higherScorer = otherPlayers.find((other) => {
+        if (other.is41 && !closer.is41) return true;
+        if (closer.is41 && !other.is41) return false;
+        return other.score > closer.score;
+      });
+
+      if (higherScorer) {
+        // BUSTED KNOCK! Closer kalah dan ditempatkan di posisi paling bawah
+        closer.isBusted = true;
+        closer.penaltyReason = `Kalah Tutup Kartu: Poin (${closer.score}) dilampaui oleh ${higherScorer.player.name} (${higherScorer.score} pts)`;
+        
+        otherPlayers.sort(sortRule);
+        const rankings = [...otherPlayers, closer];
+        const winner = otherPlayers[0] || null;
+
+        return {
+          winner,
+          rankings,
+          isBusted: true,
+          closerPlayer: closer,
+        };
+      } else {
+        // SUCCESSFUL KNOCK! Closer menang juara 1
+        otherPlayers.sort(sortRule);
+        const rankings = [closer, ...otherPlayers];
+        return {
+          winner: closer,
+          rankings,
+          isBusted: false,
+          closerPlayer: closer,
+        };
+      }
+    }
+  }
+
+  // Normal ranking (Deck out or 41 Murni)
+  playerScores.sort(sortRule);
   const winner = playerScores[0] || null;
 
   return {
     winner,
     rankings: playerScores,
+    isBusted: false,
+    closerPlayer: null,
   };
 }
