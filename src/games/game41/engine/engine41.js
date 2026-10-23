@@ -55,28 +55,52 @@ export function initGame41(config = DEFAULT_CONFIG_41, customPlayers = null) {
   // Remaining cards form the Draw Pile (Stock)
   const drawPile = [...deck];
 
-  const firstPlayerId = players[0].id;
+  // Determine starting player:
+  // If firstPlayerId is specified in config (e.g. previous game winner), use that player.
+  // Otherwise (first game / new match), randomly pick a player to start!
+  let firstPlayer;
+  if (config?.firstPlayerId && players.some((p) => p.id === config.firstPlayerId)) {
+    firstPlayer = players.find((p) => p.id === config.firstPlayerId);
+  } else {
+    const randomIndex = Math.floor(Math.random() * players.length);
+    firstPlayer = players[randomIndex];
+  }
+  const firstPlayerId = firstPlayer.id;
 
   const playerDiscardHistory = {};
+  const discardsToPlayer = {};
   players.forEach((p) => {
     playerDiscardHistory[p.id] = [];
+    discardsToPlayer[p.id] = [];
   });
+
+  // The first player receives the initial table card as their available discard option
+  discardsToPlayer[firstPlayerId] = [
+    {
+      card: initialDiscardCard,
+      fromPlayerId: 'system',
+      fromPlayerName: 'Meja Awal',
+      turn: 1,
+      taken: null,
+    },
+  ];
 
   const initialState = {
     gameType: 'game41',
-    config: { ...config, playerCount },
+    config: { ...config, playerCount, firstPlayerId },
     players,
     hands,
     drawPile,
     discardPile,
     graveyard: [], // Discarded cards that were skipped / unpicked
-    playerDiscardHistory, // Private history of discarded cards per player
+    playerDiscardHistory, // Private history of discarded cards by each player
+    discardsToPlayer, // Private history of cards discarded/passed TO each player
     passedDiscard: {
       card: initialDiscardCard,
       fromPlayerId: 'system',
       fromPlayerName: 'Meja Awal',
       toPlayerId: firstPlayerId,
-      toPlayerName: players[0].name,
+      toPlayerName: firstPlayer.name,
     },
     currentPlayer: firstPlayerId,
     turnPhase: TURN_PHASE_41.DRAW,
@@ -90,7 +114,7 @@ export function initGame41(config = DEFAULT_CONFIG_41, customPlayers = null) {
     history: [
       {
         turn: 1,
-        message: `Permainan Kartu 41 dimulai (${playerCount} pemain). Giliran ${players[0].name} untuk mengambil kartu.`,
+        message: `Permainan Kartu 41 dimulai (${playerCount} pemain). Giliran pertama: ${firstPlayer.name} untuk mengambil kartu.`,
       },
     ],
     lastAction: null,
@@ -155,12 +179,25 @@ export function drawCard41(gameState, playerId, source = DRAW_SOURCE_41.STOCK) {
     ? 'Tumpukan Dek'
     : `Buangan dari ${gameState.passedDiscard?.fromPlayerName || 'pemain sebelumnya'} (${drawnCard.label}${drawnCard.symbol})`;
 
+  // Update status (taken: true/false) in the player's personal incoming discards history
+  const nextDiscardsToPlayer = { ...(gameState.discardsToPlayer || {}) };
+  const currentDiscardsToMe = [...(nextDiscardsToPlayer[playerId] || [])];
+  if (currentDiscardsToMe.length > 0) {
+    const lastIdx = currentDiscardsToMe.length - 1;
+    currentDiscardsToMe[lastIdx] = {
+      ...currentDiscardsToMe[lastIdx],
+      taken: source === DRAW_SOURCE_41.DISCARD,
+    };
+    nextDiscardsToPlayer[playerId] = currentDiscardsToMe;
+  }
+
   const nextState = {
     ...gameState,
     drawPile: nextDrawPile,
     discardPile: nextDiscardPile,
     graveyard: nextGraveyard,
     passedDiscard: null, // Consumed or archived
+    discardsToPlayer: nextDiscardsToPlayer,
     hands: nextHands,
     turnPhase: TURN_PHASE_41.DISCARD,
     lastAction: {
@@ -301,11 +338,26 @@ export function discardCard41(gameState, playerId, cardToDiscard) {
     toPlayerName: nextPlayer.name,
   };
 
+  const nextDiscardsToPlayer = {
+    ...(gameState.discardsToPlayer || {}),
+    [nextPlayer.id]: [
+      ...((gameState.discardsToPlayer && gameState.discardsToPlayer[nextPlayer.id]) || []),
+      {
+        card: cardToDiscard,
+        fromPlayerId: playerId,
+        fromPlayerName: playerName,
+        turn: gameState.turnNumber,
+        taken: null,
+      },
+    ],
+  };
+
   const nextState = {
     ...gameState,
     hands: nextHands,
     discardPile: nextDiscardPile,
     playerDiscardHistory: nextPlayerDiscardHistory,
+    discardsToPlayer: nextDiscardsToPlayer,
     passedDiscard: nextPassedDiscard,
     currentPlayer: nextPlayer.id,
     turnPhase: TURN_PHASE_41.DRAW,

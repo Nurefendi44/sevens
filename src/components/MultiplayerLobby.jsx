@@ -19,6 +19,8 @@ import {
   Layers,
   KeyRound,
   User,
+  Bot,
+  Trash2,
 } from 'lucide-react';
 import '../styles/multiplayer.css';
 
@@ -102,6 +104,8 @@ export default function MultiplayerLobby({
   onLeaveRoom,
   onCreateRoom,
   onJoinRoom,
+  onAddBot,
+  onRemoveBot,
   onSwitchToLocal,
   onBackToMenu,
   isSupabaseConfigured,
@@ -710,11 +714,24 @@ export default function MultiplayerLobby({
           <div className="vip-seats-meta-bar">
             <span className="seats-counter-title">
               <Users size={15} />
-              <span>Daftar Kursi Pemain</span>
+              <span>Daftar Kursi Pemain ({players.length}/{targetPlayerCount})</span>
             </span>
-            <span className="seats-progress-pill">
-              {players.length} / {targetPlayerCount} Kursi Terisi
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {isHost && players.length < targetPlayerCount && (
+                <button
+                  type="button"
+                  className="btn-meta-add-bot"
+                  onClick={onAddBot}
+                  title="Tambahkan Bot AI ke meja ini"
+                >
+                  <Bot size={14} />
+                  <span>+ Tambah Bot</span>
+                </button>
+              )}
+              <span className="seats-progress-pill">
+                {players.length} / {targetPlayerCount} Kursi Terisi
+              </span>
+            </div>
           </div>
 
           {/* Grid Kursi Pemain */}
@@ -722,16 +739,18 @@ export default function MultiplayerLobby({
             {slots.map((slotPlayer, idx) => {
               if (slotPlayer) {
                 const isMe = slotPlayer.id === myPlayerId;
+                const isBot = Boolean(slotPlayer.isBot);
+
                 return (
                   <div
                     key={slotPlayer.id}
                     className={`vip-seat-card seat-occupied ${
                       isMe ? 'seat-is-me' : ''
-                    } ${slotPlayer.isReady || slotPlayer.isHost ? 'seat-is-ready' : ''}`}
+                    } ${isBot ? 'seat-is-bot' : ''} ${slotPlayer.isReady || slotPlayer.isHost ? 'seat-is-ready' : ''}`}
                   >
                     <div className="seat-avatar-wrap">
                       <span className="seat-avatar-emoji">
-                        {slotPlayer.avatar || '🃏'}
+                        {slotPlayer.avatar || (isBot ? '🤖' : '🃏')}
                       </span>
                       {slotPlayer.isHost && (
                         <span className="seat-crown-badge" title="Host Room">
@@ -752,7 +771,11 @@ export default function MultiplayerLobby({
                         {slotPlayer.isHost && (
                           <span className="seat-pill pill-host">HOST MEJA</span>
                         )}
-                        {slotPlayer.isReady ? (
+                        {isBot ? (
+                          <span className="seat-pill pill-bot">
+                            🤖 BOT (AI)
+                          </span>
+                        ) : slotPlayer.isReady ? (
                           <span className="seat-pill pill-ready">
                             ● SIAP MAIN
                           </span>
@@ -763,30 +786,55 @@ export default function MultiplayerLobby({
                         )}
                       </div>
                     </div>
+
+                    {isHost && isBot && (
+                      <button
+                        type="button"
+                        className="btn-seat-remove-bot"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onRemoveBot) onRemoveBot(slotPlayer.id);
+                        }}
+                        title={`Keluarkan ${slotPlayer.name}`}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </div>
                 );
               }
 
               return (
-                <button
-                  key={`empty-${idx}`}
-                  type="button"
-                  className="vip-seat-card seat-empty"
-                  onClick={handleShareLink}
-                  title="Klik untuk menyalin link undangan"
-                >
-                  <div className="seat-empty-avatar">
-                    <UserPlus size={20} />
+                <div key={`empty-${idx}`} className="vip-seat-card seat-empty seat-empty-interactive">
+                  <div
+                    className="seat-empty-main"
+                    onClick={handleShareLink}
+                    title="Klik untuk menyalin link undangan teman"
+                  >
+                    <div className="seat-empty-avatar">
+                      <UserPlus size={18} />
+                    </div>
+                    <div className="seat-empty-info">
+                      <span className="seat-empty-title">Kursi #{idx + 1} Kosong</span>
+                      <span className="seat-empty-sub">+ Undang Teman</span>
+                    </div>
                   </div>
-                  <div className="seat-empty-info">
-                    <span className="seat-empty-title">
-                      Kursi #{idx + 1} Kosong
-                    </span>
-                    <span className="seat-empty-sub">
-                      + Klik untuk undang teman
-                    </span>
-                  </div>
-                </button>
+
+                  {isHost && (
+                    <button
+                      type="button"
+                      className="btn-seat-add-bot"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onAddBot) onAddBot();
+                      }}
+                      title="Tambahkan Bot AI ke kursi ini"
+                    >
+                      <Bot size={13} />
+                      <span>+ Bot</span>
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>

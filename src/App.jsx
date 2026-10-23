@@ -532,6 +532,26 @@ export default function App() {
     showToast('Telah keluar dari room.');
   };
 
+  const handleAddBotMultiplayer = async () => {
+    if (!currentRoom?.code || !isHost) return;
+    const res = await multiplayerAdapter.addBot(currentRoom.code, myPlayerId);
+    if (res.success && res.room) {
+      setCurrentRoom(res.room);
+    } else {
+      showToast(res.error || 'Gagal menambahkan bot.');
+    }
+  };
+
+  const handleRemoveBotMultiplayer = async (botId) => {
+    if (!currentRoom?.code || !isHost) return;
+    const res = await multiplayerAdapter.removeBot(currentRoom.code, myPlayerId, botId);
+    if (res.success && res.room) {
+      setCurrentRoom(res.room);
+    } else {
+      showToast(res.error || 'Gagal mengeluarkan bot.');
+    }
+  };
+
   // Restart / Reset Game
   const handleRestart = async (configOverrides) => {
     const nextCfg = configOverrides || gameConfig;
@@ -665,12 +685,13 @@ export default function App() {
   const handlePlayCard = async (card, chosenDirection = null) => {
     if (!card) return;
 
-    if (isMultiplayerMode && !isMyTurn) {
+    const isCurrentBot = isBotPlayer(gameState, gameState.currentPlayer);
+    if (isMultiplayerMode && !isMyTurn && !isCurrentBot) {
       setActiveFault({ message: 'Bukan giliran Anda! Tunggu giliran Anda bermain.' });
       return;
     }
 
-    const actingPlayerId = isMultiplayerMode ? myPlayerId : gameState.currentPlayer;
+    const actingPlayerId = isCurrentBot ? gameState.currentPlayer : (isMultiplayerMode ? myPlayerId : gameState.currentPlayer);
 
     // Check Ace closure choice condition (both 2 and K open, direction not locked)
     if (card.rank === 1 && !chosenDirection) {
@@ -724,12 +745,13 @@ export default function App() {
   const handleCloseCard = async (card) => {
     if (!card) return;
 
-    if (isMultiplayerMode && !isMyTurn) {
+    const isCurrentBot = isBotPlayer(gameState, gameState.currentPlayer);
+    if (isMultiplayerMode && !isMyTurn && !isCurrentBot) {
       setActiveFault({ message: 'Bukan giliran Anda! Tunggu giliran Anda bermain.' });
       return;
     }
 
-    const actingPlayerId = isMultiplayerMode ? myPlayerId : gameState.currentPlayer;
+    const actingPlayerId = isCurrentBot ? gameState.currentPlayer : (isMultiplayerMode ? myPlayerId : gameState.currentPlayer);
 
     const result = engineCloseCard(gameState, actingPlayerId, card);
     if (result.success) {
@@ -775,7 +797,8 @@ export default function App() {
     : true;
 
   const handleDrawCard41 = async (source) => {
-    const actingPlayerId = isMultiplayerMode ? myPlayerId : gameState41.currentPlayer;
+    const isCurrentBot = isBotPlayer(gameState41, gameState41.currentPlayer);
+    const actingPlayerId = isCurrentBot ? gameState41.currentPlayer : (isMultiplayerMode ? myPlayerId : gameState41.currentPlayer);
     const res = drawCard41(gameState41, actingPlayerId, source);
     if (res.success) {
       setGameState41(res.state);
@@ -789,7 +812,8 @@ export default function App() {
   };
 
   const handleDiscardCard41 = async (card) => {
-    const actingPlayerId = isMultiplayerMode ? myPlayerId : gameState41.currentPlayer;
+    const isCurrentBot = isBotPlayer(gameState41, gameState41.currentPlayer);
+    const actingPlayerId = isCurrentBot ? gameState41.currentPlayer : (isMultiplayerMode ? myPlayerId : gameState41.currentPlayer);
     const res = discardCard41(gameState41, actingPlayerId, card);
     if (res.success) {
       setGameState41(res.state);
@@ -817,7 +841,8 @@ export default function App() {
   };
 
   const handleCloseHand41 = async (card = null) => {
-    const actingPlayerId = isMultiplayerMode ? myPlayerId : gameState41.currentPlayer;
+    const isCurrentBot = isBotPlayer(gameState41, gameState41.currentPlayer);
+    const actingPlayerId = isCurrentBot ? gameState41.currentPlayer : (isMultiplayerMode ? myPlayerId : gameState41.currentPlayer);
     const res = closeHand41(gameState41, actingPlayerId, card);
     if (res.success) {
       setGameState41(res.state);
@@ -845,33 +870,41 @@ export default function App() {
   };
 
   const handleRestart41 = async (configOverrides) => {
+    const prevWinnerId = gameState41.winner?.id || (gameState41.rankings?.[0]?.player?.id) || null;
     if (gameMode === 'multiplayer' && currentRoom?.code) {
       const isHost = currentRoom.host_id === myPlayerId;
       if (!isHost) {
         showToast('Hanya Host yang dapat mengocok ulang dan memulai game baru.');
         return;
       }
-      const res = await multiplayerAdapter.restartGame(currentRoom.code, myPlayerId, { gameType: 'game41', ...configOverrides });
+      const res = await multiplayerAdapter.restartGame(currentRoom.code, myPlayerId, {
+        gameType: 'game41',
+        firstPlayerId: prevWinnerId,
+        ...configOverrides,
+      });
       if (res.success) {
         setGameState41(res.gameState);
         setIsDealingAnimationActive(true);
-        showToast('Permainan Kartu 41 baru dimulai!');
+        const starterName = res.gameState.players.find((p) => p.id === res.gameState.currentPlayer)?.name || 'Pemain';
+        showToast(`Permainan Kartu 41 baru dimulai! Giliran pertama: ${starterName}`);
       } else {
         showToast(res.error || 'Gagal memulai ulang permainan.');
       }
     } else if (gameMode === 'single') {
       const count = gameState41.players?.length || 2;
       const roster = createSinglePlayerRoster(count);
-      const nextState = initGame41({ playerCount: count }, roster);
+      const nextState = initGame41({ playerCount: count, firstPlayerId: prevWinnerId }, roster);
       setGameState41(nextState);
       setIsDealingAnimationActive(true);
-      showToast('Permainan Kartu 41 baru dimulai!');
+      const starterName = nextState.players.find((p) => p.id === nextState.currentPlayer)?.name || 'Pemain';
+      showToast(`Permainan Kartu 41 baru dimulai! Giliran pertama: ${starterName}`);
     } else {
       const count = gameState41.players?.length || 4;
-      const nextState = initGame41({ playerCount: count });
+      const nextState = initGame41({ playerCount: count, firstPlayerId: prevWinnerId });
       setGameState41(nextState);
       setIsDealingAnimationActive(true);
-      showToast('Permainan Kartu 41 baru dimulai!');
+      const starterName = nextState.players.find((p) => p.id === nextState.currentPlayer)?.name || 'Pemain';
+      showToast(`Permainan Kartu 41 baru dimulai! Giliran pertama: ${starterName}`);
     }
   };
 
@@ -901,7 +934,8 @@ export default function App() {
   }, [activeIsMyTurn, isMultiplayerMode, isSingleMode]);
 
   const handlePlayBigTwoCombo = async (selectedCards) => {
-    const actingPlayerId = isMultiplayerMode ? myPlayerId : gameStateBigtwo.currentPlayer;
+    const isCurrentBot = isBotPlayer(gameStateBigtwo, gameStateBigtwo.currentPlayer);
+    const actingPlayerId = isCurrentBot ? gameStateBigtwo.currentPlayer : (isMultiplayerMode ? myPlayerId : gameStateBigtwo.currentPlayer);
     const res = playComboBigTwo(gameStateBigtwo, actingPlayerId, selectedCards);
     if (res.success) {
       setGameStateBigtwo(res.gameState);
@@ -921,7 +955,8 @@ export default function App() {
   };
 
   const handlePassBigTwo = async () => {
-    const actingPlayerId = isMultiplayerMode ? myPlayerId : gameStateBigtwo.currentPlayer;
+    const isCurrentBot = isBotPlayer(gameStateBigtwo, gameStateBigtwo.currentPlayer);
+    const actingPlayerId = isCurrentBot ? gameStateBigtwo.currentPlayer : (isMultiplayerMode ? myPlayerId : gameStateBigtwo.currentPlayer);
     const res = passTurnBigTwo(gameStateBigtwo, actingPlayerId);
     if (res.success) {
       setGameStateBigtwo(res.gameState);
@@ -1087,7 +1122,10 @@ export default function App() {
   const [botThinking, setBotThinking] = useState(null);
 
   useEffect(() => {
-    if (gameMode !== 'single') {
+    const isMultiplayerHost = isMultiplayerMode && currentRoom?.host_id === myPlayerId;
+    const canDriveBots = isSingleMode || isMultiplayerHost;
+
+    if (!canDriveBots) {
       setBotThinking(null);
       return;
     }
@@ -1176,6 +1214,10 @@ export default function App() {
     gameStateBigtwo.gameStatus,
     gameStateBigtwo.currentTrick,
     bigTwoWheelPicker?.isOpen,
+    isMultiplayerMode,
+    isSingleMode,
+    currentRoom?.host_id,
+    myPlayerId,
   ]);
 
   // Find active turn player's name
@@ -1898,6 +1940,8 @@ export default function App() {
           onLeaveRoom={handleLeaveRoom}
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
+          onAddBot={handleAddBotMultiplayer}
+          onRemoveBot={handleRemoveBotMultiplayer}
           onSwitchToLocal={() => setGameMode('local')}
           onBackToMenu={handleBackToModeSelect}
           isSupabaseConfigured={isSupabaseConfigured}

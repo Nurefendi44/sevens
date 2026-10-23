@@ -56,8 +56,13 @@ export function createSinglePlayerRoster(totalPlayers = 2) {
 }
 
 export function isBotPlayer(gameState, playerId) {
+  if (!playerId) return false;
   const p = gameState?.players?.find((pl) => pl.id === playerId);
-  return Boolean(p?.isBot);
+  if (p) {
+    if (p.isBot === true) return true;
+    if (p.isHuman === false) return true;
+  }
+  return String(playerId).startsWith('bot_');
 }
 
 // ---------------------------------------------------------------------------

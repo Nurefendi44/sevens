@@ -81,13 +81,13 @@ export default function RulesGuide41Modal({ onClose }) {
             </ul>
           </div>
 
-          {/* Riwayat Buangan Rahasia */}
+          {/* Riwayat Kartu yang Dibuang ke Anda (Rahasia) */}
           <div style={{ background: 'rgba(139, 92, 246, 0.08)', padding: '12px 14px', borderRadius: '8px', borderLeft: '3px solid #8b5cf6' }}>
             <h4 style={{ color: '#a78bfa', margin: '0 0 6px 0' }}>
-              🔒 RIWAYAT BUANGAN PRIBADI (RAHASIA)
+              🔒 RIWAYAT KARTU YANG DIBUANG KE ANDA (RAHASIA)
             </h4>
             <p style={{ margin: 0, color: '#ddd6fe', fontSize: '0.85rem', lineHeight: '1.6' }}>
-              Setiap kartu yang Anda buang otomatis tercatat pada panel <strong>"Buangan Saya"</strong>. Riwayat ini <strong>bersifat rahasia dan hanya dapat dilihat oleh Anda sendiri</strong>, pemain lawan tidak dapat melihat kartu apa saja yang sudah pernah Anda buang sebelumnya.
+              Setiap kali pemain sebelum Anda membuang kartu ke arah Anda, kartu tersebut otomatis tercatat pada panel <strong>"Dibuang ke Saya"</strong>. Riwayat ini <strong>bersifat rahasia dan hanya dapat dilihat oleh Anda sendiri</strong>, lengkap dengan catatan apakah kartu tersebut Anda ambil ke tangan atau Anda lewati.
             </p>
           </div>
 

@@ -52,8 +52,8 @@ export default function Table41({
   const passedDiscard = gameState.passedDiscard;
   const isDiscardForMe = Boolean(passedDiscard && passedDiscard.card && (passedDiscard.toPlayerId === myPlayer.id));
 
-  // Private Discard History for viewing player only
-  const myDiscardHistory = (myPlayer?.id && gameState.playerDiscardHistory?.[myPlayer.id]) || [];
+  // Private Discards PASSED TO viewing player only ("riwayat kartu yang dibuang ke saya")
+  const myIncomingDiscards = (myPlayer?.id && gameState.discardsToPlayer?.[myPlayer.id]) || [];
 
   // Determine next player (who will receive my discarded card)
   const myIndex = gameState.players.findIndex((p) => p.id === myPlayer.id);
@@ -223,7 +223,7 @@ export default function Table41({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {/* Private Discard History Toggle Button */}
+            {/* Private Incoming Discards Toggle Button */}
             <button
               className="toggle-chip history-toggle-chip"
               onClick={() => setIsHistoryExpanded((prev) => !prev)}
@@ -236,10 +236,10 @@ export default function Table41({
                 color: '#fbbf24',
                 cursor: 'pointer',
               }}
-              title="Lihat history kartu yang pernah Anda buang (Hanya Anda yang melihat)"
+              title="Lihat riwayat semua kartu yang dibuang/dioper ke Anda (Hanya Anda yang melihat)"
             >
               <Lock size={12} />
-              <span>Buangan Saya ({myDiscardHistory.length})</span>
+              <span>Dibuang ke Saya ({myIncomingDiscards.length})</span>
               {isHistoryExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
             </button>
 
@@ -265,40 +265,55 @@ export default function Table41({
           </div>
         </div>
 
-        {/* Private Discard History Panel (Only visible to the individual player) */}
+        {/* Private Discard History Panel: Cards discarded TO viewing player */}
         {isHistoryExpanded && (
           <div className="game41-my-history-bar">
             <div className="my-history-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Lock size={13} color="#fbbf24" />
                 <strong style={{ fontSize: '0.8rem', color: '#fbbf24' }}>
-                  Riwayat Kartu Buangan Anda
+                  Riwayat Kartu yang Dibuang ke Anda
                 </strong>
-                <span className="my-history-badge">{myDiscardHistory.length}</span>
+                <span className="my-history-badge">{myIncomingDiscards.length}</span>
               </div>
               <span className="my-history-hint">
-                🔒 Hanya Anda yang dapat melihat daftar kartu ini
+                🔒 Rahasia: Hanya Anda yang dapat melihat riwayat kartu yang dioper ke Anda
               </span>
             </div>
 
-            {myDiscardHistory.length > 0 ? (
+            {myIncomingDiscards.length > 0 ? (
               <div className="my-history-cards-scroll">
-                {myDiscardHistory.map((card, idx) => (
-                  <div
-                    key={card.id ? `${card.id}-${idx}` : idx}
-                    className="my-history-card-item"
-                    title={`Buangan ke-${idx + 1}: ${card.label}${card.symbol}`}
-                  >
-                    <span className="history-step-num">#{idx + 1}</span>
-                    <div style={{ transform: 'scale(0.85)', transformOrigin: 'top center' }}>
-                      <CardView card={card} mini />
+                {myIncomingDiscards.map((item, idx) => {
+                  const card = item.card;
+                  return (
+                    <div
+                      key={card.id ? `${card.id}-${idx}` : idx}
+                      className="my-history-card-item"
+                      title={`Kartu #${idx + 1} dari ${item.fromPlayerName || 'pemain sebelumnya'}: ${card.label}${card.symbol} (${item.taken === true ? 'Diambil ke tangan' : item.taken === false ? 'Dilewati' : 'Tersedia saat ini'})`}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '2px', padding: '0 2px' }}>
+                        <span className="history-step-num">#{idx + 1}</span>
+                        {item.taken === true ? (
+                          <span style={{ fontSize: '0.62rem', color: '#34d399', fontWeight: 800 }}>Diambil</span>
+                        ) : item.taken === false ? (
+                          <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Dilewati</span>
+                        ) : (
+                          <span style={{ fontSize: '0.62rem', color: '#fbbf24', fontWeight: 900 }}>Tersedia</span>
+                        )}
+                      </div>
+                      <div style={{ transform: 'scale(0.85)', transformOrigin: 'top center' }}>
+                        <CardView card={card} mini />
+                      </div>
+                      <span style={{ fontSize: '0.65rem', color: '#cbd5e1', maxWidth: '58px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.fromPlayerName || 'Lawan'}
+                      </span>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="my-history-empty">
-                Anda belum membuang kartu pada permainan ini.
+                Belum ada kartu buangan yang dioper ke Anda pada permainan ini.
               </div>
             )}
           </div>

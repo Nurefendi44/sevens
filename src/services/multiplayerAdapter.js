@@ -347,7 +347,104 @@ export const multiplayerAdapter = {
   },
 
   /**
-   * Host starts the game for all 4 players
+   * Host adds a Bot into the room
+   */
+  async addBot(roomCode, hostId) {
+    if (!supabase) return { success: false, error: 'Supabase offline.' };
+    const code = roomCode.trim().toUpperCase();
+    const { room, error } = await this.getRoom(code);
+    if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+
+    if (room.host_id !== hostId) {
+      return { success: false, error: 'Hanya Host yang dapat menambahkan bot!' };
+    }
+
+    if (room.status !== 'lobby') {
+      return { success: false, error: 'Permainan sudah dimulai.' };
+    }
+
+    const currentPlayers = room.players || [];
+    const maxPlayers = room.game_state?.config?.playerCount || 4;
+    if (currentPlayers.length >= maxPlayers) {
+      return { success: false, error: `Meja sudah penuh (maksimal ${maxPlayers} pemain)!` };
+    }
+
+    const botCount = currentPlayers.filter((p) => p.isBot).length + 1;
+    const botAvatars = ['🤖', '👾', '🦾', '🧠', '⚙️', '🛸'];
+    const botId = `bot_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const nextSeat = currentPlayers.length;
+
+    const botPlayer = {
+      id: botId,
+      name: `Bot ${botCount}`,
+      seatIndex: nextSeat,
+      isHost: false,
+      isReady: true,
+      isBot: true,
+      avatar: botAvatars[(botCount - 1) % botAvatars.length],
+      joinedAt: Date.now(),
+    };
+
+    const updatedPlayers = [...currentPlayers, botPlayer];
+
+    const { data: updatedRoom, error: updateErr } = await supabase
+      .from('rooms')
+      .update({
+        players: updatedPlayers,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('code', code)
+      .select()
+      .single();
+
+    if (updateErr) {
+      return { success: false, error: updateErr.message };
+    }
+
+    return { success: true, room: updatedRoom, bot: botPlayer };
+  },
+
+  /**
+   * Host removes a Bot from the room
+   */
+  async removeBot(roomCode, hostId, botId) {
+    if (!supabase) return { success: false, error: 'Supabase offline.' };
+    const code = roomCode.trim().toUpperCase();
+    const { room, error } = await this.getRoom(code);
+    if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+
+    if (room.host_id !== hostId) {
+      return { success: false, error: 'Hanya Host yang dapat mengeluarkan bot!' };
+    }
+
+    if (room.status !== 'lobby') {
+      return { success: false, error: 'Permainan sudah dimulai.' };
+    }
+
+    const currentPlayers = room.players || [];
+    const updatedPlayers = currentPlayers
+      .filter((p) => p.id !== botId)
+      .map((p, idx) => ({ ...p, seatIndex: idx }));
+
+    const { data: updatedRoom, error: updateErr } = await supabase
+      .from('rooms')
+      .update({
+        players: updatedPlayers,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('code', code)
+      .select()
+      .single();
+
+    if (updateErr) {
+      return { success: false, error: updateErr.message };
+    }
+
+    return { success: true, room: updatedRoom };
+  },
+
+  /**
+   * Host starts the game for all players
    */
   async startGame(roomCode, hostId, configOverrides = {}) {
     if (!supabase) return { success: false, error: 'Supabase offline.' };
@@ -369,14 +466,15 @@ export const multiplayerAdapter = {
 
     const actualPlayerCount = players.length;
 
-    // Format players into Engine structure
+    // Format players into Engine structure (preserving isBot and isHuman flags)
     const formattedPlayers = players.map((p, idx) => ({
       id: p.id,
       name: p.name,
       seat: SEAT_POSITIONS[idx] || `seat_${idx + 1}`,
-      isHuman: true,
+      isHuman: !p.isBot,
+      isBot: Boolean(p.isBot),
       avatar: p.avatar,
-      isHost: p.isHost,
+      isHost: Boolean(p.isHost),
     }));
 
     // Initialize state from decoupled Game Engine with correct player count & gameType
@@ -449,9 +547,10 @@ export const multiplayerAdapter = {
       id: p.id,
       name: p.name,
       seat: SEAT_POSITIONS[idx] || `seat_${idx + 1}`,
-      isHuman: true,
+      isHuman: !p.isBot,
+      isBot: Boolean(p.isBot),
       avatar: p.avatar,
-      isHost: p.isHost,
+      isHost: Boolean(p.isHost),
     }));
 
     if (formattedPlayers.length < 2) {
@@ -460,14 +559,15 @@ export const multiplayerAdapter = {
 
     const actualPlayerCount = formattedPlayers.length;
     const determinedGameType = configOverrides?.gameType || room.game_state?.gameType || 'sevens';
+    const prevWinnerId = configOverrides?.firstPlayerId || room.game_state?.winner?.id || null;
     let nextGameState;
     if (determinedGameType === 'bigtwo') {
       const effectiveDeckMode = actualPlayerCount > 4
         ? (configOverrides.deckMode || room.game_state?.config?.deckMode || 'single')
         : 'single';
-      nextGameState = initBigTwo({ ...configOverrides, playerCount: actualPlayerCount, deckMode: effectiveDeckMode }, formattedPlayers);
+      nextGameState = initBigTwo({ ...configOverrides, firstPlayerId: prevWinnerId, playerCount: actualPlayerCount, deckMode: effectiveDeckMode }, formattedPlayers);
     } else if (determinedGameType === 'game41') {
-      nextGameState = initGame41({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
+      nextGameState = initGame41({ ...configOverrides, firstPlayerId: prevWinnerId, playerCount: actualPlayerCount }, formattedPlayers);
     } else {
       nextGameState = initGame({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
     }
