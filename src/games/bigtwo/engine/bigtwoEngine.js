@@ -140,6 +140,7 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
 
   const initialState = {
     gameType: 'bigtwo',
+    deckMode: config.deckMode,
     config,
     players,
     hands,

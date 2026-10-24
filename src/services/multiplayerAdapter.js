@@ -196,7 +196,9 @@ export const multiplayerAdapter = {
     const code = generateRoomCode();
     const playerId = getLocalPlayerId();
     const targetMax = [2, 3, 4, 5, 6].includes(Number(maxPlayers)) ? Number(maxPlayers) : 4;
-    const effectiveDeckMode = targetMax > 4 ? (options?.deckMode || 'single') : 'single';
+    const effectiveDeckMode = targetMax > 4
+      ? (options?.deckMode || (gameType === 'bigtwo' ? 'double' : 'single'))
+      : 'single';
 
     const hostPlayer = {
       id: playerId,
@@ -444,6 +446,43 @@ export const multiplayerAdapter = {
   },
 
   /**
+   * Host updates room config (e.g. deckMode: 'double' | 'single')
+   */
+  async updateRoomConfig(roomCode, hostId, configUpdates = {}) {
+    if (!supabase) return { success: false, error: 'Supabase offline.' };
+    const code = roomCode.trim().toUpperCase();
+    const { room, error } = await this.getRoom(code);
+    if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+
+    if (room.host_id !== hostId) {
+      return { success: false, error: 'Hanya Host yang dapat mengubah konfigurasi meja!' };
+    }
+
+    const currentConfig = room.game_state?.config || {};
+    const updatedConfig = { ...currentConfig, ...configUpdates };
+    const updatedGameState = {
+      ...(room.game_state || {}),
+      config: updatedConfig,
+    };
+
+    const { data: updatedRoom, error: updateErr } = await supabase
+      .from('rooms')
+      .update({
+        game_state: updatedGameState,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('code', code)
+      .select()
+      .single();
+
+    if (updateErr) {
+      return { success: false, error: updateErr.message };
+    }
+
+    return { success: true, room: updatedRoom };
+  },
+
+  /**
    * Host starts the game for all players
    */
   async startGame(roomCode, hostId, configOverrides = {}) {
@@ -482,7 +521,7 @@ export const multiplayerAdapter = {
     let gameState;
     if (determinedGameType === 'bigtwo') {
       const effectiveDeckMode = actualPlayerCount > 4
-        ? (configOverrides.deckMode || room.game_state?.config?.deckMode || 'single')
+        ? (configOverrides.deckMode || room.game_state?.config?.deckMode || 'double')
         : 'single';
       gameState = initBigTwo({ ...configOverrides, playerCount: actualPlayerCount, deckMode: effectiveDeckMode }, formattedPlayers);
     } else if (determinedGameType === 'game41') {
@@ -563,7 +602,7 @@ export const multiplayerAdapter = {
     let nextGameState;
     if (determinedGameType === 'bigtwo') {
       const effectiveDeckMode = actualPlayerCount > 4
-        ? (configOverrides.deckMode || room.game_state?.config?.deckMode || 'single')
+        ? (configOverrides.deckMode || room.game_state?.config?.deckMode || 'double')
         : 'single';
       nextGameState = initBigTwo({ ...configOverrides, firstPlayerId: prevWinnerId, playerCount: actualPlayerCount, deckMode: effectiveDeckMode }, formattedPlayers);
     } else if (determinedGameType === 'game41') {

@@ -106,17 +106,20 @@ export default function MultiplayerLobby({
   onJoinRoom,
   onAddBot,
   onRemoveBot,
+  onUpdateRoomConfig,
   onSwitchToLocal,
   onBackToMenu,
   isSupabaseConfigured,
   inviteRoomCode = null,
   activeGameType = 'sevens',
+  initialDeckMode = 'double',
+  initialPlayerCount = 4,
 }) {
   const [activeTab, setActiveTab] = useState(() =>
     inviteRoomCode ? 'join' : 'create'
   );
-  const [selectedPlayerCount, setSelectedPlayerCount] = useState(4);
-  const [deckMode, setDeckMode] = useState('single');
+  const [selectedPlayerCount, setSelectedPlayerCount] = useState(initialPlayerCount || 4);
+  const [deckMode, setDeckMode] = useState(initialDeckMode || 'double');
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
@@ -733,6 +736,68 @@ export default function MultiplayerLobby({
               </span>
             </div>
           </div>
+
+          {/* Opsi / Status Mode Deck khusus Big Two jika pemain atau kapasitas > 4 */}
+          {activeGameType === 'bigtwo' && (players.length > 4 || targetPlayerCount > 4) && (
+            <div className="vip-deck-config-bar">
+              <div className="vip-deck-info-col">
+                <span className="vip-deck-title">
+                  <Layers size={14} />
+                  <span>Mode Deck ({players.length > 4 ? players.length : targetPlayerCount} Pemain):</span>
+                </span>
+                <span className="vip-deck-desc">
+                  {(room.game_state?.config?.deckMode || 'double') === 'double'
+                    ? 'Double Deck (104 Kartu) • Setiap pemain dapat 20–21 kartu penuh'
+                    : 'Single Deck (52 Kartu) • Setiap pemain dapat 10–11 kartu'}
+                </span>
+              </div>
+
+              {isHost ? (
+                <div className="vip-deck-toggle-group">
+                  <button
+                    type="button"
+                    className={`btn-vip-deck ${
+                      (room.game_state?.config?.deckMode || 'double') === 'single'
+                        ? 'active'
+                        : ''
+                    }`}
+                    onClick={() =>
+                      onUpdateRoomConfig &&
+                      onUpdateRoomConfig({ deckMode: 'single' })
+                    }
+                  >
+                    Single (52)
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn-vip-deck ${
+                      (room.game_state?.config?.deckMode || 'double') === 'double'
+                        ? 'active'
+                        : ''
+                    }`}
+                    onClick={() =>
+                      onUpdateRoomConfig &&
+                      onUpdateRoomConfig({ deckMode: 'double' })
+                    }
+                  >
+                    Double (104)
+                  </button>
+                </div>
+              ) : (
+                <span
+                  className={`vip-deck-badge ${
+                    (room.game_state?.config?.deckMode || 'double') === 'double'
+                      ? 'badge-double'
+                      : ''
+                  }`}
+                >
+                  {(room.game_state?.config?.deckMode || 'double') === 'double'
+                    ? 'Double Deck (104 Kartu)'
+                    : 'Single Deck (52 Kartu)'}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Grid Kursi Pemain */}
           <div className="vip-seats-grid">

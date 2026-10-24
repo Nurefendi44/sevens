@@ -90,7 +90,13 @@ export default function ModeSelectionScreen({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [offlinePlayerCount, setOfflinePlayerCount] = useState(4);
   const [botCount, setBotCount] = useState(1); // Default: 1 Bot (Main berdua: Anda + 1 Bot)
-  const [deckMode, setDeckMode] = useState('single');
+  const [deckMode, setDeckMode] = useState('double');
+
+  useEffect(() => {
+    if (selectedGame) {
+      setActiveGame(selectedGame);
+    }
+  }, [selectedGame]);
 
   // Mobile bottom sheet drag-down-to-close gesture handling
   const [dragOffsetY, setDragOffsetY] = useState(0);
@@ -645,7 +651,17 @@ export default function ModeSelectionScreen({
                 </div>
 
                 <div className="mode-card-footer">
-                  <button type="button" className="btn-mode-action btn-single-action">
+                  <button
+                    type="button"
+                    className="btn-mode-action btn-single-action"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectMode('single', botCount + 1, activeGame, {
+                        botCount,
+                        deckMode: botCount + 1 > 4 ? deckMode : 'single',
+                      });
+                    }}
+                  >
                     <span>Mulai Main (1 vs {botCount} Bot AI)</span>
                     <ArrowRight size={17} />
                   </button>
@@ -656,14 +672,20 @@ export default function ModeSelectionScreen({
               <div
                 className="mode-card mode-card-online"
                 onClick={() =>
-                  onSelectMode('multiplayer', null, activeGame, { deckMode })
+                  onSelectMode('multiplayer', null, activeGame, {
+                    deckMode,
+                    playerCount: botCount + 1,
+                  })
                 }
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    onSelectMode('multiplayer', null, activeGame, { deckMode });
+                    onSelectMode('multiplayer', null, activeGame, {
+                      deckMode,
+                      playerCount: botCount + 1,
+                    });
                   }
                 }}
               >
@@ -704,7 +726,17 @@ export default function ModeSelectionScreen({
                 </div>
 
                 <div className="mode-card-footer">
-                  <button type="button" className="btn-mode-action btn-online">
+                  <button
+                    type="button"
+                    className="btn-mode-action btn-online"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectMode('multiplayer', null, activeGame, {
+                        deckMode,
+                        playerCount: botCount + 1,
+                      });
+                    }}
+                  >
                     <span>Masuk Lobby Online</span>
                     <ArrowRight size={17} />
                   </button>
@@ -829,7 +861,16 @@ export default function ModeSelectionScreen({
                 </div>
 
                 <div className="mode-card-footer">
-                  <button type="button" className="btn-mode-action btn-offline">
+                  <button
+                    type="button"
+                    className="btn-mode-action btn-offline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectMode('local', offlinePlayerCount, activeGame, {
+                        deckMode: offlinePlayerCount > 4 ? deckMode : 'single',
+                      });
+                    }}
+                  >
                     <span>Mulai Main ({offlinePlayerCount} Pemain)</span>
                     <ArrowRight size={17} />
                   </button>

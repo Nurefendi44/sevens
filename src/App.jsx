@@ -84,6 +84,7 @@ import {
 export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDealingAnimationActive, setIsDealingAnimationActive] = useState(false);
+  const [multiplayerInitOptions, setMultiplayerInitOptions] = useState(null);
 
   // Table View & Mobile Focus Settings (Persistent)
   const [showOpponents, setShowOpponents] = useState(() => {
@@ -437,7 +438,7 @@ export default function App() {
   // MULTIPLAYER HANDLERS
   // ---------------------------------------------------------------------------
   const handleCreateRoom = async (username, maxPlayers = 4, gameType = activeGameType, options = {}) => {
-    const res = await multiplayerAdapter.createRoom(username, maxPlayers, gameType);
+    const res = await multiplayerAdapter.createRoom(username, maxPlayers, gameType, options);
     if (res.success) {
       setCurrentRoom(res.room);
       setMyPlayerId(res.player.id);
@@ -460,6 +461,23 @@ export default function App() {
       showToast(`Room ${res.room.code} (${res.room.game_state?.config?.playerCount || maxPlayers} Pemain) berhasil dibuat!`);
     }
     return res;
+  };
+
+  const handleUpdateRoomConfig = async (configUpdates) => {
+    if (!currentRoom?.code || !isHost) return;
+    const res = await multiplayerAdapter.updateRoomConfig(currentRoom.code, myPlayerId, configUpdates);
+    if (res.success && res.room) {
+      setCurrentRoom(res.room);
+      if (configUpdates.deckMode) {
+        showToast(
+          configUpdates.deckMode === 'double'
+            ? 'Meja diatur ke Mode Double Deck (104 kartu) 🎴'
+            : 'Meja diatur ke Mode Single Deck (52 kartu) 🃏'
+        );
+      }
+    } else if (res.error) {
+      showToast(res.error);
+    }
   };
 
   const handleJoinRoom = async (code, username) => {
@@ -497,8 +515,14 @@ export default function App() {
     if (!currentRoom?.code) return;
     const isBigTwo = activeGameType === 'bigtwo' || currentRoom.game_state?.gameType === 'bigtwo';
     const isGame41 = activeGameType === 'game41' || currentRoom.game_state?.gameType === 'game41';
+    const actualPlayerCount = currentRoom.players?.length || 4;
+    const roomDeckMode = currentRoom.game_state?.config?.deckMode;
+    const effectiveDeckMode = isBigTwo && actualPlayerCount > 4
+      ? (roomDeckMode || 'double')
+      : 'single';
+
     const configToUse = isBigTwo
-      ? { gameType: 'bigtwo', ...currentRoom.game_state?.config }
+      ? { gameType: 'bigtwo', ...currentRoom.game_state?.config, deckMode: effectiveDeckMode }
       : isGame41
       ? { gameType: 'game41' }
       : gameConfig;
@@ -1383,6 +1407,7 @@ export default function App() {
               setIsDealingAnimationActive(true);
               setGameMode('local');
             } else {
+              setMultiplayerInitOptions(options);
               setGameMode(mode);
             }
           }}
@@ -1457,7 +1482,7 @@ export default function App() {
 
           <span className="brand-tag desktop-only">
             {activeGameType === 'bigtwo'
-              ? `Capsa Banting • ${gameStateBigtwo.players?.length || 4} Pemain${gameStateBigtwo.deckMode === 'double' ? ' (Double Deck)' : ''}`
+              ? `Capsa Banting • ${gameStateBigtwo.players?.length || 4} Pemain${(gameStateBigtwo.deckMode === 'double' || gameStateBigtwo.config?.deckMode === 'double') ? ' (Double Deck • 104 Kartu)' : ((gameStateBigtwo.players?.length || 4) > 4 ? ' (Single Deck • 52 Kartu)' : '')}`
               : activeGameType === 'game41'
               ? `Kartu 41 • ${gameState41.players?.length || 4} Pemain`
               : `Tujuh Sekop • ${gameState.players?.length || 4} Pemain`}
@@ -1960,11 +1985,14 @@ export default function App() {
           onJoinRoom={handleJoinRoom}
           onAddBot={handleAddBotMultiplayer}
           onRemoveBot={handleRemoveBotMultiplayer}
+          onUpdateRoomConfig={handleUpdateRoomConfig}
           onSwitchToLocal={() => setGameMode('local')}
           onBackToMenu={handleBackToModeSelect}
           isSupabaseConfigured={isSupabaseConfigured}
           inviteRoomCode={inviteRoomCode}
           activeGameType={activeGameType}
+          initialDeckMode={multiplayerInitOptions?.deckMode || 'double'}
+          initialPlayerCount={multiplayerInitOptions?.playerCount || 4}
         />
       )}
 
