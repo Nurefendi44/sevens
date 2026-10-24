@@ -1010,10 +1010,25 @@ export default function App() {
     }
   };
 
+  const getScoreSessionKey = (gameKey) => {
+    if (isMultiplayerMode && currentRoom?.code) {
+      return `${gameKey}_room_${currentRoom.code}`;
+    }
+    if (gameMode === 'single') {
+      return `${gameKey}_single`;
+    }
+    if (gameMode === 'local') {
+      return `${gameKey}_local`;
+    }
+    return gameKey;
+  };
+
   const recordGameEndScore = (gameKey, rankings = [], winnerId = null) => {
     if (!rankings || rankings.length === 0) return;
+    const sessionKey = getScoreSessionKey(gameKey);
+
     setScoreboardData((prev) => {
-      const gameScores = { ...(prev[gameKey] || {}) };
+      const gameScores = { ...(prev[sessionKey] || {}) };
       rankings.forEach((r, idx) => {
         const key = r.id || r.name;
         const current = gameScores[key] || {
@@ -1032,7 +1047,7 @@ export default function App() {
           score: (current.score || 0) + (isWinner ? 1 : 0),
         };
       });
-      const nextScores = { ...prev, [gameKey]: gameScores };
+      const nextScores = { ...prev, [sessionKey]: gameScores };
       try {
         localStorage.setItem('poker_scoreboard_data', JSON.stringify(nextScores));
       } catch (e) {
@@ -1042,16 +1057,74 @@ export default function App() {
     });
   };
 
-  const handleResetScoreboard = (gameKey) => {
+  const handleResetScoreboard = (gameKey = activeGameType) => {
+    const sessionKey = getScoreSessionKey(gameKey);
     setScoreboardData((prev) => {
-      const target = gameKey || activeGameType;
-      const nextScores = { ...prev, [target]: {} };
+      const nextScores = { ...prev, [sessionKey]: {} };
       try {
         localStorage.setItem('poker_scoreboard_data', JSON.stringify(nextScores));
       } catch (e) {}
       return nextScores;
     });
-    showToast('Scoreboard berhasil di-reset!');
+
+    if (activeGameType === 'bigtwo') {
+      setGameStateBigtwo((prev) => {
+        const resetState = { ...prev, sessionScores: {} };
+        if (isMultiplayerMode && currentRoom?.code) {
+          multiplayerAdapter.syncGameState(currentRoom.code, resetState);
+        }
+        return resetState;
+      });
+    }
+
+    showToast('Scoreboard sesi ini berhasil di-reset!');
+  };
+
+  const getCurrentScoreboardList = () => {
+    const sessionKey = getScoreSessionKey(activeGameType);
+
+    if (activeGameType === 'bigtwo') {
+      const engineSessionScores = gameStateBigtwo.sessionScores || currentRoom?.game_state?.sessionScores;
+      if (engineSessionScores && Object.keys(engineSessionScores).length > 0) {
+        return Object.values(engineSessionScores);
+      }
+      if (scoreboardData[sessionKey] && Object.keys(scoreboardData[sessionKey]).length > 0) {
+        return Object.values(scoreboardData[sessionKey]);
+      }
+      const players = (isMultiplayerMode && currentRoom?.players)
+        ? currentRoom.players
+        : (gameStateBigtwo.players || []);
+      return players.map((p) => ({
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar,
+        games: 0,
+        score: 0,
+      }));
+    }
+
+    const scores = scoreboardData[sessionKey] || scoreboardData[activeGameType] || {};
+    return Object.values(scores);
+  };
+
+  const getCurrentScoreboardTitle = () => {
+    if (activeGameType === 'bigtwo') {
+      if (isMultiplayerMode && currentRoom?.code) {
+        return `Scoreboard • Capsa Banting (Sesi Room: ${currentRoom.code})`;
+      }
+      if (gameMode === 'single') {
+        return 'Scoreboard • Capsa Banting (Sesi vs Bot)';
+      }
+      return 'Scoreboard • Capsa Banting (Sesi Offline)';
+    }
+    if (activeGameType === 'game41') {
+      return isMultiplayerMode && currentRoom?.code
+        ? `Scoreboard • Remi 41 (Sesi Room: ${currentRoom.code})`
+        : 'Scoreboard • Remi 41';
+    }
+    return isMultiplayerMode && currentRoom?.code
+      ? `Scoreboard • Sevens (Sesi Room: ${currentRoom.code})`
+      : 'Scoreboard • Tujuh Sekop';
   };
 
   const handleBigTwoWheelComplete = async (selectedPlayerId) => {
@@ -1116,11 +1189,13 @@ export default function App() {
       const count = gameStateBigtwo.players?.length || 2;
       const roster = createSinglePlayerRoster(count);
       const effectiveDeckMode = count > 4 ? gameStateBigtwo.config.deckMode : 'single';
+      const carriedSessionScores = gameStateBigtwo.sessionScores || {};
       const nextState = initBigTwo(
         {
           playerCount: count,
           deckMode: effectiveDeckMode,
           startingPlayerId: previousWinnerId,
+          sessionScores: carriedSessionScores,
           ...configOverrides,
         },
         roster
@@ -1136,10 +1211,12 @@ export default function App() {
       }
     } else {
       const count = gameStateBigtwo.players?.length || 4;
+      const carriedSessionScores = gameStateBigtwo.sessionScores || {};
       const nextState = initBigTwo({
         playerCount: count,
         deckMode: gameStateBigtwo.config.deckMode,
         startingPlayerId: previousWinnerId,
+        sessionScores: carriedSessionScores,
         ...configOverrides,
       });
       setGameStateBigtwo(nextState);
@@ -2096,6 +2173,7 @@ export default function App() {
           onOpenScoreboard={() => setShowScoreboardModal(true)}
           isMultiplayer={isMultiplayerMode}
           isHost={isHost}
+          currentRoomCode={isMultiplayerMode ? currentRoom?.code : null}
         />
       )}
 
@@ -2103,15 +2181,9 @@ export default function App() {
       <ScoreboardModal
         isOpen={showScoreboardModal}
         onClose={() => setShowScoreboardModal(false)}
-        scoreboardData={Object.values(scoreboardData[activeGameType] || {})}
+        scoreboardData={getCurrentScoreboardList()}
         onResetScoreboard={() => handleResetScoreboard(activeGameType)}
-        activeGameTitle={
-          activeGameType === 'bigtwo'
-            ? 'Scoreboard • Capsa Banting (Big Two)'
-            : activeGameType === 'game41'
-            ? 'Scoreboard • Remi 41'
-            : 'Scoreboard • Sevens (Tujuh Sekop)'
-        }
+        activeGameTitle={getCurrentScoreboardTitle()}
       />
 
       {/* Rules Guide Modals */}

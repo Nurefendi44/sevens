@@ -600,15 +600,40 @@ export const multiplayerAdapter = {
     const determinedGameType = configOverrides?.gameType || room.game_state?.gameType || 'sevens';
     const prevWinnerId = configOverrides?.firstPlayerId || room.game_state?.winner?.id || null;
     let nextGameState;
+    const carriedSessionScores = room.game_state?.sessionScores || {};
     if (determinedGameType === 'bigtwo') {
       const effectiveDeckMode = actualPlayerCount > 4
         ? (configOverrides.deckMode || room.game_state?.config?.deckMode || 'double')
         : 'single';
-      nextGameState = initBigTwo({ ...configOverrides, firstPlayerId: prevWinnerId, playerCount: actualPlayerCount, deckMode: effectiveDeckMode }, formattedPlayers);
+      nextGameState = initBigTwo(
+        {
+          ...configOverrides,
+          firstPlayerId: prevWinnerId,
+          playerCount: actualPlayerCount,
+          deckMode: effectiveDeckMode,
+          sessionScores: carriedSessionScores,
+        },
+        formattedPlayers
+      );
     } else if (determinedGameType === 'game41') {
-      nextGameState = initGame41({ ...configOverrides, firstPlayerId: prevWinnerId, playerCount: actualPlayerCount }, formattedPlayers);
+      nextGameState = initGame41(
+        {
+          ...configOverrides,
+          firstPlayerId: prevWinnerId,
+          playerCount: actualPlayerCount,
+          sessionScores: carriedSessionScores,
+        },
+        formattedPlayers
+      );
     } else {
-      nextGameState = initGame({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
+      nextGameState = initGame(
+        {
+          ...configOverrides,
+          playerCount: actualPlayerCount,
+          sessionScores: carriedSessionScores,
+        },
+        formattedPlayers
+      );
     }
 
     await supabase

@@ -9,6 +9,7 @@ export default function GameOverBigTwoModal({
   onOpenScoreboard,
   isMultiplayer = false,
   isHost = true,
+  currentRoomCode = null,
 }) {
   if (!gameState || gameState.gameStatus !== 'GAME_OVER') return null;
 
@@ -30,6 +31,22 @@ export default function GameOverBigTwoModal({
       <div className="modal-card" style={{ maxWidth: '600px', width: '92vw' }}>
         {/* Header */}
         <div className="modal-header" style={{ justifyContent: 'center', textAlign: 'center', flexDirection: 'column' }}>
+          {currentRoomCode && (
+            <span style={{
+              display: 'inline-block',
+              background: 'rgba(56, 189, 248, 0.15)',
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+              color: '#38bdf8',
+              fontSize: '0.74rem',
+              fontWeight: 800,
+              padding: '0.2rem 0.65rem',
+              borderRadius: '999px',
+              marginBottom: '0.4rem',
+              letterSpacing: '0.5px'
+            }}>
+              SESI ROOM: {currentRoomCode}
+            </span>
+          )}
           <div style={{ fontSize: '3rem', margin: '0.25rem 0' }}>
             {gameState.endReason === 'LAST_CARD_TWO_DISQUALIFICATION' ? '🚫' : '🏆'}
           </div>
@@ -106,7 +123,7 @@ export default function GameOverBigTwoModal({
                     </div>
                   </div>
 
-                  <div style={{ textAlign: 'right' }}>
+                  <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
                     {isDisqualified ? (
                       <span style={{ background: '#dc2626', color: '#ffffff', padding: '0.25rem 0.65rem', borderRadius: '6px', fontWeight: 800, fontSize: '0.75rem' }}>
                         0 Poin ⚠️
@@ -118,6 +135,11 @@ export default function GameOverBigTwoModal({
                     ) : (
                       <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.85rem' }}>
                         Peringkat #{rankPos}
+                      </span>
+                    )}
+                    {gameState.sessionScores?.[r.id] && (
+                      <span style={{ fontSize: '0.72rem', color: '#38bdf8', fontWeight: 700 }}>
+                        Total Sesi: <strong>{gameState.sessionScores[r.id].score || 0} Poin</strong> ({gameState.sessionScores[r.id].games || 0} Game)
                       </span>
                     )}
                   </div>

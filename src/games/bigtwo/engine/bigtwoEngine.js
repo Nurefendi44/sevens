@@ -144,6 +144,7 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
     config,
     players,
     hands,
+    sessionScores: configOverrides.sessionScores || {},
     undealtCards: fullDeck,
     currentTrick: {
       cards: [],
@@ -325,6 +326,28 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
         timestamp: Date.now(),
       };
 
+      // Hitung akumulasi skor sesi room saat ini
+      const prevSessionScores = gameState.sessionScores || {};
+      const updatedSessionScores = { ...prevSessionScores };
+      rankings.forEach((r, idx) => {
+        const key = r.id || r.name;
+        const current = updatedSessionScores[key] || {
+          id: r.id,
+          name: r.name,
+          avatar: r.avatar,
+          games: 0,
+          score: 0,
+        };
+        const isWinner = r.id === actualWinner?.id;
+        updatedSessionScores[key] = {
+          ...current,
+          name: r.name || current.name,
+          avatar: r.avatar || current.avatar,
+          games: (current.games || 0) + 1,
+          score: (current.score || 0) + (isWinner ? 1 : 0),
+        };
+      });
+
       const finishedState = {
         ...gameState,
         hands: updatedHands,
@@ -342,6 +365,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
         disqualifiedPlayerName: playerName,
         endReason: 'LAST_CARD_TWO_DISQUALIFICATION',
         rankings,
+        sessionScores: updatedSessionScores,
         history: [
           ...gameState.history,
           {
@@ -401,6 +425,29 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
         timestamp: Date.now(),
       };
 
+      // Hitung akumulasi skor sesi room saat ini
+      const prevSessionScores = gameState.sessionScores || {};
+      const updatedSessionScores = { ...prevSessionScores };
+      const normalWinnerId = nextFinishedPlayers[0]?.id || playerId;
+      finalRankings.forEach((r, idx) => {
+        const key = r.id || r.name;
+        const current = updatedSessionScores[key] || {
+          id: r.id,
+          name: r.name,
+          avatar: r.avatar,
+          games: 0,
+          score: 0,
+        };
+        const isWinner = r.id === normalWinnerId || idx === 0;
+        updatedSessionScores[key] = {
+          ...current,
+          name: r.name || current.name,
+          avatar: r.avatar || current.avatar,
+          games: (current.games || 0) + 1,
+          score: (current.score || 0) + (isWinner ? 1 : 0),
+        };
+      });
+
       const finalState = {
         ...gameState,
         hands: updatedHands,
@@ -413,10 +460,11 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
         lastPlayedCombo: combo,
         lastAction: actionPayload,
         gameStatus: GAME_STATUS_BIGTWO.GAME_OVER,
-        winner: nextFinishedPlayers[0]?.id || playerId,
+        winner: normalWinnerId,
         endReason: 'NORMAL_WIN',
         finishedPlayers: nextFinishedPlayers,
         rankings: finalRankings,
+        sessionScores: updatedSessionScores,
         history: [
           ...gameState.history,
           {
