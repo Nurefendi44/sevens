@@ -67,7 +67,10 @@ export default function RulesGuide41Modal({ onClose }) {
             </h4>
             <ul style={{ margin: 0, paddingLeft: '1.25rem', color: '#fef3c7', fontSize: '0.85rem', lineHeight: '1.6' }}>
               <li>
-                <strong>Tutup Kapan Saja:</strong> Kapanpun pemain siap pada gilirannya, pemain dapat menekan tombol <strong>Tutup Kartu</strong>.
+                <strong>Syarat Minimal 4 Putaran:</strong> Fitur <strong>Tutup Kartu</strong> baru terbuka setelah permainan berjalan <strong>minimal 4 putaran</strong> (semua pemain sudah melewati setidaknya 3–4 kali giliran).
+              </li>
+              <li>
+                <strong>Tutup Saat Giliran Anda:</strong> Setelah mencapai Putaran 4 atau lebih, pemain dapat menekan tombol <strong>Tutup Kartu</strong> pada gilirannya jika merasa poin kartunya sudah cukup tinggi untuk menang.
               </li>
               <li>
                 <strong>Aturan Penalti Terbawah:</strong> Jika Pemain A menutup kartu misal dengan <strong>30 poin</strong>, lalu ada Pemain B yang memiliki poin <strong>di atas 30 poin</strong>, maka:

@@ -794,10 +794,16 @@ export default function App() {
   // ---------------------------------------------------------------------------
   const isMyTurn41 = isMultiplayerMode
     ? gameState41.currentPlayer === myPlayerId
+    : isSingleMode
+    ? gameState41.currentPlayer === SINGLE_HUMAN_ID
     : true;
 
   const handleDrawCard41 = async (source) => {
     const isCurrentBot = isBotPlayer(gameState41, gameState41.currentPlayer);
+    if (!isCurrentBot && !isMyTurn41) {
+      showToast('Bukan giliran Anda!');
+      return;
+    }
     const actingPlayerId = isCurrentBot ? gameState41.currentPlayer : (isMultiplayerMode ? myPlayerId : gameState41.currentPlayer);
     const res = drawCard41(gameState41, actingPlayerId, source);
     if (res.success) {
@@ -813,6 +819,10 @@ export default function App() {
 
   const handleDiscardCard41 = async (card) => {
     const isCurrentBot = isBotPlayer(gameState41, gameState41.currentPlayer);
+    if (!isCurrentBot && !isMyTurn41) {
+      showToast('Bukan giliran Anda!');
+      return;
+    }
     const actingPlayerId = isCurrentBot ? gameState41.currentPlayer : (isMultiplayerMode ? myPlayerId : gameState41.currentPlayer);
     const res = discardCard41(gameState41, actingPlayerId, card);
     if (res.success) {
@@ -842,6 +852,10 @@ export default function App() {
 
   const handleCloseHand41 = async (card = null) => {
     const isCurrentBot = isBotPlayer(gameState41, gameState41.currentPlayer);
+    if (!isCurrentBot && !isMyTurn41) {
+      showToast('Bukan giliran Anda!');
+      return;
+    }
     const actingPlayerId = isCurrentBot ? gameState41.currentPlayer : (isMultiplayerMode ? myPlayerId : gameState41.currentPlayer);
     const res = closeHand41(gameState41, actingPlayerId, card);
     if (res.success) {
@@ -1334,6 +1348,8 @@ export default function App() {
               } else if (chosenGame === 'game41') {
                 const state41 = initGame41({ playerCount: totalCount }, roster);
                 setGameState41(state41);
+                const starterName = state41.players.find((p) => p.id === state41.currentPlayer)?.name || 'Pemain';
+                showToast(`Permainan Kartu 41 dimulai! Giliran pertama: ${starterName}`);
               } else {
                 const nextCfg = { ...gameConfig, playerCount: totalCount };
                 setGameConfig(nextCfg);
@@ -1357,6 +1373,8 @@ export default function App() {
               } else if (chosenGame === 'game41') {
                 const state41 = initGame41({ playerCount: count });
                 setGameState41(state41);
+                const starterName = state41.players.find((p) => p.id === state41.currentPlayer)?.name || 'Pemain';
+                showToast(`Permainan Kartu 41 dimulai! Giliran pertama: ${starterName}`);
               } else {
                 const nextCfg = { ...gameConfig, playerCount: count };
                 setGameConfig(nextCfg);

@@ -105,6 +105,7 @@ export function initGame41(config = DEFAULT_CONFIG_41, customPlayers = null) {
     currentPlayer: firstPlayerId,
     turnPhase: TURN_PHASE_41.DRAW,
     turnNumber: 1,
+    currentRound: 1,
     gameStatus: GAME_STATUS_41.PLAYING,
     winner: null,
     closerPlayerId: null,
@@ -391,6 +392,7 @@ export function discardCard41(gameState, playerId, cardToDiscard) {
     currentPlayer: nextPlayer.id,
     turnPhase: TURN_PHASE_41.DRAW,
     turnNumber: gameState.turnNumber + 1,
+    currentRound: Math.floor(gameState.turnNumber / gameState.players.length) + 1,
     lastAction: {
       type: 'DISCARD',
       playerId,
@@ -426,6 +428,14 @@ export function closeHand41(gameState, playerId, cardToDiscard = null) {
 
   if (gameState.currentPlayer !== playerId) {
     return { success: false, error: 'Bukan giliran Anda untuk menutup kartu!' };
+  }
+
+  const currentRound = gameState.currentRound || Math.floor(((gameState.turnNumber || 1) - 1) / (gameState.players?.length || 4)) + 1;
+  if (currentRound < 4) {
+    return {
+      success: false,
+      error: `Tutup Kartu hanya dapat dilakukan setelah minimal 4 putaran permainan! (Saat ini masih Putaran ke-${currentRound})`,
+    };
   }
 
   const currentHand = gameState.hands[playerId] || [];

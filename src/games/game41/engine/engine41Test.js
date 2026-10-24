@@ -2,7 +2,7 @@
  * UNIT TESTS FOR KARTU 41 ENGINE
  */
 
-import { initGame41, drawCard41, discardCard41 } from './engine41.js';
+import { initGame41, drawCard41, discardCard41, closeHand41 } from './engine41.js';
 import { calculateHandScore41, determineWinners41 } from './scoring41.js';
 import { SUITS } from '../../../engine/constants.js';
 
@@ -176,5 +176,45 @@ if (p2UpdatedEntry.takenByNextPlayer !== false) {
   throw new Error('FAIL: Expected p2 discard entry to have takenByNextPlayer: false when skipped');
 }
 console.log('✓ Discard tracking when skipped by next player verified!');
+
+console.log('\n=== TEST 6: MINIMAL 4 PUTARAN UNTUK TUTUP KARTU ===');
+const roundTestGame = initGame41({ playerCount: 4, firstPlayerId: 'player_1' });
+// Try to close hand in Putaran 1
+const failClose = closeHand41(roundTestGame, 'player_1');
+if (failClose.success) {
+  throw new Error('FAIL: Tutup kartu should NOT be allowed in Putaran 1!');
+}
+console.log('✓ Successfully blocked Tutup Kartu in Putaran 1:', failClose.error);
+
+// Set game state to Putaran 4 (turnNumber = 13 for 4 players)
+const round4State = {
+  ...roundTestGame,
+  turnNumber: 13,
+  currentRound: 4,
+  currentPlayer: 'player_1',
+};
+const successClose = closeHand41(round4State, 'player_1');
+if (!successClose.success) {
+  throw new Error('FAIL: Tutup kartu should be allowed in Putaran 4: ' + successClose.error);
+}
+console.log('✓ Successfully allowed Tutup Kartu in Putaran 4!');
+
+console.log('\n=== TEST 7: RANDOM FIRST TURN & RESTART WITH PREVIOUS WINNER ===');
+const starters = new Set();
+for (let i = 0; i < 60; i++) {
+  const g = initGame41({ playerCount: 4 });
+  starters.add(g.currentPlayer);
+}
+if (starters.size < 2) {
+  throw new Error('FAIL: First turn should be randomized among all players! Got: ' + Array.from(starters).join(', '));
+}
+console.log(`✓ First turn is randomized across players (observed ${starters.size} different starting players)!`);
+
+// Verify when firstPlayerId is provided (restart with previous winner), that winner starts!
+const restartState = initGame41({ playerCount: 4, firstPlayerId: 'player_3' });
+if (restartState.currentPlayer !== 'player_3') {
+  throw new Error('FAIL: Expected player_3 (previous winner) to start on restart, got ' + restartState.currentPlayer);
+}
+console.log('✓ Previous winner (player_3) correctly starts on restart/play again!');
 
 console.log('\n🎉 ALL KARTU 41 TESTS PASSED WITH 100% SUCCESS! 🎉');

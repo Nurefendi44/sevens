@@ -63,6 +63,9 @@ export default function Table41({
   const myIndex = gameState.players.findIndex((p) => p.id === myPlayer.id);
   const nextPlayer = gameState.players[(myIndex + 1) % gameState.players.length];
 
+  const currentRound = gameState.currentRound || Math.floor(((gameState.turnNumber || 1) - 1) / (gameState.players?.length || 4)) + 1;
+  const canCloseRound = currentRound >= 4;
+
   const canDraw = isMyTurn && gameState.turnPhase === TURN_PHASE_41.DRAW;
   const canDiscard = isMyTurn && gameState.turnPhase === TURN_PHASE_41.DISCARD && selectedCard;
 
@@ -148,6 +151,20 @@ export default function Table41({
       <div className="game41-center-arena">
         {/* Status Indicator Banner */}
         <div className="game41-action-status-banner">
+          <span
+            style={{
+              background: canCloseRound ? 'rgba(245, 158, 11, 0.25)' : 'rgba(255, 255, 255, 0.1)',
+              border: canCloseRound ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(255, 255, 255, 0.15)',
+              color: canCloseRound ? '#fbbf24' : '#cbd5e1',
+              padding: '2px 8px',
+              borderRadius: '9999px',
+              fontSize: '0.72rem',
+              fontWeight: 800,
+              fontFamily: 'var(--font-mono, monospace)',
+            }}
+          >
+            Putaran {currentRound}
+          </span>
           <span className="status-pulse-dot" />
           <span>
             {isMyTurn ? (
@@ -155,15 +172,17 @@ export default function Table41({
                 isDiscardForMe && passedDiscard?.card ? (
                   `Giliran Anda: Ambil kartu dari Dek ATAU ambil Buangan (${passedDiscard.card.label}${passedDiscard.card.symbol}) dari ${passedDiscard.fromPlayerName}`
                 ) : (
-                  'Giliran Anda: Ambil 1 kartu dari Tumpukan Dek Tertutup, atau Tutup Kartu jika siap!'
+                  canCloseRound
+                    ? 'Giliran Anda: Ambil 1 kartu dari Dek Tertutup, atau Tutup Kartu jika siap!'
+                    : `Giliran Anda: Ambil 1 kartu dari Dek Tertutup (Tutup Kartu terbuka di Putaran 4)`
                 )
               ) : (
                 `Giliran Anda: Pilih 1 kartu di tangan untuk Dibuang ke ${nextPlayer?.name || 'pemain berikutnya'}`
               )
             ) : (
-              `Giliran ${currentTurnPlayer?.name || 'Pemain Lain'} (${
-                gameState.turnPhase === TURN_PHASE_41.DRAW ? 'Mengambil kartu' : 'Membuang kartu'
-              })`
+              `Menunggu Giliran: Saat ini giliran ${currentTurnPlayer?.name || 'Pemain Lain'} sedang ${
+                gameState.turnPhase === TURN_PHASE_41.DRAW ? 'mengambil kartu' : 'membuang kartu'
+              }...`
             )}
           </span>
         </div>
@@ -492,23 +511,32 @@ export default function Table41({
               </button>
             )}
 
-            {/* TUTUP KARTU (KNOCK) BUTTON - Player can declare to close at any time during their turn */}
+            {/* TUTUP KARTU (KNOCK) BUTTON - Player can declare to close at any time during their turn if round >= 4 */}
             {isMyTurn && (
               <button
                 className="btn-game41 btn-game41-close-hand"
-                disabled={gameState.turnPhase === TURN_PHASE_41.DISCARD && !selectedCard}
+                disabled={!canCloseRound || (gameState.turnPhase === TURN_PHASE_41.DISCARD && !selectedCard)}
                 onClick={() => setShowConfirmClose(true)}
                 title={
-                  gameState.turnPhase === TURN_PHASE_41.DRAW
+                  !canCloseRound
+                    ? `Tutup Kartu baru dapat dilakukan mulai Putaran ke-4 (Saat ini Putaran ke-${currentRound})`
+                    : gameState.turnPhase === TURN_PHASE_41.DRAW
                     ? `Tutup kartu sekarang dengan 4 kartu Anda (${activeEval.bestScore} pts)`
                     : selectedCard
                     ? `Buang ${selectedCard.label}${selectedCard.symbol} dan tutup kartu dengan sisa (${previewEval.bestScore} pts)`
                     : 'Pilih 1 kartu buangan terlebih dahulu untuk menutup kartu'
                 }
+                style={{
+                  opacity: !canCloseRound ? 0.6 : 1,
+                  cursor: !canCloseRound ? 'not-allowed' : 'pointer',
+                  filter: !canCloseRound ? 'grayscale(0.5)' : 'none',
+                }}
               >
                 <ShieldAlert size={15} />
                 <span>
-                  {gameState.turnPhase === TURN_PHASE_41.DRAW
+                  {!canCloseRound
+                    ? `Tutup Kartu (Putaran ${currentRound}/4)`
+                    : gameState.turnPhase === TURN_PHASE_41.DRAW
                     ? `Tutup Kartu (${activeEval.bestScore} pts)`
                     : selectedCard
                     ? `Tutup Kartu (${previewEval.bestScore} pts)`

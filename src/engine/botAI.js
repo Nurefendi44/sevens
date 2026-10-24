@@ -166,7 +166,8 @@ export function chooseGame41BotMove(gameState, botId) {
 
   // DISCARD phase: drop the card whose removal keeps the highest score
   const best = bestScoreAfterDiscard(hand);
-  if (best.score >= 34) {
+  const currentRound = gameState.currentRound || Math.floor(((gameState.turnNumber || 1) - 1) / (gameState.players?.length || 4)) + 1;
+  if (best.score >= 34 && currentRound >= 4) {
     return { action: 'closeHand', card: best.discard };
   }
   return { action: 'discard', card: best.discard };
