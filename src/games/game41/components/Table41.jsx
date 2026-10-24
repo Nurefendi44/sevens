@@ -500,7 +500,7 @@ export default function Table41({
                 onClick={() => setShowConfirmClose(true)}
                 title={
                   gameState.turnPhase === TURN_PHASE_41.DRAW
-                    ? `Tutup kartu sekarang dengan 4 kartu Anda (${handEval.bestScore} pts)`
+                    ? `Tutup kartu sekarang dengan 4 kartu Anda (${activeEval.bestScore} pts)`
                     : selectedCard
                     ? `Buang ${selectedCard.label}${selectedCard.symbol} dan tutup kartu dengan sisa (${previewEval.bestScore} pts)`
                     : 'Pilih 1 kartu buangan terlebih dahulu untuk menutup kartu'
