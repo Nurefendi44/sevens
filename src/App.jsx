@@ -188,21 +188,29 @@ export default function App() {
     }
   }, [currentRoom]);
 
-  // Synchronize game_state inside cached room when it changes
+  // Synchronize game_state inside cached room when it changes (only when game is playing)
   useEffect(() => {
-    if (typeof localStorage !== 'undefined' && currentRoom?.code && gameState) {
+    if (typeof localStorage !== 'undefined' && currentRoom?.code && currentRoom?.status === 'playing') {
       try {
         const cached = localStorage.getItem('sevens_cached_room');
         if (cached) {
           const parsed = JSON.parse(cached);
           if (parsed && parsed.code === currentRoom.code) {
-            parsed.game_state = gameState;
-            localStorage.setItem('sevens_cached_room', JSON.stringify(parsed));
+            const activeState =
+              activeGameType === 'bigtwo'
+                ? gameStateBigtwo
+                : activeGameType === 'game41'
+                ? gameState41
+                : gameState;
+            if (activeState && activeState.players) {
+              parsed.game_state = activeState;
+              localStorage.setItem('sevens_cached_room', JSON.stringify(parsed));
+            }
           }
         }
       } catch (e) {}
     }
-  }, [gameState, currentRoom?.code]);
+  }, [gameState, gameStateBigtwo, gameState41, currentRoom?.code, currentRoom?.status, activeGameType]);
 
   // Local UI State
   const [handSortBy, setHandSortBy] = useState('suit');
@@ -442,18 +450,25 @@ export default function App() {
     if (res.success) {
       setCurrentRoom(res.room);
       setMyPlayerId(res.player.id);
-      if (res.room.game_state) {
-        if (res.room.game_state.gameType === 'bigtwo') {
-          setActiveGameType('bigtwo');
-          if (res.room.game_state.players) setGameStateBigtwo(res.room.game_state);
-        } else if (res.room.game_state.gameType === 'game41') {
-          setActiveGameType('game41');
-          if (res.room.game_state.players) setGameState41(res.room.game_state);
-        } else {
-          setActiveGameType('sevens');
-          if (res.room.game_state.players) setGameState(res.room.game_state);
-        }
+      // Clean reset game engine states for fresh waiting room
+      if (gameType === 'bigtwo') {
+        setActiveGameType('bigtwo');
+        setGameStateBigtwo(initBigTwo({ playerCount: maxPlayers, deckMode: options?.deckMode || 'single' }));
+      } else if (gameType === 'game41') {
+        setActiveGameType('game41');
+        setGameState41(initGame41({ playerCount: maxPlayers }));
+      } else {
+        setActiveGameType('sevens');
+        setGameState(initGame({ ...gameConfig, playerCount: maxPlayers }));
       }
+      setBigTwoWheelPicker(null);
+      setPendingBigTwoWheel(null);
+      setRecentActionPopup(null);
+      setSelectedCard(null);
+      setActiveFault(null);
+      setPendingAceChoiceCard(null);
+      setIsDealingAnimationActive(false);
+
       if (typeof window !== 'undefined' && window.history) {
         window.history.replaceState({}, document.title, window.location.pathname);
       }
@@ -485,18 +500,36 @@ export default function App() {
     if (res.success) {
       setCurrentRoom(res.room);
       setMyPlayerId(res.player.id);
-      if (res.room.game_state) {
-        if (res.room.game_state.gameType === 'bigtwo') {
-          setActiveGameType('bigtwo');
-          if (res.room.game_state.players) setGameStateBigtwo(res.room.game_state);
-        } else if (res.room.game_state.gameType === 'game41') {
-          setActiveGameType('game41');
-          if (res.room.game_state.players) setGameState41(res.room.game_state);
+      const roomGame = res.room.game_state?.gameType || activeGameType;
+      setActiveGameType(roomGame);
+
+      if (res.room.game_state?.players) {
+        if (roomGame === 'bigtwo') {
+          setGameStateBigtwo(res.room.game_state);
+        } else if (roomGame === 'game41') {
+          setGameState41(res.room.game_state);
         } else {
-          setActiveGameType('sevens');
-          if (res.room.game_state.players) setGameState(res.room.game_state);
+          setGameState(res.room.game_state);
+        }
+      } else {
+        // Room still in lobby: initialize fresh engine state with clean roster
+        const capacity = res.room.game_state?.config?.playerCount || 4;
+        if (roomGame === 'bigtwo') {
+          setGameStateBigtwo(initBigTwo({ playerCount: capacity, deckMode: res.room.game_state?.config?.deckMode || 'single' }));
+        } else if (roomGame === 'game41') {
+          setGameState41(initGame41({ playerCount: capacity }));
+        } else {
+          setGameState(initGame({ ...gameConfig, playerCount: capacity }));
         }
       }
+      setBigTwoWheelPicker(null);
+      setPendingBigTwoWheel(null);
+      setRecentActionPopup(null);
+      setSelectedCard(null);
+      setActiveFault(null);
+      setPendingAceChoiceCard(null);
+      setIsDealingAnimationActive(false);
+
       if (typeof window !== 'undefined' && window.history) {
         window.history.replaceState({}, document.title, window.location.pathname);
       }
@@ -553,6 +586,21 @@ export default function App() {
     }
     setCurrentRoom(null);
     clearLocalSession();
+    // Clean reset local game engine states
+    if (activeGameType === 'bigtwo') {
+      setGameStateBigtwo(initBigTwo({ playerCount: 4 }));
+    } else if (activeGameType === 'game41') {
+      setGameState41(initGame41({ playerCount: 4 }));
+    } else {
+      setGameState(initGame(DEFAULT_CONFIG));
+    }
+    setBigTwoWheelPicker(null);
+    setPendingBigTwoWheel(null);
+    setRecentActionPopup(null);
+    setSelectedCard(null);
+    setActiveFault(null);
+    setPendingAceChoiceCard(null);
+    setIsDealingAnimationActive(false);
     showToast('Telah keluar dari room.');
   };
 
@@ -708,6 +756,7 @@ export default function App() {
   // ---------------------------------------------------------------------------
   const handlePlayCard = async (card, chosenDirection = null) => {
     if (!card) return;
+    if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
 
     const isCurrentBot = isBotPlayer(gameState, gameState.currentPlayer);
     if (isMultiplayerMode && !isMyTurn && !isCurrentBot) {
@@ -768,6 +817,7 @@ export default function App() {
 
   const handleCloseCard = async (card) => {
     if (!card) return;
+    if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
 
     const isCurrentBot = isBotPlayer(gameState, gameState.currentPlayer);
     if (isMultiplayerMode && !isMyTurn && !isCurrentBot) {
@@ -823,6 +873,7 @@ export default function App() {
     : true;
 
   const handleDrawCard41 = async (source) => {
+    if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
     const isCurrentBot = isBotPlayer(gameState41, gameState41.currentPlayer);
     if (!isCurrentBot && !isMyTurn41) {
       showToast('Bukan giliran Anda!');
@@ -842,6 +893,7 @@ export default function App() {
   };
 
   const handleDiscardCard41 = async (card) => {
+    if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
     const isCurrentBot = isBotPlayer(gameState41, gameState41.currentPlayer);
     if (!isCurrentBot && !isMyTurn41) {
       showToast('Bukan giliran Anda!');
@@ -875,6 +927,7 @@ export default function App() {
   };
 
   const handleCloseHand41 = async (card = null) => {
+    if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
     const isCurrentBot = isBotPlayer(gameState41, gameState41.currentPlayer);
     if (!isCurrentBot && !isMyTurn41) {
       showToast('Bukan giliran Anda!');
@@ -972,6 +1025,7 @@ export default function App() {
   }, [activeIsMyTurn, isMultiplayerMode, isSingleMode]);
 
   const handlePlayBigTwoCombo = async (selectedCards) => {
+    if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
     const isCurrentBot = isBotPlayer(gameStateBigtwo, gameStateBigtwo.currentPlayer);
     const actingPlayerId = isCurrentBot ? gameStateBigtwo.currentPlayer : (isMultiplayerMode ? myPlayerId : gameStateBigtwo.currentPlayer);
     const res = playComboBigTwo(gameStateBigtwo, actingPlayerId, selectedCards);
@@ -993,6 +1047,7 @@ export default function App() {
   };
 
   const handlePassBigTwo = async () => {
+    if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
     const isCurrentBot = isBotPlayer(gameStateBigtwo, gameStateBigtwo.currentPlayer);
     const actingPlayerId = isCurrentBot ? gameStateBigtwo.currentPlayer : (isMultiplayerMode ? myPlayerId : gameStateBigtwo.currentPlayer);
     const res = passTurnBigTwo(gameStateBigtwo, actingPlayerId);
@@ -1237,7 +1292,10 @@ export default function App() {
   const [botThinking, setBotThinking] = useState(null);
 
   useEffect(() => {
-    const isMultiplayerHost = isMultiplayerMode && currentRoom?.host_id === myPlayerId;
+    const isMultiplayerHost =
+      isMultiplayerMode &&
+      currentRoom?.host_id === myPlayerId &&
+      currentRoom?.status === 'playing';
     const canDriveBots = isSingleMode || isMultiplayerHost;
 
     if (!canDriveBots) {

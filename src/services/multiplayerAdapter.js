@@ -554,8 +554,11 @@ export const multiplayerAdapter = {
   async syncGameState(roomCode, nextGameState) {
     if (!supabase) return { success: false };
     const code = roomCode.trim().toUpperCase();
-    const nextStatus =
-      nextGameState.gameStatus === GAME_STATUS.GAME_OVER ? 'game_over' : 'playing';
+    const isOver =
+      nextGameState.gameStatus === GAME_STATUS.GAME_OVER ||
+      nextGameState.gameStatus === 'GAME_OVER' ||
+      nextGameState.gameStatus === 'game_over';
+    const nextStatus = isOver ? 'game_over' : 'playing';
 
     const { error } = await supabase
       .from('rooms')
@@ -564,7 +567,8 @@ export const multiplayerAdapter = {
         status: nextStatus,
         updated_at: new Date().toISOString(),
       })
-      .eq('code', code);
+      .eq('code', code)
+      .neq('status', 'lobby');
 
     if (error) {
       console.error('Failed to sync game state:', error);
