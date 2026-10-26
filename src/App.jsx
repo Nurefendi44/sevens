@@ -188,30 +188,6 @@ export default function App() {
     }
   }, [currentRoom]);
 
-  // Synchronize game_state inside cached room when it changes (only when game is playing)
-  useEffect(() => {
-    if (typeof localStorage !== 'undefined' && currentRoom?.code && currentRoom?.status === 'playing') {
-      try {
-        const cached = localStorage.getItem('sevens_cached_room');
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (parsed && parsed.code === currentRoom.code) {
-            const activeState =
-              activeGameType === 'bigtwo'
-                ? gameStateBigtwo
-                : activeGameType === 'game41'
-                ? gameState41
-                : gameState;
-            if (activeState && activeState.players) {
-              parsed.game_state = activeState;
-              localStorage.setItem('sevens_cached_room', JSON.stringify(parsed));
-            }
-          }
-        }
-      } catch (e) {}
-    }
-  }, [gameState, gameStateBigtwo, gameState41, currentRoom?.code, currentRoom?.status, activeGameType]);
-
   // Local UI State
   const [handSortBy, setHandSortBy] = useState('suit');
   const [selectedCard, setSelectedCard] = useState(null);
@@ -260,6 +236,30 @@ export default function App() {
       localStorage.setItem('sevens_active_game_type', activeGameType);
     }
   }, [activeGameType]);
+
+  // Synchronize game_state inside cached room when it changes (only when game is playing)
+  useEffect(() => {
+    if (typeof localStorage !== 'undefined' && currentRoom?.code && currentRoom?.status === 'playing') {
+      try {
+        const cached = localStorage.getItem('sevens_cached_room');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.code === currentRoom.code) {
+            const activeState =
+              activeGameType === 'bigtwo'
+                ? gameStateBigtwo
+                : activeGameType === 'game41'
+                ? gameState41
+                : gameState;
+            if (activeState && activeState.players) {
+              parsed.game_state = activeState;
+              localStorage.setItem('sevens_cached_room', JSON.stringify(parsed));
+            }
+          }
+        }
+      } catch (e) {}
+    }
+  }, [gameState, gameStateBigtwo, gameState41, currentRoom?.code, currentRoom?.status, activeGameType]);
 
   const prevTurnNumberRef = useRef(gameState.turnNumber);
 
