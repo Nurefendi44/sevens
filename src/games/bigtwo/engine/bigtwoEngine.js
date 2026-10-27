@@ -282,43 +282,54 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
 
     if (hasTwoAsLastCard) {
       // RULE 1 VIOLATION: Pemain mengeluarkan kartu 2 terakhir -> OTOMATIS KALAH!
-      const otherPlayersRanked = gameState.players
-        .filter((p) => p.id !== playerId)
-        .map((p) => {
-          const remaining = updatedHands[p.id]?.length || 0;
-          return {
-            id: p.id,
-            name: p.name,
-            avatar: p.avatar,
-            remainingCards: remaining,
-            isWinner: false,
-          };
-        })
+      const previousFinished = gameState.finishedPlayers || [];
+      const disqualifiedPlayerObj = gameState.players.find((p) => p.id === playerId);
+      const finishedIds = previousFinished.map((f) => f.id);
+
+      const remainingOthers = gameState.players
+        .filter((p) => p.id !== playerId && !finishedIds.includes(p.id))
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          avatar: p.avatar,
+          remainingCards: updatedHands[p.id]?.length || 0,
+          isWinner: false,
+        }))
         .sort((a, b) => a.remainingCards - b.remainingCards);
 
-      if (otherPlayersRanked.length > 0) {
-        otherPlayersRanked[0].isWinner = true;
-      }
-      const actualWinner = otherPlayersRanked[0];
+      const totalPlayers = gameState.players.length;
+      // Berikan peringkat dan poin kepada pemain yang tidak terdiskualifikasi
+      const nonDisqualified = [...previousFinished, ...remainingOthers].map((p, idx) => {
+        const rank = idx + 1;
+        const pointsEarned = Math.max(0, totalPlayers - rank);
+        return {
+          ...p,
+          rank,
+          pointsEarned,
+          isWinner: rank === 1,
+        };
+      });
 
-      const rankings = [
-        ...otherPlayersRanked,
-        {
-          id: playerId,
-          name: playerName,
-          avatar: gameState.players.find((p) => p.id === playerId)?.avatar || '👤',
-          remainingCards: 0,
-          isWinner: false,
-          isDisqualified: true,
-          penaltyReason: 'Mengeluarkan Kartu 2 Terakhir (Dilarang)',
-        },
-      ];
+      const disqualifiedEntry = {
+        id: playerId,
+        name: playerName,
+        avatar: disqualifiedPlayerObj?.avatar || '👤',
+        rank: totalPlayers,
+        remainingCards: 0,
+        pointsEarned: 0,
+        isWinner: false,
+        isDisqualified: true,
+        penaltyReason: 'Mengeluarkan Kartu 2 Terakhir (Dilarang)',
+      };
+
+      const rankings = [...nonDisqualified, disqualifiedEntry];
+      const actualWinner = rankings[0];
 
       const actionPayload = {
         type: 'PLAY_COMBO',
         playerId,
         playerName,
-        avatar: gameState.players.find((p) => p.id === playerId)?.avatar || '👤',
+        avatar: disqualifiedPlayerObj?.avatar || '👤',
         cards: selectedCards,
         combo,
         isDisqualified: true,
@@ -329,7 +340,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
       // Hitung akumulasi skor sesi room saat ini
       const prevSessionScores = gameState.sessionScores || {};
       const updatedSessionScores = { ...prevSessionScores };
-      rankings.forEach((r, idx) => {
+      rankings.forEach((r) => {
         const key = r.id || r.name;
         const current = updatedSessionScores[key] || {
           id: r.id,
@@ -338,13 +349,12 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
           games: 0,
           score: 0,
         };
-        const isWinner = r.id === actualWinner?.id;
         updatedSessionScores[key] = {
           ...current,
           name: r.name || current.name,
           avatar: r.avatar || current.avatar,
           games: (current.games || 0) + 1,
-          score: (current.score || 0) + (isWinner ? 1 : 0),
+          score: (current.score || 0) + (r.pointsEarned || 0),
         };
       });
 
@@ -379,14 +389,23 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
     }
 
     // NORMAL FINISH: Player finishes all cards!
+    const totalPlayers = gameState.players.length;
     const previousFinished = gameState.finishedPlayers || [];
     const finishRank = previousFinished.length + 1;
     const playerObj = gameState.players.find((p) => p.id === playerId);
+
+    // Sistem skoring Big Two berdasarkan urutan tercepat menghabiskan kartu:
+    // Poin Tambahan = Jumlah pemain yang masih tersisa di meja saat kartu habis - 1
+    // (player.score += remaining_players.length - 1)
+    // Selesai urutan ke-k mendapat (totalPlayers - k) poin
+    const pointsEarned = Math.max(0, totalPlayers - finishRank);
+
     const newFinishedEntry = {
       id: playerId,
       name: playerName,
       avatar: playerObj?.avatar || '👤',
       rank: finishRank,
+      pointsEarned,
       remainingCards: 0,
       isWinner: finishRank === 1,
     };
@@ -402,13 +421,17 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
     if (remainingActivePlayers.length <= 1) {
       const lastPlayer = remainingActivePlayers[0] || null;
       const lastRemaining = lastPlayer ? (updatedHands[lastPlayer.id]?.length || 0) : 0;
+      const lastRank = nextFinishedPlayers.length + 1;
+      const lastPointsEarned = Math.max(0, totalPlayers - lastRank); // Pemain terakhir tersisa 1 di meja: 1 - 1 = 0 poin
+
       const finalRankings = [
         ...nextFinishedPlayers,
         ...(lastPlayer ? [{
           id: lastPlayer.id,
           name: lastPlayer.name,
           avatar: lastPlayer.avatar,
-          rank: nextFinishedPlayers.length + 1,
+          rank: lastRank,
+          pointsEarned: lastPointsEarned,
           remainingCards: lastRemaining,
           isWinner: false,
         }] : []),
@@ -421,7 +444,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
         avatar: playerObj?.avatar || '👤',
         cards: selectedCards,
         combo,
-        message: `🏆 ${playerName} mengeluarkan ${combo.label} dan menghabiskan seluruh kartunya! (Juara ${finishRank})`,
+        message: `🏆 ${playerName} mengeluarkan ${combo.label} dan menghabiskan seluruh kartunya! (Juara ${finishRank} • +${pointsEarned} Poin)`,
         timestamp: Date.now(),
       };
 
@@ -429,7 +452,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
       const prevSessionScores = gameState.sessionScores || {};
       const updatedSessionScores = { ...prevSessionScores };
       const normalWinnerId = nextFinishedPlayers[0]?.id || playerId;
-      finalRankings.forEach((r, idx) => {
+      finalRankings.forEach((r) => {
         const key = r.id || r.name;
         const current = updatedSessionScores[key] || {
           id: r.id,
@@ -438,13 +461,12 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
           games: 0,
           score: 0,
         };
-        const isWinner = r.id === normalWinnerId || idx === 0;
         updatedSessionScores[key] = {
           ...current,
           name: r.name || current.name,
           avatar: r.avatar || current.avatar,
           games: (current.games || 0) + 1,
-          score: (current.score || 0) + (isWinner ? 1 : 0),
+          score: (current.score || 0) + (r.pointsEarned || 0),
         };
       });
 
@@ -469,7 +491,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
           ...gameState.history,
           {
             turn: gameState.history.length + 1,
-            message: `🏆 ${playerName} mengeluarkan ${combo.label} dan menghabiskan seluruh kartu (Juara ${finishRank})! Seluruh putaran selesai.`,
+            message: `🏆 ${playerName} mengeluarkan ${combo.label} dan menghabiskan seluruh kartu (Juara ${finishRank} • +${pointsEarned} Poin)! Seluruh putaran selesai.`,
           },
         ],
       };
@@ -501,7 +523,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
       avatar: playerObj?.avatar || '👤',
       cards: selectedCards,
       combo,
-      message: `🎉 ${playerName} menghabiskan seluruh kartunya (Juara ${finishRank} 👑)! Permainan berlanjut untuk pemain lain...`,
+      message: `🎉 ${playerName} menghabiskan seluruh kartunya (Juara ${finishRank} 👑 • +${pointsEarned} Poin)! Permainan berlanjut untuk pemain lain...`,
       timestamp: Date.now(),
     };
 
@@ -523,7 +545,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
         ...gameState.history,
         {
           turn: gameState.history.length + 1,
-          message: `🎉 ${playerName} menghabiskan seluruh kartunya (Juara ${finishRank})! Giliran dilanjutkan oleh ${gameState.players.find(p => p.id === nextCurrentPlayerId)?.name}.`,
+          message: `🎉 ${playerName} menghabiskan seluruh kartunya (Juara ${finishRank} • +${pointsEarned} Poin)! Giliran dilanjutkan oleh ${gameState.players.find(p => p.id === nextCurrentPlayerId)?.name}.`,
         },
       ],
     };

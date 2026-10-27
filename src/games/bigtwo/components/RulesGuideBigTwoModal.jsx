@@ -127,6 +127,36 @@ export default function RulesGuideBigTwoModal({ isOpen, onClose }) {
             </ul>
           </div>
 
+          {/* Scoring System */}
+          <div style={{ background: 'rgba(56, 189, 248, 0.06)', border: '1px solid rgba(56, 189, 248, 0.25)', padding: '12px 16px', borderRadius: '10px' }}>
+            <h4 style={{ color: '#38bdf8', fontWeight: 700, margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>🏆</span> 4. Sistem Skoring Poin (Urutan Tercepat Menghabiskan Kartu)
+            </h4>
+            <p style={{ margin: '0 0 8px 0' }}>
+              Sistem skoring dihitung <strong>murni berdasarkan urutan tercepat menghabiskan kartu di tangan</strong> (<em>You get more points by finishing your hand the fastest!</em>), bukan dari jumlah sisa kartu.
+            </p>
+            <div style={{ background: 'rgba(0,0,0,0.3)', padding: '8px 12px', borderRadius: '6px', fontWeight: 700, color: '#38bdf8', marginBottom: '8px' }}>
+              Poin Tambahan = Jumlah pemain yang masih tersisa di meja − 1
+            </div>
+            <p style={{ margin: '0 0 8px 0', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+              Jika dimainkan oleh <strong>N pemain</strong>, pemain yang selesai pada urutan ke-<em>k</em> akan mendapatkan <strong>(N − k) poin</strong>:
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '6px', fontSize: '0.8rem' }}>
+              <div style={{ background: 'rgba(255,255,255,0.04)', padding: '6px 8px', borderRadius: '6px' }}>
+                <strong style={{ color: '#fbbf24' }}>Juara 1</strong>: +(N − 1) Poin
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.04)', padding: '6px 8px', borderRadius: '6px' }}>
+                <strong style={{ color: '#94a3b8' }}>Juara 2</strong>: +(N − 2) Poin
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.04)', padding: '6px 8px', borderRadius: '6px' }}>
+                <strong style={{ color: '#b45309' }}>Juara 3</strong>: +(N − 3) Poin
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.04)', padding: '6px 8px', borderRadius: '6px' }}>
+                <strong style={{ color: '#f87171' }}>Terakhir</strong>: 0 Poin
+              </div>
+            </div>
+          </div>
+
         </div>
 
         <div className="modal-footer" style={{ justifyContent: 'center' }}>

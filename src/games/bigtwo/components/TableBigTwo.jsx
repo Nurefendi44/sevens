@@ -216,7 +216,7 @@ export default function TableBigTwo({
                       boxShadow: '0 2px 6px rgba(234, 179, 8, 0.4)',
                     }}
                   >
-                    👑 JUARA {finishedEntry.rank}
+                    👑 JUARA {finishedEntry.rank}{finishedEntry.pointsEarned !== undefined ? ` (+${finishedEntry.pointsEarned} Poin)` : ''}
                   </span>
                 ) : isOpponentPassed ? (
                   <span
@@ -310,7 +310,10 @@ export default function TableBigTwo({
                   boxShadow: '0 2px 8px rgba(234, 179, 8, 0.4)',
                 }}
               >
-                🎉 JUARA {gameState.finishedPlayers.find((f) => f.id === myPlayer.id)?.rank} (KARTU HABIS)
+                {(() => {
+                  const myFinish = gameState.finishedPlayers?.find((f) => f.id === myPlayer.id);
+                  return `🎉 JUARA ${myFinish?.rank} (KARTU HABIS${myFinish?.pointsEarned !== undefined ? ` • +${myFinish.pointsEarned} Poin` : ''})`;
+                })()}
               </span>
             ) : isMyTurn ? (
               <span className="bigtwo-inline-turn-pill">🔥 Giliran Anda</span>

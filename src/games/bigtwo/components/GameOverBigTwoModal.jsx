@@ -69,19 +69,39 @@ export default function GameOverBigTwoModal({
               </>
             ) : (
               <>
-                Pemenang: <strong style={{ color: '#38bdf8' }}>{winnerPlayer?.name || 'Pemain'}</strong> berhasil meraih Juara 1 (+1 Poin)!
+                Pemenang: <strong style={{ color: '#38bdf8' }}>{winnerPlayer?.name || 'Pemain'}</strong> berhasil meraih Juara 1 (+{rankings[0]?.pointsEarned ?? Math.max(0, (gameState.players?.length || 4) - 1)} Poin)!
               </>
             )}
           </p>
         </div>
 
+        {/* Scoring Rule Explanatory Banner */}
+        <div style={{
+          margin: '0.5rem 1rem 0 1rem',
+          padding: '0.45rem 0.85rem',
+          borderRadius: '8px',
+          background: 'rgba(56, 189, 248, 0.08)',
+          border: '1px solid rgba(56, 189, 248, 0.25)',
+          fontSize: '0.78rem',
+          color: '#bae6fd',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.45rem',
+          justifyContent: 'center',
+          textAlign: 'center'
+        }}>
+          <span>⚡ <strong>Sistem Skoring Urutan:</strong> Poin = Jumlah Pemain Tersisa di Meja − 1 (Makin cepat kartu habis, makin banyak poin!)</span>
+        </div>
+
         {/* Leaderboard Table (Model Poin) */}
-        <div className="modal-body" style={{ padding: '1rem 0' }}>
+        <div className="modal-body" style={{ padding: '0.75rem 0' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {rankings.map((r, index) => {
               const isWinner = r.isWinner ?? (index === 0 && !r.isDisqualified);
               const isDisqualified = r.isDisqualified;
               const rankPos = r.rank || index + 1;
+              const totalP = gameState.players?.length || 4;
+              const points = r.pointsEarned !== undefined ? r.pointsEarned : (isDisqualified ? 0 : Math.max(0, totalP - rankPos));
 
               return (
                 <div
@@ -91,11 +111,15 @@ export default function GameOverBigTwoModal({
                       ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(15, 23, 42, 0.9))'
                       : isWinner
                       ? 'linear-gradient(135deg, rgba(2, 132, 199, 0.25), rgba(15, 23, 42, 0.9))'
+                      : points > 0
+                      ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(15, 23, 42, 0.85))'
                       : 'rgba(255, 255, 255, 0.04)',
                     border: isDisqualified
                       ? '1.5px solid #ef4444'
                       : isWinner
                       ? '1.5px solid #38bdf8'
+                      : points > 0
+                      ? '1px solid rgba(16, 185, 129, 0.35)'
                       : '1px solid rgba(255, 255, 255, 0.1)',
                     borderRadius: '12px',
                     padding: '0.75rem 1rem',
@@ -117,8 +141,10 @@ export default function GameOverBigTwoModal({
                         {isDisqualified
                           ? 'Kalah (Kartu 2 Terakhir Dilarang)'
                           : rankPos === 1
-                          ? 'Juara 1 (Kartu Habis Lebih Dulu)'
-                          : `Juara ${rankPos}${r.remainingCards > 0 ? ` (Sisa ${r.remainingCards} kartu)` : ' (Kartu Habis)'}`}
+                          ? `Juara 1 (Kartu Habis Pertama • +${points} Poin)`
+                          : r.remainingCards > 0
+                          ? `Peringkat #${rankPos} (Sisa ${r.remainingCards} kartu • +${points} Poin)`
+                          : `Juara ${rankPos} (Kartu Habis • +${points} Poin)`}
                       </div>
                     </div>
                   </div>
@@ -130,11 +156,15 @@ export default function GameOverBigTwoModal({
                       </span>
                     ) : isWinner ? (
                       <span className="badge-ready" style={{ background: 'linear-gradient(135deg, #0284c7, #2563eb)', color: '#ffffff', padding: '0.3rem 0.75rem', borderRadius: '8px', fontWeight: 800 }}>
-                        +1 POIN 🏆
+                        +{points} POIN 🏆
+                      </span>
+                    ) : points > 0 ? (
+                      <span style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(6, 95, 70, 0.6))', border: '1px solid #10b981', color: '#6ee7b7', padding: '0.25rem 0.65rem', borderRadius: '6px', fontWeight: 800, fontSize: '0.78rem' }}>
+                        +{points} POIN
                       </span>
                     ) : (
-                      <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.85rem' }}>
-                        Peringkat #{rankPos}
+                      <span style={{ background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', padding: '0.25rem 0.65rem', borderRadius: '6px', fontWeight: 700, fontSize: '0.75rem' }}>
+                        0 Poin
                       </span>
                     )}
                     {gameState.sessionScores?.[r.id] && (
