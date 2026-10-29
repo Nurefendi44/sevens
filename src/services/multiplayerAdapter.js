@@ -911,10 +911,43 @@ export const multiplayerAdapter = {
     return { success: true, room: updatedRoom, player: newHostPlayer };
   },
 
+  activeChannels: {},
+
   /**
-   * Subscribes to Realtime updates for a specific room
+   * Sends an ephemeral live chat / quick emote message via Realtime Broadcast
    */
-  subscribeToRoom(roomCode, onRoomUpdate, onStatusChange = null) {
+  async sendRoomChat(roomCode, chatPayload) {
+    if (!supabase) return { success: false, error: 'Supabase offline' };
+    const code = roomCode.trim().toUpperCase();
+    const channelName = `room_channel_${code}`;
+    let channel = this.activeChannels[code];
+    if (!channel) {
+      channel = supabase.channel(channelName);
+      this.activeChannels[code] = channel;
+      channel.subscribe();
+    }
+
+    try {
+      await channel.send({
+        type: 'broadcast',
+        event: 'room_chat',
+        payload: {
+          ...chatPayload,
+          id: `chat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          timestamp: Date.now(),
+        },
+      });
+      return { success: true };
+    } catch (err) {
+      console.warn('Gagal mengirim broadcast chat:', err);
+      return { success: false, error: err.message };
+    }
+  },
+
+  /**
+   * Subscribes to Realtime updates and live chat for a specific room
+   */
+  subscribeToRoom(roomCode, onRoomUpdate, onStatusChange = null, onChatMessage = null) {
     if (!supabase) return () => {};
     const code = roomCode.trim().toUpperCase();
     const channelName = `room_channel_${code}`;
@@ -935,6 +968,11 @@ export const multiplayerAdapter = {
           }
         }
       )
+      .on('broadcast', { event: 'room_chat' }, ({ payload }) => {
+        if (onChatMessage && payload) {
+          onChatMessage(payload);
+        }
+      })
       .subscribe((status) => {
         if (onStatusChange) onStatusChange(status);
         if (status === 'SUBSCRIBED') {
@@ -942,7 +980,10 @@ export const multiplayerAdapter = {
         }
       });
 
+    this.activeChannels[code] = channel;
+
     return () => {
+      delete this.activeChannels[code];
       supabase.removeChannel(channel);
     };
   },

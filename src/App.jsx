@@ -48,6 +48,7 @@ import BigTwoFirstTurnWheel from './games/bigtwo/components/BigTwoFirstTurnWheel
 import { initBigTwo, playComboBigTwo, passTurnBigTwo, setBotTakeoverBigTwo } from './games/bigtwo/engine/bigtwoEngine.js';
 
 import ActionAnnouncementPopup from './components/ActionAnnouncementPopup.jsx';
+import LiveChatOverlay from './components/LiveChatOverlay.jsx';
 
 import {
   createSinglePlayerRoster,
@@ -171,6 +172,7 @@ export default function App() {
 
   const [copiedRoomCode, setCopiedRoomCode] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+  const [activeChatMessages, setActiveChatMessages] = useState([]);
   const [isReconnecting, setIsReconnecting] = useState(() => {
     if (typeof localStorage !== 'undefined') {
       const session = getActiveSession();
@@ -500,95 +502,142 @@ export default function App() {
   }, [isMultiplayerMode, currentRoom?.status]);
 
   // ---------------------------------------------------------------------------
+  // LIVE CHAT HANDLERS (Ephemeral popups & broadcast)
+  // ---------------------------------------------------------------------------
+  const handleIncomingChatMessage = (chat) => {
+    if (!chat || !chat.message) return;
+    audio.playChatPopSound();
+    const newChat = {
+      ...chat,
+      id: chat.id || `chat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    };
+
+    setActiveChatMessages((prev) => [...prev.slice(-2), newChat]);
+
+    // Auto-dismiss after 4.5 seconds
+    setTimeout(() => {
+      setActiveChatMessages((prev) =>
+        prev.map((m) => (m.id === newChat.id ? { ...m, isFading: true } : m))
+      );
+      setTimeout(() => {
+        setActiveChatMessages((prev) => prev.filter((m) => m.id !== newChat.id));
+      }, 400);
+    }, 4200);
+  };
+
+  const handleSendChatMessage = async (text) => {
+    if (!currentRoom?.code || !myPlayerId) return;
+    const myPlayer = (currentRoom.players || []).find((p) => p.id === myPlayerId) || {};
+    const chatPayload = {
+      senderId: myPlayerId,
+      senderName: myPlayer.name || getLocalPlayerName() || 'Pemain',
+      senderAvatar: myPlayer.avatar || '👤',
+      message: text,
+      timestamp: Date.now(),
+    };
+
+    // Optimistic local display
+    handleIncomingChatMessage(chatPayload);
+
+    // Broadcast to other players in room
+    await multiplayerAdapter.sendRoomChat(currentRoom.code, chatPayload);
+  };
+
+  // ---------------------------------------------------------------------------
   // 2. SUPABASE REALTIME SUBSCRIPTION
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (gameMode !== 'multiplayer' || !currentRoom?.code) return;
 
-    const unsubscribe = multiplayerAdapter.subscribeToRoom(currentRoom.code, (updatedRoom) => {
-      setCurrentRoom(updatedRoom);
+    const unsubscribe = multiplayerAdapter.subscribeToRoom(
+      currentRoom.code,
+      (updatedRoom) => {
+        setCurrentRoom(updatedRoom);
 
-      if (updatedRoom.status === 'lobby') {
-        // Reset local in-game state when returning to lobby
-        setGameStateBigtwo({});
-        setGameState41({});
-        return;
-      }
+        if (updatedRoom.status === 'lobby') {
+          // Reset local in-game state when returning to lobby
+          setGameStateBigtwo({});
+          setGameState41({});
+          return;
+        }
 
-      if (updatedRoom.game_state) {
-        const nextState = updatedRoom.game_state;
+        if (updatedRoom.game_state) {
+          const nextState = updatedRoom.game_state;
 
-        if (nextState.gameType === 'bigtwo') {
-          setActiveGameType('bigtwo');
-          if (nextState.players && nextState.hands) {
-            setGameStateBigtwo(nextState);
-            if (nextState.lastAction) {
-              setRecentActionPopup(nextState.lastAction);
-              if (nextState.lastAction.type === 'PLAY_COMBO') audio.playCardSound();
-              else if (nextState.lastAction.type === 'PASS') audio.closeCardSound();
-            }
-            setCurrentRoom(updatedRoom);
-          } else if (updatedRoom.status === 'playing') {
-            // Realtime payload might be compact/truncated; fetch full record immediately
-            multiplayerAdapter.getRoom(currentRoom.code).then(({ room }) => {
-              if (room?.game_state?.players && room?.game_state?.hands) {
-                setGameStateBigtwo(room.game_state);
+          if (nextState.gameType === 'bigtwo') {
+            setActiveGameType('bigtwo');
+            if (nextState.players && nextState.hands) {
+              setGameStateBigtwo(nextState);
+              if (nextState.lastAction) {
+                setRecentActionPopup(nextState.lastAction);
+                if (nextState.lastAction.type === 'PLAY_COMBO') audio.playCardSound();
+                else if (nextState.lastAction.type === 'PASS') audio.closeCardSound();
               }
-              setCurrentRoom(room || updatedRoom);
-            }).catch(() => {
               setCurrentRoom(updatedRoom);
-            });
-          } else {
-            setCurrentRoom(updatedRoom);
-          }
-          return;
-        }
-
-        if (nextState.gameType === 'game41') {
-          setActiveGameType('game41');
-          if (nextState.players) {
-            if (nextState.lastAction) {
-              setRecentActionPopup(nextState.lastAction);
+            } else if (updatedRoom.status === 'playing') {
+              // Realtime payload might be compact/truncated; fetch full record immediately
+              multiplayerAdapter.getRoom(currentRoom.code).then(({ room }) => {
+                if (room?.game_state?.players && room?.game_state?.hands) {
+                  setGameStateBigtwo(room.game_state);
+                }
+                setCurrentRoom(room || updatedRoom);
+              }).catch(() => {
+                setCurrentRoom(updatedRoom);
+              });
+            } else {
+              setCurrentRoom(updatedRoom);
             }
-            if (nextState.turnNumber !== prevTurnNumberRef.current && nextState.lastAction) {
-              const action = nextState.lastAction;
-              if (action.type === 'DRAW') {
-                audio.playCardSound();
-              } else if (action.type === 'DISCARD') {
-                if (action.is41) audio.victorySound();
-                else audio.closeCardSound();
+            return;
+          }
+
+          if (nextState.gameType === 'game41') {
+            setActiveGameType('game41');
+            if (nextState.players) {
+              if (nextState.lastAction) {
+                setRecentActionPopup(nextState.lastAction);
               }
+              if (nextState.turnNumber !== prevTurnNumberRef.current && nextState.lastAction) {
+                const action = nextState.lastAction;
+                if (action.type === 'DRAW') {
+                  audio.playCardSound();
+                } else if (action.type === 'DISCARD') {
+                  if (action.is41) audio.victorySound();
+                  else audio.closeCardSound();
+                }
+              }
+              prevTurnNumberRef.current = nextState.turnNumber;
+              setGameState41(nextState);
             }
-            prevTurnNumberRef.current = nextState.turnNumber;
-            setGameState41(nextState);
+            return;
           }
-          return;
-        }
 
-        // If turn is 1 and game newly started or restarted, trigger dealing animation
-        if (nextState.turnNumber === 1 && !nextState.firstMoveMade && prevTurnNumberRef.current !== 1) {
-          setIsDealingAnimationActive(true);
-        }
-
-        // Play audio feedback if a move was made by other players
-        if (nextState.lastAction) {
-          setRecentActionPopup(nextState.lastAction);
-        }
-        if (nextState.turnNumber !== prevTurnNumberRef.current && nextState.lastAction) {
-          const action = nextState.lastAction;
-          if (action.type === 'PLAY') {
-            if (action.card?.rank === 7) audio.sevenChime();
-            else audio.playCardSound();
-          } else if (action.type === 'CLOSE') {
-            audio.closeCardSound();
-          } else if (action.type === 'FAULT') {
-            audio.faultSound();
+          // If turn is 1 and game newly started or restarted, trigger dealing animation
+          if (nextState.turnNumber === 1 && !nextState.firstMoveMade && prevTurnNumberRef.current !== 1) {
+            setIsDealingAnimationActive(true);
           }
+
+          // Play audio feedback if a move was made by other players
+          if (nextState.lastAction) {
+            setRecentActionPopup(nextState.lastAction);
+          }
+          if (nextState.turnNumber !== prevTurnNumberRef.current && nextState.lastAction) {
+            const action = nextState.lastAction;
+            if (action.type === 'PLAY') {
+              if (action.card?.rank === 7) audio.sevenChime();
+              else audio.playCardSound();
+            } else if (action.type === 'CLOSE') {
+              audio.closeCardSound();
+            } else if (action.type === 'FAULT') {
+              audio.faultSound();
+            }
+          }
+          prevTurnNumberRef.current = nextState.turnNumber;
+          setGameState(nextState);
         }
-        prevTurnNumberRef.current = nextState.turnNumber;
-        setGameState(nextState);
-      }
-    });
+      },
+      null,
+      handleIncomingChatMessage
+    );
 
     return () => {
       unsubscribe();
@@ -2799,6 +2848,19 @@ export default function App() {
         <MatchHistoryDrawer
           actionLog={gameState.actionLog}
           onClose={() => setShowHistoryModal(false)}
+        />
+      )}
+
+      {/* LIVE CHAT & EPHEMERAL POPUPS OVERLAY (Online Multiplayer) */}
+      {isMultiplayerMode && currentRoom?.code && (
+        <LiveChatOverlay
+          roomCode={currentRoom.code}
+          myPlayerId={myPlayerId}
+          myPlayerName={(currentRoom.players || []).find((p) => p.id === myPlayerId)?.name || getLocalPlayerName()}
+          myAvatar={(currentRoom.players || []).find((p) => p.id === myPlayerId)?.avatar || '👤'}
+          activeMessages={activeChatMessages}
+          onSendMessage={handleSendChatMessage}
+          isMultiplayer={true}
         />
       )}
     </div>
