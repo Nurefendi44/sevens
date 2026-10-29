@@ -1076,6 +1076,7 @@ export const multiplayerAdapter = {
     if (!channel) {
       channel = supabase.channel(channelName);
       this.activeChannels[code] = channel;
+      channel.subscribe();
     }
 
     try {

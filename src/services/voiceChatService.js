@@ -10,6 +10,10 @@ const ICE_SERVERS = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    { urls: 'stun:stun.services.mozilla.com' },
   ],
 };
 
@@ -31,6 +35,8 @@ class VoiceChatService {
     this.peerConnections = new Map();
     // Map: peerId -> HTMLAudioElement
     this.remoteAudios = new Map();
+    // Map: peerId -> Array of RTCIceCandidateInit (queued candidates before remote description is set)
+    this.pendingCandidates = new Map();
 
     // Callbacks
     this.onSpeakingChange = null; // (playerId, isSpeaking) => void
@@ -185,6 +191,7 @@ class VoiceChatService {
       } catch (e) {}
     });
     this.peerConnections.clear();
+    this.pendingCandidates.clear();
 
     // Remove remote audio elements
     this.remoteAudios.forEach((audioEl) => {
@@ -225,10 +232,9 @@ class VoiceChatService {
 
     try {
       if (type === 'voice_join') {
-        // A new peer joined voice. Deterministic initiator: ID comparison
-        if (this.myPlayerId > senderId) {
-          await this.initiateCall(senderId);
-        }
+        // A peer joined or announced their voice presence.
+        // As an active connected peer with a microphone, initiate a call to the newcomer!
+        await this.initiateCall(senderId);
       } else if (type === 'voice_offer') {
         await this.handleOffer(senderId, data);
       } else if (type === 'voice_answer') {
@@ -261,9 +267,9 @@ class VoiceChatService {
 
     const pc = new RTCPeerConnection(ICE_SERVERS);
 
-    // Add local tracks to send voice
+    // Add local audio tracks to send voice
     if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => {
+      this.localStream.getAudioTracks().forEach((track) => {
         pc.addTrack(track, this.localStream);
       });
     }
@@ -286,12 +292,35 @@ class VoiceChatService {
       if (!audioEl) {
         audioEl = document.createElement('audio');
         audioEl.autoplay = true;
+        audioEl.playsInline = true;
+        audioEl.setAttribute('playsinline', 'true');
+        audioEl.setAttribute('autoplay', 'true');
+        audioEl.volume = 1.0;
         audioEl.style.display = 'none';
         document.body.appendChild(audioEl);
         this.remoteAudios.set(peerId, audioEl);
       }
-      if (event.streams && event.streams[0]) {
-        audioEl.srcObject = event.streams[0];
+
+      const stream =
+        event.streams && event.streams[0]
+          ? event.streams[0]
+          : new MediaStream([event.track]);
+
+      audioEl.srcObject = stream;
+
+      // Ensure playback starts even under strict browser autoplay policies
+      const playPromise = audioEl.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn('[VoiceChat] Audio playback waiting for user gesture:', err);
+          const resumeAudio = () => {
+            audioEl.play().catch(() => {});
+            document.removeEventListener('click', resumeAudio);
+            document.removeEventListener('touchstart', resumeAudio);
+          };
+          document.addEventListener('click', resumeAudio, { once: true });
+          document.addEventListener('touchstart', resumeAudio, { once: true });
+        });
       }
     };
 
@@ -306,51 +335,131 @@ class VoiceChatService {
   }
 
   async initiateCall(peerId) {
-    const pc = this.getOrCreatePeerConnection(peerId);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
+    try {
+      const pc = this.getOrCreatePeerConnection(peerId);
+      if (pc.signalingState !== 'stable') {
+        return;
+      }
 
-    await this.sendSignal({
-      type: 'voice_offer',
-      senderId: this.myPlayerId,
-      targetId: peerId,
-      data: offer,
-    });
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        voiceActivityDetection: true,
+      });
+      await pc.setLocalDescription(offer);
+
+      await this.sendSignal({
+        type: 'voice_offer',
+        senderId: this.myPlayerId,
+        targetId: peerId,
+        data: offer,
+      });
+    } catch (err) {
+      console.warn('[VoiceChat] Failed to initiate call to', peerId, err);
+    }
   }
 
   async handleOffer(peerId, offer) {
-    const pc = this.getOrCreatePeerConnection(peerId);
-    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    try {
+      const pc = this.getOrCreatePeerConnection(peerId);
 
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
+      const isCollision =
+        offer.type === 'offer' &&
+        (pc.signalingState !== 'stable' || pc.connectionState === 'connecting');
 
-    await this.sendSignal({
-      type: 'voice_answer',
-      senderId: this.myPlayerId,
-      targetId: peerId,
-      data: answer,
-    });
+      const isPolite = this.myPlayerId < peerId;
+
+      if (isCollision) {
+        if (!isPolite) {
+          // Impolite peer ignores colliding incoming offer
+          return;
+        }
+        try {
+          await pc.setLocalDescription({ type: 'rollback' });
+        } catch (e) {
+          // Fallback if rollback is not supported
+        }
+      }
+
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      await this.flushPendingCandidates(peerId);
+
+      const answer = await pc.createAnswer({
+        offerToReceiveAudio: true,
+      });
+      await pc.setLocalDescription(answer);
+
+      await this.sendSignal({
+        type: 'voice_answer',
+        senderId: this.myPlayerId,
+        targetId: peerId,
+        data: answer,
+      });
+    } catch (err) {
+      console.warn('[VoiceChat] Failed to handle offer from', peerId, err);
+    }
   }
 
   async handleAnswer(peerId, answer) {
-    const pc = this.peerConnections.get(peerId);
-    if (pc && pc.signalingState !== 'stable') {
-      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    try {
+      const pc = this.peerConnections.get(peerId);
+      if (pc && pc.signalingState === 'have-local-offer') {
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        await this.flushPendingCandidates(peerId);
+      }
+    } catch (err) {
+      console.warn('[VoiceChat] Failed to handle answer from', peerId, err);
     }
   }
 
   async handleIceCandidate(peerId, candidate) {
+    if (!candidate) return;
+    await this.addIceCandidateSafe(peerId, candidate);
+  }
+
+  async addIceCandidateSafe(peerId, candidate) {
     const pc = this.peerConnections.get(peerId);
-    if (pc && pc.remoteDescription) {
+    // If connection doesn't exist yet, or remote description is not ready yet:
+    if (!pc || !pc.remoteDescription || !pc.remoteDescription.type) {
+      if (!this.pendingCandidates.has(peerId)) {
+        this.pendingCandidates.set(peerId, []);
+      }
+      this.pendingCandidates.get(peerId).push(candidate);
+      return;
+    }
+
+    try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (err) {
+      console.warn('[VoiceChat] Failed to add ICE candidate:', err);
+    }
+  }
+
+  async flushPendingCandidates(peerId) {
+    const pc = this.peerConnections.get(peerId);
+    if (!pc || !pc.remoteDescription) return;
+
+    const queued = this.pendingCandidates.get(peerId);
+    if (queued && queued.length > 0) {
+      this.pendingCandidates.delete(peerId);
+      for (const cand of queued) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(cand));
+        } catch (err) {
+          console.warn('[VoiceChat] Failed to add queued ICE candidate:', err);
+        }
+      }
     }
   }
 
   closePeer(peerId) {
+    this.pendingCandidates.delete(peerId);
+
     const pc = this.peerConnections.get(peerId);
     if (pc) {
       try {
+        pc.onicecandidate = null;
+        pc.ontrack = null;
+        pc.onconnectionstatechange = null;
         pc.close();
       } catch (e) {}
       this.peerConnections.delete(peerId);
@@ -376,6 +485,9 @@ class VoiceChatService {
       if (!AudioCtx) return;
 
       this.audioContext = new AudioCtx();
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume().catch(() => {});
+      }
       const source = this.audioContext.createMediaStreamSource(stream);
       this.analyser = this.audioContext.createAnalyser();
       this.analyser.fftSize = 256;
