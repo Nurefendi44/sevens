@@ -48,7 +48,7 @@ import BigTwoFirstTurnWheel from './games/bigtwo/components/BigTwoFirstTurnWheel
 import { initBigTwo, playComboBigTwo, passTurnBigTwo, setBotTakeoverBigTwo } from './games/bigtwo/engine/bigtwoEngine.js';
 
 import ActionAnnouncementPopup from './components/ActionAnnouncementPopup.jsx';
-import LiveChatOverlay from './components/LiveChatOverlay.jsx';
+import LiveChatOverlay, { getBotChatReply } from './components/LiveChatOverlay.jsx';
 
 import {
   createSinglePlayerRoster,
@@ -84,12 +84,14 @@ import {
   Rows3,
   Trophy,
   Crown,
+  MessageSquare,
 } from 'lucide-react';
 
 export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDealingAnimationActive, setIsDealingAnimationActive] = useState(false);
   const [multiplayerInitOptions, setMultiplayerInitOptions] = useState(null);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   // Table View & Mobile Focus Settings (Persistent)
   const [showOpponents, setShowOpponents] = useState(() => {
@@ -526,21 +528,71 @@ export default function App() {
   };
 
   const handleSendChatMessage = async (text) => {
-    if (!currentRoom?.code || !myPlayerId) return;
-    const myPlayer = (currentRoom.players || []).find((p) => p.id === myPlayerId) || {};
+    if (!text || !text.trim()) return;
+
+    let senderName = getLocalPlayerName() || 'Anda';
+    let senderAvatar = '👤';
+    let senderId = myPlayerId || 'local_human';
+
+    if (isMultiplayerMode && currentRoom?.players) {
+      const myPlayer = (currentRoom.players || []).find((p) => p.id === myPlayerId);
+      if (myPlayer) {
+        senderName = myPlayer.name || senderName;
+        senderAvatar = myPlayer.avatar || senderAvatar;
+      }
+    }
+
     const chatPayload = {
-      senderId: myPlayerId,
-      senderName: myPlayer.name || getLocalPlayerName() || 'Pemain',
-      senderAvatar: myPlayer.avatar || '👤',
-      message: text,
+      senderId,
+      senderName,
+      senderAvatar,
+      message: text.trim(),
       timestamp: Date.now(),
     };
 
     // Optimistic local display
     handleIncomingChatMessage(chatPayload);
 
-    // Broadcast to other players in room
-    await multiplayerAdapter.sendRoomChat(currentRoom.code, chatPayload);
+    // Broadcast to other players in room (if online)
+    if (isMultiplayerMode && currentRoom?.code) {
+      await multiplayerAdapter.sendRoomChat(currentRoom.code, chatPayload);
+    }
+
+    // Interactive Bot reply when playing with Bot AI
+    const activePlayersList = isMultiplayerMode
+      ? (currentRoom?.players || [])
+      : (activeGameType === 'bigtwo'
+          ? (gameStateBigtwo?.players || [])
+          : activeGameType === 'game41'
+          ? (gameState41?.players || [])
+          : (gameState?.players || []));
+
+    const botPlayers = activePlayersList.filter(
+      (p) => p.isBot || p.isBotTakeover || isBotPlayer(null, p.id)
+    );
+
+    if (botPlayers.length > 0) {
+      const chosenBot = botPlayers[Math.floor(Math.random() * botPlayers.length)];
+      const botDelay = 1200 + Math.random() * 1100;
+
+      setTimeout(() => {
+        const replyText = getBotChatReply(text);
+        const botPayload = {
+          senderId: chosenBot.id,
+          senderName: chosenBot.name || 'Bot AI',
+          senderAvatar: chosenBot.avatar || '🤖',
+          message: replyText,
+          timestamp: Date.now(),
+        };
+
+        handleIncomingChatMessage(botPayload);
+
+        // If in multiplayer room and I am host, broadcast the bot reply so all players see it
+        if (isMultiplayerMode && currentRoom?.code && isHost) {
+          multiplayerAdapter.sendRoomChat(currentRoom.code, botPayload);
+        }
+      }, botDelay);
+    }
   };
 
   // ---------------------------------------------------------------------------
@@ -2361,6 +2413,23 @@ export default function App() {
             <span>Scoreboard</span>
           </button>
 
+          {/* Dedicated Chat Button in Desktop Header */}
+          <button
+            className="btn-header"
+            onClick={() => setIsChatOpen(true)}
+            title="Buka Chat Meja & Quick Emote"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              borderColor: 'rgba(56, 189, 248, 0.45)',
+              color: '#38bdf8',
+            }}
+          >
+            <MessageSquare size={15} />
+            <span>Chat</span>
+          </button>
+
           <button
             className={`btn-icon ${isMuted ? 'active' : ''}`}
             onClick={handleToggleSound}
@@ -2396,6 +2465,16 @@ export default function App() {
               <Share2 size={16} />
             </button>
           )}
+
+          {/* Mobile Chat Button */}
+          <button
+            className="btn-icon"
+            onClick={() => setIsChatOpen(true)}
+            title="Chat & Emote Meja"
+            style={{ color: '#38bdf8' }}
+          >
+            <MessageSquare size={16} />
+          </button>
 
           <button
             className="btn-icon"
@@ -2717,6 +2796,7 @@ export default function App() {
         onOpenConfig={() => setShowConfigModal(true)}
         onOpenHistory={() => setShowHistoryModal(true)}
         onOpenScoreboard={() => setShowScoreboardModal(true)}
+        onOpenChat={() => setIsChatOpen(true)}
         isMuted={isMuted}
         onToggleSound={handleToggleSound}
         onRestart={() => {
@@ -2851,16 +2931,24 @@ export default function App() {
         />
       )}
 
-      {/* LIVE CHAT & EPHEMERAL POPUPS OVERLAY (Online Multiplayer) */}
-      {isMultiplayerMode && currentRoom?.code && (
+      {/* LIVE CHAT & EPHEMERAL POPUPS OVERLAY (Online & Offline Tables) */}
+      {gameMode && (
         <LiveChatOverlay
-          roomCode={currentRoom.code}
-          myPlayerId={myPlayerId}
-          myPlayerName={(currentRoom.players || []).find((p) => p.id === myPlayerId)?.name || getLocalPlayerName()}
-          myAvatar={(currentRoom.players || []).find((p) => p.id === myPlayerId)?.avatar || '👤'}
+          roomCode={currentRoom?.code || 'OFFLINE'}
+          myPlayerId={myPlayerId || 'local_human'}
+          myPlayerName={
+            (currentRoom?.players || []).find((p) => p.id === myPlayerId)?.name ||
+            getLocalPlayerName() ||
+            'Anda'
+          }
+          myAvatar={
+            (currentRoom?.players || []).find((p) => p.id === myPlayerId)?.avatar ||
+            '👤'
+          }
           activeMessages={activeChatMessages}
           onSendMessage={handleSendChatMessage}
-          isMultiplayer={true}
+          isOpen={isChatOpen}
+          onToggleOpen={setIsChatOpen}
         />
       )}
     </div>

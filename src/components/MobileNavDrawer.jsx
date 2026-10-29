@@ -21,6 +21,7 @@ import {
   Rows3,
   Trophy,
   Crown,
+  MessageSquare,
 } from 'lucide-react';
 
 export default function MobileNavDrawer({
@@ -40,6 +41,7 @@ export default function MobileNavDrawer({
   onOpenConfig,
   onOpenHistory,
   onOpenScoreboard,
+  onOpenChat,
   isMuted,
   onToggleSound,
   onRestart,
@@ -237,6 +239,25 @@ export default function MobileNavDrawer({
               <div className="menu-item-text">
                 <span>Scoreboard & Peringkat</span>
                 <small>Akumulasi poin & riwayat kemenangan</small>
+              </div>
+            </button>
+          )}
+
+          {/* Live Chat & Quick Emotes */}
+          {onOpenChat && (
+            <button
+              className="mobile-menu-item"
+              onClick={() => {
+                onOpenChat();
+                onClose();
+              }}
+            >
+              <div className="menu-item-icon">
+                <MessageSquare size={18} color="#38bdf8" />
+              </div>
+              <div className="menu-item-text">
+                <span>Chat Meja & Emote</span>
+                <small>Kirim pesan kilat atau ketik pesan obrolan</small>
               </div>
             </button>
           )}

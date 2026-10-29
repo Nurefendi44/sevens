@@ -15,15 +15,66 @@ export const QUICK_CHAT_PRESETS = [
   'Gaskeun ronde berikutnya! 🚀',
 ];
 
+export function getBotChatReply(userMessage) {
+  const msg = (userMessage || '').toLowerCase();
+  if (msg.includes('halo') || msg.includes('hi') || msg.includes('hai')) {
+    const replies = ['Halo juga! Siap bertanding 🤖', 'Hai hai! Semoga hoki ya 🃏', 'Halo bos! Ayo kita mulai 🔥'];
+    return replies[Math.floor(Math.random() * replies.length)];
+  }
+  if (msg.includes('buruan') || msg.includes('jalan') || msg.includes('lama') || msg.includes('cepet')) {
+    const replies = ['Sabar bos, lagi ngitung kombinasi kartu nih ⏳', 'Tenang tenang, langsung jalan kok! 🚀', 'Bentar lagi mikir trik banting kartu 🤖'];
+    return replies[Math.floor(Math.random() * replies.length)];
+  }
+  if (msg.includes('jelek') || msg.includes('waduh') || msg.includes('gawat') || msg.includes('aduh')) {
+    const replies = ['Wkwk sama nih bos, kartu saya juga berantakan 😅', 'Tetap tenang dan kuasai kartu! 💪', 'Jangan panik dulu, masih ada harapan 😂'];
+    return replies[Math.floor(Math.random() * replies.length)];
+  }
+  if (msg.includes('gg') || msg.includes('mantap') || msg.includes('keren') || msg.includes('nice')) {
+    const replies = ['GGWP! Main bareng Anda seru banget 👏', 'Makasih bos! Permainan yang sengit 🔥', 'Nice game! Ronde depan kita balas ya 🃏'];
+    return replies[Math.floor(Math.random() * replies.length)];
+  }
+  if (msg.includes('santai') || msg.includes('ngopi') || msg.includes('kopi')) {
+    const replies = ['Sambil seruput kopi dulu bos ☕', 'Santai tapi pasti menang wkwk 😎', 'Ngopi dulu biar ga salah buang kartu ☕'];
+    return replies[Math.floor(Math.random() * replies.length)];
+  }
+  if (msg.includes('banting') || msg.includes('capsa') || msg.includes('bom')) {
+    const replies = ['Awas kena banting balik ya! 💥', 'Waduh siap-siap pasang sabuk pengaman 😱', 'Keluarkan kartu terbaikmu bos! 🃏'];
+    return replies[Math.floor(Math.random() * replies.length)];
+  }
+  if (msg.includes('tutup') || msg.includes('as')) {
+    const replies = ['Tenang, saya usahakan ga nutup kartu penting 🔒', 'Siap bos, ikuti alur permainan! 👍'];
+    return replies[Math.floor(Math.random() * replies.length)];
+  }
+  if (msg.includes('gaskeun') || msg.includes('gas') || msg.includes('mulai')) {
+    const replies = ['Gaskeun tanpa ampun! 🚀', 'Siap 100%! Ayo lanjut ronde baru 🔥', 'Let’s gooo! 🃏'];
+    return replies[Math.floor(Math.random() * replies.length)];
+  }
+  const defaultReplies = [
+    'Siap bos, pantau terus mejanya! 👀',
+    'Hehe seru banget nih permainannya 🃏',
+    'Ayo fokus, kartu saya udah siap jalan! 🤖',
+    'Mantap, lanjut gaskeun! 🚀',
+    'Wkwk asyik banget mabar kartu ☕',
+  ];
+  return defaultReplies[Math.floor(Math.random() * defaultReplies.length)];
+}
+
 export default function LiveChatOverlay({
   myPlayerId,
   myPlayerName,
   myAvatar = '👤',
   activeMessages = [],
   onSendMessage,
-  isMultiplayer = false,
+  isOpen: externalIsOpen,
+  onToggleOpen,
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen;
+  const setIsOpen = (val) => {
+    if (onToggleOpen) onToggleOpen(val);
+    setInternalIsOpen(val);
+  };
+
   const [customText, setCustomText] = useState('');
   const inputRef = useRef(null);
 
@@ -33,8 +84,6 @@ export default function LiveChatOverlay({
       setTimeout(() => inputRef.current?.focus(), 80);
     }
   }, [isOpen]);
-
-  if (!isMultiplayer) return null;
 
   const handleSend = (textToSend) => {
     const text = (textToSend || customText).trim();
@@ -91,7 +140,6 @@ export default function LiveChatOverlay({
         aria-label="Kirim Pesan Chat Meja"
       >
         <MessageSquare size={16} />
-        <span>Chat</span>
         {activeMessages.length > 0 && <span className="live-chat-unread-dot" />}
       </button>
 
