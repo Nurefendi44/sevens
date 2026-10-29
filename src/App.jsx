@@ -1224,7 +1224,6 @@ export default function App() {
         showToast(`🤖 Giliran ${pObj?.name || 'Pemain'} diambil alih oleh Bot AI (AFK > 2 Menit).`);
       } else {
         showToast('✨ Anda telah mengambil alih kendali kartu kembali!');
-        setShowAfkWarningModal(false);
       }
 
       if (isMultiplayerMode && currentRoom?.code) {
@@ -2519,46 +2518,6 @@ export default function App() {
           actionLog={gameState.actionLog}
           onClose={() => setShowHistoryModal(false)}
         />
-      )}
-
-      {/* AFK 2-MINUTE CONFIRMATION MODAL (ACTIVE PLAYER ONLY) */}
-      {showAfkWarningModal && (
-        <div className="bigtwo-afk-modal-overlay">
-          <div className="bigtwo-afk-modal">
-            <div className="bigtwo-afk-modal-header">
-              <div className="bigtwo-afk-modal-icon">⚠️</div>
-              <h3 className="bigtwo-afk-modal-title">Peringatan AFK (&gt; 2 Menit)</h3>
-              <p className="bigtwo-afk-modal-desc">
-                Waktu giliran Anda telah mencapai 2 menit tanpa langkah. Untuk kelancaran bermain bersama, giliran Anda akan diambil alih oleh Bot AI.
-              </p>
-            </div>
-            <div className="bigtwo-afk-modal-actions">
-              <button
-                type="button"
-                className="btn-afk-resume"
-                onClick={() => {
-                  setShowAfkWarningModal(false);
-                  if (activeGameType === 'bigtwo') {
-                    setGameStateBigtwo((prev) => ({ ...prev, turnStartedAt: Date.now() }));
-                  }
-                  showToast('Silakan pilih dan mainkan kartu Anda!');
-                }}
-              >
-                <span>✨ Saya Sudah Kembali (Lanjut Main)</span>
-              </button>
-              <button
-                type="button"
-                className="btn-afk-yield-bot"
-                onClick={() => {
-                  setShowAfkWarningModal(false);
-                  handleSetBotTakeover(myPlayerId, true);
-                }}
-              >
-                Serahkan Giliran ke Bot AI Sekarang
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
