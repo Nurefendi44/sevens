@@ -378,12 +378,21 @@ export default function TableBigTwo({
                   return `🎉 JUARA ${myFinish?.rank} (KARTU HABIS${myFinish?.pointsEarned !== undefined ? ` • +${myFinish.pointsEarned} Poin` : ''})`;
                 })()}
               </span>
+            ) : myPlayer?.isBotTakeover ? (
+              <span
+                className="bigtwo-inline-turn-pill"
+                style={{ borderColor: '#ef4444', color: '#fca5a5', background: 'rgba(239, 68, 68, 0.25)' }}
+              >
+                🤖 Mode Bot (AFK) • Klik "Ambil Alih" untuk Lanjut Main
+              </span>
             ) : isMyTurn ? (
               <span
                 className="bigtwo-inline-turn-pill"
-                style={turnDuration >= 90 ? { borderColor: '#f59e0b', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.18)' } : {}}
+                style={turnDuration >= 90 ? { borderColor: '#f59e0b', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.25)' } : {}}
               >
-                🔥 Giliran Anda {turnDuration > 0 ? `(${formatTime(turnDuration)} / 02:00)` : ''}
+                {turnDuration >= 90
+                  ? `⚠️ AFK Otomatis Bot (${Math.max(0, 120 - turnDuration)}s)`
+                  : `🔥 Giliran Anda (${formatTime(turnDuration)} / 02:00)`}
               </span>
             ) : null}
 
@@ -441,7 +450,7 @@ export default function TableBigTwo({
               >
                 <CardView
                   card={card}
-                  isPlayable={isMyTurn}
+                  isPlayable={isMyTurn && !myPlayer?.isBotTakeover}
                   isSelected={isSelected}
                   size={isGridView ? 'medium' : 'large'}
                 />
@@ -451,10 +460,10 @@ export default function TableBigTwo({
         </div>
       </div>
 
-      {/* FLOATING BOTTOM TRANSPARENT ACTION DOCK */}
+      {/* FLOATING BOTTOM ACTION DOCK */}
       <div className="bigtwo-floating-dock-wrapper">
         {/* Combo preview pill above dock when valid combo is selected */}
-        {selectedCards.length > 0 && selectedEval?.isValid && (
+        {selectedCards.length > 0 && selectedEval?.isValid && !myPlayer?.isBotTakeover && (
           <div
             className="bigtwo-floating-combo-pill"
             style={
@@ -477,72 +486,96 @@ export default function TableBigTwo({
           </div>
         )}
 
-        <div
-          className={`bigtwo-floating-dock ${isMyTurn ? 'is-my-turn' : ''}`}
-        >
-          <button
-            type="button"
-            className="btn-action-play"
-            disabled={!isMyTurn || selectedCards.length === 0}
-            onClick={handlePlay}
+        {myPlayer?.isBotTakeover ? (
+          <div className="bigtwo-floating-dock is-bot-takeover-dock">
+            <button
+              type="button"
+              className="btn-action-reclaim-main"
+              onClick={() => onReclaimControl && onReclaimControl(myPlayer.id)}
+              title="Klik untuk mengambil alih kendali dan bermain manual kembali (seperti game Mobile Legends)"
+            >
+              <Sparkles size={17} />
+              <span>Ambil Alih Kendali (Saya Sudah Kembali)</span>
+            </button>
+            {onOpenRules && (
+              <button
+                type="button"
+                className="btn-action-rules"
+                onClick={onOpenRules}
+                title="Lihat Panduan Aturan"
+              >
+                <HelpCircle size={15} />
+              </button>
+            )}
+          </div>
+        ) : (
+          <div
+            className={`bigtwo-floating-dock ${isMyTurn ? 'is-my-turn' : ''}`}
           >
-            <Play size={15} fill="currentColor" />
-            <span>
-              Mainkan{' '}
-              {selectedCards.length > 0 ? `(${selectedCards.length})` : ''}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            className="btn-action-pass"
-            disabled={!isMyTurn || isFreeTurn}
-            onClick={handlePassClick}
-            title={
-              isFreeTurn
-                ? 'Meja kosong, wajib mengeluarkan kartu'
-                : 'Lewat giliran'
-            }
-          >
-            <SkipForward size={15} />
-            <span>Pass</span>
-          </button>
-
-          {selectedCards.length > 0 && (
             <button
               type="button"
-              className="btn-action-deselect"
-              onClick={handleClearSelection}
-              title="Batalkan pilihan kartu"
+              className="btn-action-play"
+              disabled={!isMyTurn || selectedCards.length === 0}
+              onClick={handlePlay}
             >
-              <RotateCcw size={14} />
-              <span>Reset</span>
+              <Play size={15} fill="currentColor" />
+              <span>
+                Mainkan{' '}
+                {selectedCards.length > 0 ? `(${selectedCards.length})` : ''}
+              </span>
             </button>
-          )}
 
-          {onOpenWheel && (
             <button
               type="button"
-              className="btn-action-rules"
-              onClick={onOpenWheel}
-              title="Putar Roda Acak Giliran Pertama"
-              style={{ background: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.3)', color: '#fbbf24' }}
+              className="btn-action-pass"
+              disabled={!isMyTurn || isFreeTurn}
+              onClick={handlePassClick}
+              title={
+                isFreeTurn
+                  ? 'Meja kosong, wajib mengeluarkan kartu'
+                  : 'Lewat giliran'
+              }
             >
-              <Sparkles size={15} />
+              <SkipForward size={15} />
+              <span>Pass</span>
             </button>
-          )}
 
-          {onOpenRules && (
-            <button
-              type="button"
-              className="btn-action-rules"
-              onClick={onOpenRules}
-              title="Lihat Panduan Aturan"
-            >
-              <HelpCircle size={15} />
-            </button>
-          )}
-        </div>
+            {selectedCards.length > 0 && (
+              <button
+                type="button"
+                className="btn-action-deselect"
+                onClick={handleClearSelection}
+                title="Batalkan pilihan kartu"
+              >
+                <RotateCcw size={14} />
+                <span>Reset</span>
+              </button>
+            )}
+
+            {onOpenWheel && (
+              <button
+                type="button"
+                className="btn-action-rules"
+                onClick={onOpenWheel}
+                title="Putar Roda Acak Giliran Pertama"
+                style={{ background: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.3)', color: '#fbbf24' }}
+              >
+                <Sparkles size={15} />
+              </button>
+            )}
+
+            {onOpenRules && (
+              <button
+                type="button"
+                className="btn-action-rules"
+                onClick={onOpenRules}
+                title="Lihat Panduan Aturan"
+              >
+                <HelpCircle size={15} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

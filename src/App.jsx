@@ -280,9 +280,9 @@ export default function App() {
 
   // AFK & Turn Timer tracking state
   const [turnElapsed, setTurnElapsed] = useState(0);
-  const [showAfkWarningModal, setShowAfkWarningModal] = useState(false);
   const turnStartTimeRef = useRef(Date.now());
   const prevTurnPlayerIdRef = useRef(null);
+  const afkTriggeredTurnRef = useRef(new Set());
 
   // Cumulative Scoreboard Data (Games Played & Point Score, persisted in localStorage)
   const [scoreboardData, setScoreboardData] = useState(() => {
@@ -1233,12 +1233,11 @@ export default function App() {
     }
   };
 
-  // AFK & Turn Timer tracking (120 seconds = 2 minutes)
+  // AFK & Turn Timer tracking (120 seconds = 2 minutes -> auto-switch to Bot AI like Mobile Legends)
   useEffect(() => {
     if (activeGameType !== 'bigtwo') return;
     if (gameStateBigtwo?.gameStatus === 'GAME_OVER' || bigTwoWheelPicker?.isOpen) {
       setTurnElapsed(0);
-      setShowAfkWarningModal(false);
       return;
     }
 
@@ -1247,7 +1246,6 @@ export default function App() {
       prevTurnPlayerIdRef.current = currentId;
       turnStartTimeRef.current = gameStateBigtwo?.turnStartedAt || Date.now();
       setTurnElapsed(0);
-      setShowAfkWarningModal(false);
     }
 
     const interval = setInterval(() => {
@@ -1259,11 +1257,23 @@ export default function App() {
       const isHumanTurn = currentPlayerObj && !currentPlayerObj.isBot && !currentPlayerObj.isBotTakeover;
 
       if (isHumanTurn && elapsed >= 120) {
-        if (currentId === myPlayerId) {
-          setShowAfkWarningModal(true);
-        } else if (isHost && isMultiplayerMode) {
-          // Host automatically initiates bot takeover to keep the room moving
-          handleSetBotTakeover(currentId, true);
+        const turnKey = `${currentId}_${startTime}`;
+        if (!afkTriggeredTurnRef.current.has(turnKey)) {
+          afkTriggeredTurnRef.current.add(turnKey);
+
+          // Determine who should trigger takeover:
+          // 1. Viewer is the active player (myPlayerId in MP, or SINGLE_HUMAN_ID in single, or local mode)
+          // 2. OR Host in multiplayer (safety net if guest closed tab or is unresponsive)
+          const isMyActiveTurn = isMultiplayerMode
+            ? currentId === myPlayerId
+            : isSingleMode
+            ? currentId === SINGLE_HUMAN_ID
+            : true;
+
+          if (isMyActiveTurn || (isHost && isMultiplayerMode)) {
+            console.log(`[AFK AUTO-TAKEOVER] Pemain ${currentPlayerObj.name} (${currentId}) AFK > 120s. Langsung dialihkan ke Bot AI.`);
+            handleSetBotTakeover(currentId, true);
+          }
         }
       }
     }, 1000);
@@ -1278,6 +1288,7 @@ export default function App() {
     myPlayerId,
     isHost,
     isMultiplayerMode,
+    isSingleMode,
   ]);
 
   const getScoreSessionKey = (gameKey) => {
@@ -1511,7 +1522,7 @@ export default function App() {
       isMultiplayerMode &&
       currentRoom?.host_id === myPlayerId &&
       currentRoom?.status === 'playing';
-    const canDriveBots = isSingleMode || isMultiplayerHost;
+    const canDriveBots = isSingleMode || isMultiplayerHost || gameMode === 'local';
 
     if (!canDriveBots) {
       setBotThinking(null);
@@ -1608,6 +1619,7 @@ export default function App() {
     gameStateBigtwo?.currentPlayer,
     gameStateBigtwo?.gameStatus,
     gameStateBigtwo?.currentTrick,
+    gameStateBigtwo?.players?.find((p) => p.id === gameStateBigtwo?.currentPlayer)?.isBotTakeover,
     bigTwoWheelPicker?.isOpen,
     isMultiplayerMode,
     isSingleMode,
