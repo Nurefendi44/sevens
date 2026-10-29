@@ -30,6 +30,7 @@ export default function Table41({
   onOpenRules,
   onReclaimControl,
   turnDuration = 0,
+  speakingPlayers = new Set(),
 }) {
   const [selectedCard, setSelectedCard] = useState(null);
   const [showConfirmClose, setShowConfirmClose] = useState(false);
@@ -128,7 +129,12 @@ export default function Table41({
               key={p.id}
               className={`game41-seat-pod ${isOpponentTurn ? 'active-turn' : ''}`}
             >
-              <span style={{ fontSize: '1.25rem' }}>{p.avatar}</span>
+              <span
+                style={{ fontSize: '1.25rem' }}
+                className={speakingPlayers?.has?.(p.id) ? 'speaking-avatar-ring' : ''}
+              >
+                {p.avatar}
+              </span>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <strong style={{ fontSize: '0.8rem', color: isOpponentTurn ? '#fbbf24' : '#f8fafc' }}>
                   {p.name}
@@ -278,7 +284,12 @@ export default function Table41({
 
         <div className="game41-tray-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <span style={{ fontSize: '1.3rem' }}>{myPlayer.avatar}</span>
+            <span
+              style={{ fontSize: '1.3rem' }}
+              className={speakingPlayers?.has?.(myPlayer.id) ? 'speaking-avatar-ring' : ''}
+            >
+              {myPlayer.avatar}
+            </span>
             <strong>{myPlayer.name}</strong>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
               ({myHand.length} kartu)

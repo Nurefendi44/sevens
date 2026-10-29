@@ -20,6 +20,7 @@ export default function FloatingReactionsOverlay({
   isOpen = false,
   onToggleOpen,
   myPlayerId,
+  showTrigger = true,
 }) {
   const dockRef = useRef(null);
   const triggerRef = useRef(null);
@@ -87,17 +88,19 @@ export default function FloatingReactionsOverlay({
       </div>
 
       {/* 2. FLOATING REACTION TRIGGER BUTTON (FAB / PILL) */}
-      <button
-        ref={triggerRef}
-        type="button"
-        className={`reaction-trigger-btn ${isOpen ? 'active' : ''}`}
-        onClick={() => onToggleOpen && onToggleOpen(!isOpen)}
-        title="Kirim Reaksi Emote (Google Meet Style)"
-        aria-label="Kirim Reaksi Emote"
-      >
-        <span style={{ fontSize: '1.1rem' }}>😊</span>
-        <span>Reaksi</span>
-      </button>
+      {showTrigger && (
+        <button
+          ref={triggerRef}
+          type="button"
+          className={`reaction-trigger-btn ${isOpen ? 'active' : ''}`}
+          onClick={() => onToggleOpen && onToggleOpen(!isOpen)}
+          title="Kirim Reaksi Emote (Google Meet Style)"
+          aria-label="Kirim Reaksi Emote"
+        >
+          <span style={{ fontSize: '1.1rem' }}>😊</span>
+          <span>Reaksi</span>
+        </button>
+      )}
 
       {/* 3. GOOGLE MEET HORIZONTAL EMOJI DOCK BAR */}
       {isOpen && (

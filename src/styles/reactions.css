@@ -147,8 +147,8 @@
 /* Google Meet Horizontal Emoji Reaction Dock Bar */
 .meet-reaction-dock {
   position: fixed;
-  bottom: 175px;
-  right: 18px;
+  bottom: 142px;
+  right: 14px;
   z-index: 10001;
   display: flex;
   align-items: center;
@@ -165,8 +165,8 @@
 
 @media (max-width: 640px) {
   .meet-reaction-dock {
-    bottom: 150px;
-    right: 12px;
+    bottom: 134px;
+    right: 8px;
     gap: 0.25rem;
     padding: 0.35rem 0.5rem;
     max-width: 95vw;

@@ -34,6 +34,7 @@ export default function TableBigTwo({
   onError,
   onReclaimControl,
   turnDuration = 0,
+  speakingPlayers = new Set(),
 }) {
   const [selectedCards, setSelectedCards] = useState([]);
   const [isGridView, setIsGridView] = useState(false);
@@ -218,7 +219,9 @@ export default function TableBigTwo({
               }
             >
               <div className="bigtwo-opp-header">
-                <span className="opp-avatar">{p.avatar || '🤖'}</span>
+                <span className={`opp-avatar ${speakingPlayers?.has?.(p.id) ? 'speaking-avatar-ring' : ''}`}>
+                  {p.avatar || '🤖'}
+                </span>
                 <span className="opp-name">
                   {p.name} : <strong>{finishedEntry ? 'HABIS' : oppCardCount}</strong>
                 </span>
@@ -356,7 +359,9 @@ export default function TableBigTwo({
 
         <div className="bigtwo-tray-header">
           <div className="tray-hand-info">
-            <span className="tray-avatar">{myPlayer.avatar || '👑'}</span>
+            <span className={`tray-avatar ${speakingPlayers?.has?.(myPlayer.id) ? 'speaking-avatar-ring' : ''}`}>
+              {myPlayer.avatar || '👑'}
+            </span>
             <span className="tray-label">
               Kartu Anda (<strong>{myHand.length}</strong>)
             </span>

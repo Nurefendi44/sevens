@@ -50,6 +50,8 @@ import { initBigTwo, playComboBigTwo, passTurnBigTwo, setBotTakeoverBigTwo } fro
 import ActionAnnouncementPopup from './components/ActionAnnouncementPopup.jsx';
 import LiveChatOverlay from './components/LiveChatOverlay.jsx';
 import FloatingReactionsOverlay from './components/FloatingReactionsOverlay.jsx';
+import UnifiedSocialDock from './components/UnifiedSocialDock.jsx';
+import { voiceChat } from './services/voiceChatService.js';
 
 import {
   createSinglePlayerRoster,
@@ -87,6 +89,8 @@ import {
   Crown,
   MessageSquare,
   Smile,
+  Mic,
+  MicOff,
 } from 'lucide-react';
 
 export default function App() {
@@ -96,6 +100,11 @@ export default function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [activeReactions, setActiveReactions] = useState([]);
   const [isReactionOpen, setIsReactionOpen] = useState(false);
+
+  // Live Voice Chat State
+  const [isVoiceConnected, setIsVoiceConnected] = useState(false);
+  const [isVoiceMuted, setIsVoiceMuted] = useState(true);
+  const [speakingPlayers, setSpeakingPlayers] = useState(new Set());
 
   // Table View & Mobile Focus Settings (Persistent)
   const [showOpponents, setShowOpponents] = useState(() => {
@@ -609,6 +618,51 @@ export default function App() {
   };
 
   // ---------------------------------------------------------------------------
+  // LIVE VOICE CHAT (WebRTC P2P) HANDLERS
+  // ---------------------------------------------------------------------------
+  const handleToggleVoice = async () => {
+    if (!isVoiceConnected) {
+      if (!isMultiplayerMode || !currentRoom?.code) {
+        showToast('Voice Chat aktif di Room Multiplayer Online');
+        return;
+      }
+      const myName =
+        (currentRoom?.players || []).find((p) => p.id === myPlayerId)?.name ||
+        getLocalPlayerName() ||
+        'Player';
+
+      const success = await voiceChat.joinRoom(currentRoom.code, myPlayerId, myName, {
+        onSpeakingChange: (pId, speaking) => {
+          setSpeakingPlayers((prev) => {
+            const next = new Set(prev);
+            if (speaking) next.add(pId);
+            else next.delete(pId);
+            return next;
+          });
+        },
+        onStatusChange: (status) => {
+          setIsVoiceConnected(status.isConnected);
+          setIsVoiceMuted(status.isMuted);
+          if (status.error) showToast(status.error);
+        },
+      });
+
+      if (success) {
+        showToast('Mikrofon aktif 🎙️');
+      }
+    } else {
+      const nextMute = voiceChat.toggleMute();
+      setIsVoiceMuted(nextMute);
+      showToast(nextMute ? 'Mikrofon dimatikan (Muted)' : 'Mikrofon aktif (Unmuted) 🎙️');
+    }
+  };
+
+  const handleIncomingVoiceSignal = (signal) => {
+    if (!signal) return;
+    voiceChat.handleIncomingSignal(signal);
+  };
+
+  // ---------------------------------------------------------------------------
   // 2. SUPABASE REALTIME SUBSCRIPTION
   // ---------------------------------------------------------------------------
   useEffect(() => {
@@ -702,11 +756,13 @@ export default function App() {
       },
       null,
       handleIncomingChatMessage,
-      handleIncomingReaction
+      handleIncomingReaction,
+      handleIncomingVoiceSignal
     );
 
     return () => {
       unsubscribe();
+      voiceChat.leaveRoom();
     };
   }, [gameMode, currentRoom?.code]);
 
@@ -912,6 +968,11 @@ export default function App() {
   };
 
   const handleLeaveRoom = async () => {
+    voiceChat.leaveRoom();
+    setIsVoiceConnected(false);
+    setIsVoiceMuted(true);
+    setSpeakingPlayers(new Set());
+
     if (currentRoom?.code) {
       await multiplayerAdapter.leaveRoom(currentRoom.code, myPlayerId);
     }
@@ -2164,6 +2225,18 @@ export default function App() {
     (activeGameType === 'game41' && (gameState41.gameStatus === 'game_over' || gameState41.gameStatus === 'GAME_OVER')) ||
     (activeGameType === 'sevens' && (gameState.gameStatus === GAME_STATUS.GAME_OVER || gameState.gameStatus === 'GAME_OVER'));
 
+  const isAnyModalOpen =
+    isGameOver ||
+    showScoreboardModal ||
+    showConfigModal ||
+    showRulesModal ||
+    showRules41Modal ||
+    showRulesBigtwoModal ||
+    showHistoryModal ||
+    Boolean(bigTwoWheelPicker?.isOpen) ||
+    showMultiplayerLobby ||
+    isMobileMenuOpen;
+
   return (
     <div className="app-container">
       {/* Real-time Action Announcement Pop-up (Who played / discarded / passed what) */}
@@ -2465,6 +2538,34 @@ export default function App() {
             <span>Reaksi</span>
           </button>
 
+          {/* Live Voice Chat Button in Desktop Header */}
+          <button
+            className="btn-header"
+            onClick={handleToggleVoice}
+            title={
+              isVoiceConnected
+                ? isVoiceMuted
+                  ? 'Nyalakan Mic (Unmute)'
+                  : 'Matikan Mic (Mute)'
+                : 'Gabung Live Voice Chat'
+            }
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              borderColor: isVoiceConnected && !isVoiceMuted ? 'rgba(16, 185, 129, 0.7)' : 'rgba(16, 185, 129, 0.4)',
+              color: isVoiceConnected && !isVoiceMuted ? '#10b981' : '#6ee7b7',
+              background: isVoiceConnected && !isVoiceMuted ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
+            }}
+          >
+            {isVoiceConnected && !isVoiceMuted ? (
+              <Mic size={15} className={speakingPlayers.has(myPlayerId) ? 'pulse-speaking' : ''} />
+            ) : (
+              <MicOff size={15} />
+            )}
+            <span>{isVoiceConnected ? (isVoiceMuted ? 'Muted' : 'Voice On') : 'Voice'}</span>
+          </button>
+
           <button
             className={`btn-icon ${isMuted ? 'active' : ''}`}
             onClick={handleToggleSound}
@@ -2500,6 +2601,23 @@ export default function App() {
               <Share2 size={16} />
             </button>
           )}
+
+          {/* Mobile Live Voice Button */}
+          <button
+            className="btn-icon"
+            onClick={handleToggleVoice}
+            title={isVoiceConnected && !isVoiceMuted ? 'Matikan Mic' : 'Nyalakan Mic'}
+            style={{
+              color: isVoiceConnected && !isVoiceMuted ? '#10b981' : '#94a3b8',
+              borderColor: isVoiceConnected && !isVoiceMuted ? '#10b981' : undefined,
+            }}
+          >
+            {isVoiceConnected && !isVoiceMuted ? (
+              <Mic size={16} className={speakingPlayers.has(myPlayerId) ? 'pulse-speaking' : ''} />
+            ) : (
+              <MicOff size={16} />
+            )}
+          </button>
 
           {/* Mobile Chat Button */}
           <button
@@ -2585,6 +2703,7 @@ export default function App() {
             onError={showToast}
             onReclaimControl={(playerId) => handleSetBotTakeover(playerId, false)}
             turnDuration={turnElapsed}
+            speakingPlayers={speakingPlayers}
           />
         ) : activeGameType === 'game41' ? (
           <Table41
@@ -2598,6 +2717,7 @@ export default function App() {
             onOpenRules={() => setShowRules41Modal(true)}
             onReclaimControl={(playerId) => handleSetBotTakeover(playerId, false)}
             turnDuration={turnElapsed}
+            speakingPlayers={speakingPlayers}
           />
         ) : (
           <>
@@ -2696,6 +2816,7 @@ export default function App() {
                           cardCount={gameState.hands[p.id]?.length || 0}
                           closedCount={gameState.closedCards[p.id]?.length || 0}
                           faultCount={gameState.faults[p.id]?.length || 0}
+                          isSpeaking={speakingPlayers.has(p.id)}
                         />
                       ))}
                     </div>
@@ -2707,6 +2828,7 @@ export default function App() {
                         cardCount={gameState.hands[seats.top.id]?.length || 0}
                         closedCount={gameState.closedCards[seats.top.id]?.length || 0}
                         faultCount={gameState.faults[seats.top.id]?.length || 0}
+                        isSpeaking={speakingPlayers.has(seats.top.id)}
                       />
                     </div>
                   ) : null}
@@ -2720,6 +2842,7 @@ export default function App() {
                         cardCount={gameState.hands[seats.left.id]?.length || 0}
                         closedCount={gameState.closedCards[seats.left.id]?.length || 0}
                         faultCount={gameState.faults[seats.left.id]?.length || 0}
+                        isSpeaking={speakingPlayers.has(seats.left.id)}
                       />
                     </div>
                   )}
@@ -2744,6 +2867,7 @@ export default function App() {
                     cardCount={gameState.hands[seats.right.id]?.length || 0}
                     closedCount={gameState.closedCards[seats.right.id]?.length || 0}
                     faultCount={gameState.faults[seats.right.id]?.length || 0}
+                    isSpeaking={speakingPlayers.has(seats.right.id)}
                   />
                 </div>
               )}
@@ -2842,6 +2966,9 @@ export default function App() {
         onOpenScoreboard={() => setShowScoreboardModal(true)}
         onOpenChat={() => setIsChatOpen(true)}
         onOpenReactions={() => setIsReactionOpen(true)}
+        isVoiceConnected={isVoiceConnected}
+        isVoiceMuted={isVoiceMuted}
+        onToggleVoice={handleToggleVoice}
         isMuted={isMuted}
         onToggleSound={handleToggleSound}
         onRestart={() => {
@@ -2995,6 +3122,7 @@ export default function App() {
           onSendMessage={handleSendChatMessage}
           isOpen={isChatOpen}
           onToggleOpen={setIsChatOpen}
+          showTrigger={false}
         />
       )}
 
@@ -3006,6 +3134,23 @@ export default function App() {
           isOpen={isReactionOpen}
           onToggleOpen={setIsReactionOpen}
           myPlayerId={myPlayerId}
+          showTrigger={false}
+        />
+      )}
+
+      {/* UNIFIED SOCIAL DOCK PILL (Voice + Reaksi + Chat in 1 sleek compact bar) */}
+      {gameMode && (
+        <UnifiedSocialDock
+          isVisible={!isAnyModalOpen}
+          isVoiceConnected={isVoiceConnected}
+          isVoiceMuted={isVoiceMuted}
+          isSpeaking={speakingPlayers.has(myPlayerId)}
+          onToggleVoice={handleToggleVoice}
+          isReactionOpen={isReactionOpen}
+          onToggleReaction={() => setIsReactionOpen((prev) => !prev)}
+          isChatOpen={isChatOpen}
+          onToggleChat={() => setIsChatOpen((prev) => !prev)}
+          hasUnreadChat={activeChatMessages.length > 0}
         />
       )}
     </div>

@@ -6,11 +6,12 @@ export default function PlayerSeat({
   cardCount = 0,
   closedCount = 0,
   faultCount = 0,
+  isSpeaking = false,
 }) {
   return (
     <div className={`player-seat ${isTurn ? 'active-turn' : ''}`}>
       <div className="seat-header">
-        <div className="player-avatar">{player.avatar}</div>
+        <div className={`player-avatar ${isSpeaking ? 'speaking-avatar-ring' : ''}`}>{player.avatar}</div>
         <div className="player-info">
           <div className="player-name">
             {player.name}

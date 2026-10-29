@@ -1023,9 +1023,36 @@ export const multiplayerAdapter = {
   },
 
   /**
-   * Subscribes to Realtime updates, live chat, and reactions for a specific room
+   * Broadcasts WebRTC Voice Chat signaling message (offer, answer, ICE, speaking)
    */
-  subscribeToRoom(roomCode, onRoomUpdate, onStatusChange = null, onChatMessage = null, onReaction = null) {
+  async sendVoiceSignal(roomCode, signalPayload) {
+    if (!supabase) return { success: false };
+    const code = roomCode.trim().toUpperCase();
+    const channelName = `room_channel_${code}`;
+
+    let channel = this.activeChannels[code];
+    if (!channel) {
+      channel = supabase.channel(channelName);
+      this.activeChannels[code] = channel;
+    }
+
+    try {
+      await channel.send({
+        type: 'broadcast',
+        event: 'voice_signal',
+        payload: signalPayload,
+      });
+      return { success: true };
+    } catch (err) {
+      console.warn('Gagal mengirim broadcast voice signal:', err);
+      return { success: false, error: err.message };
+    }
+  },
+
+  /**
+   * Subscribes to Realtime updates, live chat, reactions, and voice signaling for a specific room
+   */
+  subscribeToRoom(roomCode, onRoomUpdate, onStatusChange = null, onChatMessage = null, onReaction = null, onVoiceSignal = null) {
     if (!supabase) return () => {};
     const code = roomCode.trim().toUpperCase();
     const channelName = `room_channel_${code}`;
@@ -1054,6 +1081,11 @@ export const multiplayerAdapter = {
       .on('broadcast', { event: 'room_reaction' }, ({ payload }) => {
         if (onReaction && payload) {
           onReaction(payload);
+        }
+      })
+      .on('broadcast', { event: 'voice_signal' }, ({ payload }) => {
+        if (onVoiceSignal && payload) {
+          onVoiceSignal(payload);
         }
       })
       .subscribe((status) => {

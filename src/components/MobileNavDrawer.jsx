@@ -23,6 +23,8 @@ import {
   Crown,
   MessageSquare,
   Smile,
+  Mic,
+  MicOff,
 } from 'lucide-react';
 
 export default function MobileNavDrawer({
@@ -44,6 +46,9 @@ export default function MobileNavDrawer({
   onOpenScoreboard,
   onOpenChat,
   onOpenReactions,
+  isVoiceConnected = false,
+  isVoiceMuted = true,
+  onToggleVoice = null,
   isMuted,
   onToggleSound,
   onRestart,
@@ -242,6 +247,35 @@ export default function MobileNavDrawer({
               <div className="menu-item-text">
                 <span>Scoreboard & Peringkat</span>
                 <small>Akumulasi poin & riwayat kemenangan</small>
+              </div>
+            </button>
+          )}
+
+          {/* Live Voice Chat (WebRTC) */}
+          {onToggleVoice && (
+            <button
+              className="mobile-menu-item"
+              onClick={() => {
+                onToggleVoice();
+                onClose();
+              }}
+            >
+              <div className="menu-item-icon">
+                {isVoiceConnected && !isVoiceMuted ? (
+                  <Mic size={18} color="#10b981" />
+                ) : (
+                  <MicOff size={18} color="#94a3b8" />
+                )}
+              </div>
+              <div className="menu-item-text">
+                <span>
+                  {isVoiceConnected
+                    ? isVoiceMuted
+                      ? 'Live Voice: Mikrofon Muted'
+                      : 'Live Voice: Mikrofon Aktif 🎙️'
+                    : 'Gabung Live Voice Chat'}
+                </span>
+                <small>Bicara langsung secara realtime dengan teman di meja</small>
               </div>
             </button>
           )}

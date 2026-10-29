@@ -23,6 +23,7 @@ export default function LiveChatOverlay({
   onSendMessage,
   isOpen: externalIsOpen,
   onToggleOpen,
+  showTrigger = true,
 }) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen;
@@ -88,16 +89,18 @@ export default function LiveChatOverlay({
       )}
 
       {/* 2. FLOATING CHAT BUTTON (TRIGGER) */}
-      <button
-        type="button"
-        className={`live-chat-trigger-btn ${activeMessages.length > 0 ? 'has-recent' : ''}`}
-        onClick={() => setIsOpen(true)}
-        title="Buka Live Chat & Quick Emote"
-        aria-label="Kirim Pesan Chat Meja"
-      >
-        <MessageSquare size={16} />
-        {activeMessages.length > 0 && <span className="live-chat-unread-dot" />}
-      </button>
+      {showTrigger && (
+        <button
+          type="button"
+          className={`live-chat-trigger-btn ${activeMessages.length > 0 ? 'has-recent' : ''}`}
+          onClick={() => setIsOpen(true)}
+          title="Buka Live Chat & Quick Emote"
+          aria-label="Kirim Pesan Chat Meja"
+        >
+          <MessageSquare size={16} />
+          {activeMessages.length > 0 && <span className="live-chat-unread-dot" />}
+        </button>
+      )}
 
       {/* 3. QUICK CHAT & CUSTOM INPUT POPOVER MODAL */}
       {isOpen && (
