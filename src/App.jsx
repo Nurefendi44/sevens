@@ -133,14 +133,27 @@ export default function App() {
   // Multiplayer Room & Identity State (Synchronously restored from cache on refresh)
   const [currentRoom, setCurrentRoom] = useState(() => {
     if (typeof localStorage !== 'undefined') {
+      const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      const urlRoom = urlParams?.get('room')?.trim().toUpperCase();
       const session = getActiveSession();
+
+      // If user opened an invite link (?room=...) that doesn't match an active room session,
+      // start with null so the user is prompted to enter their name!
+      if (urlRoom && (!session.roomCode || session.roomCode !== urlRoom)) {
+        return null;
+      }
+
       if (session.roomCode) {
         try {
           const cached = localStorage.getItem('sevens_cached_room');
           if (cached) {
             const parsed = JSON.parse(cached);
             if (parsed && parsed.code === session.roomCode) {
-              return parsed;
+              const myId = getLocalPlayerId();
+              const isParticipant = (parsed.players || []).some((p) => p.id === session.playerId || p.id === myId);
+              if (isParticipant) {
+                return parsed;
+              }
             }
           }
         } catch (e) {}
@@ -148,6 +161,7 @@ export default function App() {
     }
     return null;
   });
+
 
   const [myPlayerId, setMyPlayerId] = useState(() => getLocalPlayerId());
   const isSingleMode = gameMode === 'single';
@@ -349,40 +363,61 @@ export default function App() {
   const prevTurnNumberRef = useRef(gameState.turnNumber);
 
   // ---------------------------------------------------------------------------
-  // 1. RECONNECT HANDLING (Check server state on mount & silently update cache)
+  // 1. RECONNECT & INVITE HANDLING (Check server state on mount & silently update cache)
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const session = getActiveSession();
     const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-    const targetRoomCode = session.roomCode || urlParams?.get('room');
+    const inviteParam = urlParams?.get('room')?.trim().toUpperCase() || null;
+    const currentMyId = session.playerId || getLocalPlayerId();
+
+    // If an invite room link is opened, prioritize checking that room
+    const targetRoomCode = (inviteParam && (!session.roomCode || session.roomCode !== inviteParam))
+      ? inviteParam
+      : (session.roomCode || inviteParam);
 
     if (targetRoomCode && isSupabaseConfigured) {
       multiplayerAdapter.getRoom(targetRoomCode).then(({ room, error }) => {
         setIsReconnecting(false);
         if (room && !error) {
-          setCurrentRoom(room);
-          setGameMode('multiplayer');
-          if (session.playerId) {
-            setMyPlayerId(session.playerId);
-          }
-          if (room.game_state) {
-            if (room.game_state.gameType === 'bigtwo') {
-              setActiveGameType('bigtwo');
-              if (room.game_state.players) setGameStateBigtwo(room.game_state);
-            } else if (room.game_state.gameType === 'game41') {
-              setActiveGameType('game41');
-              if (room.game_state.players) setGameState41(room.game_state);
-            } else {
-              setActiveGameType('sevens');
-              if (room.game_state.players) setGameState(room.game_state);
+          const roomGameType = room.game_state?.gameType || room.config?.gameType || 'bigtwo';
+          setActiveGameType(roomGameType);
+
+          // Check if viewer is ALREADY a participant in this room
+          const isPlayerInRoom = (room.players || []).some(
+            (p) => p.id === currentMyId || p.id === session.playerId || p.id === myPlayerId
+          );
+
+          if (isPlayerInRoom) {
+            // Already registered in room: reconnect seamlessly
+            setCurrentRoom(room);
+            setGameMode('multiplayer');
+            if (session.playerId) {
+              setMyPlayerId(session.playerId);
             }
+            if (room.game_state) {
+              if (room.game_state.gameType === 'bigtwo') {
+                if (room.game_state.players) setGameStateBigtwo(room.game_state);
+              } else if (room.game_state.gameType === 'game41') {
+                if (room.game_state.players) setGameState41(room.game_state);
+              } else {
+                if (room.game_state.players) setGameState(room.game_state);
+              }
+            }
+            showToast(`Terhubung ke Room ${room.code}`);
+          } else {
+            // Visiting via invite link: user has not joined yet!
+            // Keep currentRoom as null so MultiplayerLobby renders the Join/Name input screen!
+            setCurrentRoom(null);
+            setInviteRoomCode(room.code);
+            setGameMode('multiplayer');
+            showToast(`Undangan Room ${room.code} ditemukan. Silakan masukkan nama Anda!`);
           }
-          // Only show toast if user reconnected cleanly
-          showToast(`Terhubung ke Room ${room.code}`);
         } else if (!error && room === null) {
           // Room was explicitly deleted / not found in DB
           clearLocalSession();
           setCurrentRoom(null);
+          setInviteRoomCode(null);
         } else {
           // Temporary network error / offline: retain session and do not kick player!
           console.warn('Gagal memuat room server, mempertahankan sesi lokal:', error);
@@ -406,14 +441,14 @@ export default function App() {
           url.searchParams.set('room', currentRoom.code);
           window.history.replaceState(null, '', url.toString());
         }
-      } else {
+      } else if (!inviteRoomCode) {
         if (url.searchParams.has('room') && !currentRoom?.code) {
           url.searchParams.delete('room');
           window.history.replaceState(null, '', url.pathname);
         }
       }
     } catch {}
-  }, [isMultiplayerMode, currentRoom?.code]);
+  }, [isMultiplayerMode, currentRoom?.code, inviteRoomCode]);
 
   // Auto-resync when returning to tab or network comes back online
   useEffect(() => {
@@ -1938,8 +1973,13 @@ export default function App() {
   // ---------------------------------------------------------------------------
   // RENDER: MULTIPLAYER LOBBY (When in multiplayer and no room or in lobby)
   // ---------------------------------------------------------------------------
+  const isParticipant = Boolean(
+    currentRoom && (currentRoom.players || []).some((p) => p.id === myPlayerId)
+  );
+
   const showMultiplayerLobby =
-    isMultiplayerMode && (!currentRoom || currentRoom.status === 'lobby');
+    isMultiplayerMode && (!currentRoom || !isParticipant || currentRoom.status === 'lobby');
+
 
   return (
     <div className="app-container">

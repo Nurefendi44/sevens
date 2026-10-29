@@ -23,6 +23,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import '../styles/multiplayer.css';
+import { getLocalPlayerName } from '../services/multiplayerAdapter.js';
+
 
 /**
  * Intelligent parser to extract pure 6-character room code from:
@@ -115,29 +117,34 @@ export default function MultiplayerLobby({
   initialDeckMode = 'double',
   initialPlayerCount = 4,
 }) {
+  const players = room?.players || [];
+  const isParticipant = Boolean(room && players.some((p) => p.id === myPlayerId));
+  const effectiveInviteCode = inviteRoomCode || (!isParticipant && room?.code ? room.code : null);
+
   const [activeTab, setActiveTab] = useState(() =>
-    inviteRoomCode ? 'join' : 'create'
+    effectiveInviteCode ? 'join' : 'create'
   );
   const [selectedPlayerCount, setSelectedPlayerCount] = useState(initialPlayerCount || 4);
   const [deckMode, setDeckMode] = useState(initialDeckMode || 'double');
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [usernameInput, setUsernameInput] = useState('');
+  const [usernameInput, setUsernameInput] = useState(() => getLocalPlayerName() || '');
   const [roomCodeInput, setRoomCodeInput] = useState(() =>
-    extractCleanRoomCode(inviteRoomCode || '')
+    extractCleanRoomCode(effectiveInviteCode || '')
   );
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const meta = GAME_META[activeGameType] || GAME_META.sevens;
 
-  // Sync inviteRoomCode if changed
+  // Sync effectiveInviteCode if changed
   useEffect(() => {
-    if (inviteRoomCode) {
-      setRoomCodeInput(extractCleanRoomCode(inviteRoomCode));
+    if (effectiveInviteCode) {
+      setRoomCodeInput(extractCleanRoomCode(effectiveInviteCode));
       setActiveTab('join');
     }
-  }, [inviteRoomCode]);
+  }, [effectiveInviteCode]);
+
 
   // Generate invite share link (Clean URL)
   const getInviteUrl = () => {
@@ -304,7 +311,7 @@ export default function MultiplayerLobby({
   // ---------------------------------------------------------------------------
   // VIEW A: NOT IN A ROOM YET (CREATE / JOIN SCREEN WITH TAB SWITCHER)
   // ---------------------------------------------------------------------------
-  if (!room) {
+  if (!room || !isParticipant) {
     return (
       <div className="mp-overlay">
         <div className="mp-ambient-bg" aria-hidden="true">
@@ -383,7 +390,7 @@ export default function MultiplayerLobby({
               </div>
             )}
 
-            {inviteRoomCode && (
+            {effectiveInviteCode && (
               <div className="mp-invite-banner">
                 <div className="mp-invite-icon">
                   <Link2 size={20} />
@@ -392,7 +399,7 @@ export default function MultiplayerLobby({
                   <strong>Undangan Room Ditemukan!</strong>
                   <span>
                     Anda diundang ke Room{' '}
-                    <code className="mp-code-chip">{inviteRoomCode}</code>. Isi
+                    <code className="mp-code-chip">{effectiveInviteCode}</code>. Isi
                     nama Anda lalu klik <strong>Gabung ke Meja</strong>.
                   </span>
                 </div>
@@ -468,7 +475,7 @@ export default function MultiplayerLobby({
               >
                 <KeyRound size={16} />
                 <span>Gabung Kode Room</span>
-                {inviteRoomCode && <span className="mp-tab-dot" />}
+                {effectiveInviteCode && <span className="mp-tab-dot" />}
               </button>
             </div>
 
@@ -635,10 +642,9 @@ export default function MultiplayerLobby({
   // ---------------------------------------------------------------------------
   // VIEW B: INSIDE ROOM WAITING LOBBY (MEJA KARTU VIP)
   // ---------------------------------------------------------------------------
-  const players = room.players || [];
   const myPlayer = players.find((p) => p.id === myPlayerId) || {};
   const isReady = Boolean(myPlayer.isReady);
-  const targetPlayerCount = room.game_state?.config?.playerCount || 4;
+  const targetPlayerCount = room?.game_state?.config?.playerCount || 4;
   const canStart = players.length >= 2;
 
   const slots = Array.from({ length: targetPlayerCount }).map(
