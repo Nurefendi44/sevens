@@ -552,18 +552,6 @@ export default function TableBigTwo({
               </button>
             )}
 
-            {onOpenWheel && (
-              <button
-                type="button"
-                className="btn-action-rules"
-                onClick={onOpenWheel}
-                title="Putar Roda Acak Giliran Pertama"
-                style={{ background: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.3)', color: '#fbbf24' }}
-              >
-                <Sparkles size={15} />
-              </button>
-            )}
-
             {onOpenRules && (
               <button
                 type="button"

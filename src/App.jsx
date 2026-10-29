@@ -48,7 +48,7 @@ import BigTwoFirstTurnWheel from './games/bigtwo/components/BigTwoFirstTurnWheel
 import { initBigTwo, playComboBigTwo, passTurnBigTwo, setBotTakeoverBigTwo } from './games/bigtwo/engine/bigtwoEngine.js';
 
 import ActionAnnouncementPopup from './components/ActionAnnouncementPopup.jsx';
-import LiveChatOverlay, { getBotChatReply } from './components/LiveChatOverlay.jsx';
+import LiveChatOverlay from './components/LiveChatOverlay.jsx';
 
 import {
   createSinglePlayerRoster,
@@ -516,15 +516,15 @@ export default function App() {
 
     setActiveChatMessages((prev) => [...prev.slice(-2), newChat]);
 
-    // Auto-dismiss after 4.5 seconds
+    // Auto-dismiss after 8.5 seconds (agar nyaman dan leluasa dibaca)
     setTimeout(() => {
       setActiveChatMessages((prev) =>
         prev.map((m) => (m.id === newChat.id ? { ...m, isFading: true } : m))
       );
       setTimeout(() => {
         setActiveChatMessages((prev) => prev.filter((m) => m.id !== newChat.id));
-      }, 400);
-    }, 4200);
+      }, 500);
+    }, 8500);
   };
 
   const handleSendChatMessage = async (text) => {
@@ -556,42 +556,6 @@ export default function App() {
     // Broadcast to other players in room (if online)
     if (isMultiplayerMode && currentRoom?.code) {
       await multiplayerAdapter.sendRoomChat(currentRoom.code, chatPayload);
-    }
-
-    // Interactive Bot reply when playing with Bot AI
-    const activePlayersList = isMultiplayerMode
-      ? (currentRoom?.players || [])
-      : (activeGameType === 'bigtwo'
-          ? (gameStateBigtwo?.players || [])
-          : activeGameType === 'game41'
-          ? (gameState41?.players || [])
-          : (gameState?.players || []));
-
-    const botPlayers = activePlayersList.filter(
-      (p) => p.isBot || p.isBotTakeover || isBotPlayer(null, p.id)
-    );
-
-    if (botPlayers.length > 0) {
-      const chosenBot = botPlayers[Math.floor(Math.random() * botPlayers.length)];
-      const botDelay = 1200 + Math.random() * 1100;
-
-      setTimeout(() => {
-        const replyText = getBotChatReply(text);
-        const botPayload = {
-          senderId: chosenBot.id,
-          senderName: chosenBot.name || 'Bot AI',
-          senderAvatar: chosenBot.avatar || '🤖',
-          message: replyText,
-          timestamp: Date.now(),
-        };
-
-        handleIncomingChatMessage(botPayload);
-
-        // If in multiplayer room and I am host, broadcast the bot reply so all players see it
-        if (isMultiplayerMode && currentRoom?.code && isHost) {
-          multiplayerAdapter.sendRoomChat(currentRoom.code, botPayload);
-        }
-      }, botDelay);
     }
   };
 
@@ -2145,6 +2109,10 @@ export default function App() {
   const showMultiplayerLobby =
     isMultiplayerMode && (!currentRoom || !isParticipant || currentRoom.status === 'lobby');
 
+  const isGameOver =
+    (activeGameType === 'bigtwo' && (gameStateBigtwo.gameStatus === 'GAME_OVER' || gameStateBigtwo.status === 'finished')) ||
+    (activeGameType === 'game41' && (gameState41.gameStatus === 'game_over' || gameState41.gameStatus === 'GAME_OVER')) ||
+    (activeGameType === 'sevens' && (gameState.gameStatus === GAME_STATUS.GAME_OVER || gameState.gameStatus === 'GAME_OVER'));
 
   return (
     <div className="app-container">
@@ -2438,7 +2406,7 @@ export default function App() {
             {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
           </button>
 
-          {(!isMultiplayerMode || isHost) && (
+          {(!isMultiplayerMode || isHost) && isGameOver && (
             <button
               className="btn-header btn-gold"
               onClick={() => {
@@ -2537,7 +2505,6 @@ export default function App() {
             onPass={handlePassBigTwo}
             isMultiplayer={isMultiplayerMode}
             onOpenRules={() => setShowRulesBigtwoModal(true)}
-            onOpenWheel={handleBigTwoRespin}
             onError={showToast}
             onReclaimControl={(playerId) => handleSetBotTakeover(playerId, false)}
             turnDuration={turnElapsed}
@@ -2804,6 +2771,7 @@ export default function App() {
           else if (activeGameType === 'game41') handleRestart41();
           else handleRestart();
         }}
+        isGameOver={isGameOver}
         isHost={isHost}
         onClaimHost={handleClaimHost}
         onResetRoom={handleResetRoom}

@@ -52,6 +52,7 @@ export default function MobileNavDrawer({
   onSwitchMode,
   onBackToMenu,
   activeGameType = 'sevens',
+  isGameOver = false,
 }) {
   if (!isOpen) return null;
 
@@ -328,8 +329,8 @@ export default function MobileNavDrawer({
             </div>
           </button>
 
-          {/* Restart / Game Baru (if Host or Local) */}
-          {(!isMultiplayerMode || isHost) && (
+          {/* Restart / Game Baru (Hanya muncul jika permainan telah selesai / Game Over) */}
+          {(!isMultiplayerMode || isHost) && isGameOver && (
             <button
               className="mobile-menu-item item-gold"
               onClick={() => {
