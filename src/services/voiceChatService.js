@@ -17,6 +17,61 @@ const ICE_SERVERS = {
   ],
 };
 
+let cachedIceServers = null;
+
+/**
+ * Load ICE servers. STUN alone cannot traverse symmetric NAT (mobile data, hotspot,
+ * some ISPs) so a TURN relay is required for reliable voice. Configure one via env:
+ *  - VITE_METERED_DOMAIN + VITE_METERED_API_KEY  (free at metered.ca), or
+ *  - VITE_TURN_URLS (comma separated) + VITE_TURN_USERNAME + VITE_TURN_CREDENTIAL
+ */
+async function loadIceServers() {
+  if (cachedIceServers) return cachedIceServers;
+
+  const env = (typeof import.meta !== 'undefined' && import.meta.env) || {};
+  const servers = [...ICE_SERVERS.iceServers];
+  let hasTurn = false;
+
+  try {
+    if (env.VITE_METERED_DOMAIN && env.VITE_METERED_API_KEY) {
+      const res = await fetch(
+        `https://${env.VITE_METERED_DOMAIN}/api/v1/turn/credentials?apiKey=${env.VITE_METERED_API_KEY}`
+      );
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length) {
+          servers.push(...list);
+          hasTurn = true;
+        }
+      } else {
+        console.warn('[VoiceChat] Metered TURN fetch failed:', res.status);
+      }
+    }
+  } catch (e) {
+    console.warn('[VoiceChat] Could not load Metered TURN credentials:', e);
+  }
+
+  if (!hasTurn && env.VITE_TURN_URLS && env.VITE_TURN_USERNAME && env.VITE_TURN_CREDENTIAL) {
+    servers.push({
+      urls: env.VITE_TURN_URLS.split(',').map((u) => u.trim()).filter(Boolean),
+      username: env.VITE_TURN_USERNAME,
+      credential: env.VITE_TURN_CREDENTIAL,
+    });
+    hasTurn = true;
+  }
+
+  if (!hasTurn) {
+    console.warn(
+      '⚠️ [VoiceChat] Tidak ada TURN server dikonfigurasi. Voice hanya jalan jika NAT kedua pemain longgar. Lihat .env.example.'
+    );
+  } else {
+    console.log('✅ [VoiceChat] TURN relay server loaded');
+  }
+
+  cachedIceServers = { iceServers: servers, hasTurn };
+  return cachedIceServers;
+}
+
 class VoiceChatService {
   constructor() {
     this.roomCode = null;
@@ -42,6 +97,7 @@ class VoiceChatService {
     this.onSpeakingChange = null; // (playerId, isSpeaking) => void
     this.onStatusChange = null;   // ({ isConnected, isMuted, error }) => void
     this.onPeerConnect = null;    // (playerId) => void
+    this.iceConfig = { iceServers: ICE_SERVERS.iceServers, hasTurn: false };
     this.speakingPeers = new Set();
   }
 
@@ -76,6 +132,8 @@ class VoiceChatService {
     this.onPeerConnect = callbacks.onPeerConnect || null;
 
     try {
+      this.iceConfig = await loadIceServers();
+
       // 1. Request microphone stream
       this.localStream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -295,7 +353,7 @@ class VoiceChatService {
     }
 
     console.log(`🤝 [VoiceChat] Creating RTCPeerConnection for ${peerId}`);
-    const pc = new RTCPeerConnection(ICE_SERVERS);
+    const pc = new RTCPeerConnection({ iceServers: this.iceConfig.iceServers });
 
     // Add local audio tracks to send voice
     if (this.localStream) {
@@ -307,6 +365,9 @@ class VoiceChatService {
     // Send local ICE candidates to remote peer (serialized to plain JSON)
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        const candType = (event.candidate.candidate || '').split(' ')[7];
+        console.log(`🧊 [VoiceChat] Local ICE candidate (${candType}) for ${peerId}`);
+
         const candData = event.candidate.toJSON
           ? event.candidate.toJSON()
           : {
@@ -340,6 +401,15 @@ class VoiceChatService {
           this.onPeerConnect(peerId);
         }
       } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        if (pc.connectionState === 'failed' && this.onStatusChange) {
+          this.onStatusChange({
+            isConnected: this.isConnected,
+            isMuted: this.isMuted,
+            error: this.iceConfig.hasTurn
+              ? 'Koneksi voice gagal tersambung. Coba bergabung ulang.'
+              : 'Koneksi voice gagal (jaringan memblokir P2P). Server TURN belum dikonfigurasi.',
+          });
+        }
         this.closePeer(peerId);
       }
     };
