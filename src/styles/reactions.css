@@ -1,0 +1,219 @@
+/* ==========================================================================
+   GOOGLE MEET STYLE FLOATING REACTIONS & EMOJI PARTICLES
+   ========================================================================== */
+
+/* Fullscreen transparent layer for floating reactions */
+.floating-reactions-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10002;
+  overflow: hidden;
+}
+
+/* Individual floating emoji particle */
+.floating-reaction-item {
+  position: absolute;
+  bottom: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  user-select: none;
+  will-change: transform, opacity;
+  animation: floatUpMeet var(--anim-duration, 2.8s) cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+.floating-emoji-char {
+  font-size: 2.2rem;
+  line-height: 1;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.45));
+  transform-origin: center center;
+}
+
+/* Sender badge below floating emoji */
+.floating-sender-badge {
+  margin-top: 4px;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #f8fafc;
+  font-size: 0.65rem;
+  font-weight: 700;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.floating-sender-badge.is-me {
+  background: rgba(14, 165, 233, 0.88);
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+/* Upward swaying float animation (Google Meet physics) */
+@keyframes floatUpMeet {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.35) rotate(0deg);
+  }
+  10% {
+    opacity: 1;
+    transform: translate3d(calc(var(--drift-x, 20px) * 0.3), -8vh, 0) scale(var(--target-scale, 1.1)) rotate(var(--rot-1, 6deg));
+  }
+  35% {
+    opacity: 1;
+    transform: translate3d(calc(var(--drift-x, 20px) * -0.5), -28vh, 0) scale(var(--target-scale, 1.1)) rotate(var(--rot-2, -8deg));
+  }
+  65% {
+    opacity: 0.95;
+    transform: translate3d(calc(var(--drift-x, 20px) * 0.8), -55vh, 0) scale(var(--target-scale, 1.1)) rotate(var(--rot-1, 5deg));
+  }
+  85% {
+    opacity: 0.8;
+    transform: translate3d(calc(var(--drift-x, 20px) * -0.3), -75vh, 0) scale(calc(var(--target-scale, 1.1) * 0.95)) rotate(var(--rot-3, -4deg));
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(calc(var(--drift-x, 20px) * 1.2), -92vh, 0) scale(calc(var(--target-scale, 1.1) * 0.7)) rotate(0deg);
+  }
+}
+
+/* ==========================================================================
+   GOOGLE MEET REACTION BAR & FLOATING TRIGGER DOCK
+   ========================================================================== */
+
+/* Floating Reaction Action Button (Trigger) */
+.reaction-trigger-btn {
+  position: fixed;
+  bottom: 125px;
+  right: 110px;
+  z-index: 9999;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95));
+  border: 1.5px solid rgba(245, 158, 11, 0.5);
+  color: #f8fafc;
+  font-size: 0.85rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6), 0 0 18px rgba(245, 158, 11, 0.22);
+  backdrop-filter: blur(14px);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.reaction-trigger-btn:hover {
+  background: rgba(30, 41, 59, 0.98);
+  border-color: #fbbf24;
+  color: #ffffff;
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.7), 0 0 25px rgba(245, 158, 11, 0.4);
+}
+
+.reaction-trigger-btn.active {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: #fbbf24;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
+}
+
+/* Mobile FAB for Reactions */
+@media (max-width: 640px) {
+  .reaction-trigger-btn {
+    bottom: 95px;
+    right: 64px;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6), 0 0 15px rgba(245, 158, 11, 0.35);
+  }
+
+  .reaction-trigger-btn span {
+    display: none;
+  }
+}
+
+/* Google Meet Horizontal Emoji Reaction Dock Bar */
+.meet-reaction-dock {
+  position: fixed;
+  bottom: 175px;
+  right: 18px;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.7), 0 0 25px rgba(56, 189, 248, 0.25);
+  backdrop-filter: blur(16px);
+  animation: meetDockPop 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  user-select: none;
+}
+
+@media (max-width: 640px) {
+  .meet-reaction-dock {
+    bottom: 150px;
+    right: 12px;
+    gap: 0.25rem;
+    padding: 0.35rem 0.5rem;
+    max-width: 95vw;
+    overflow-x: auto;
+  }
+}
+
+@keyframes meetDockPop {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Individual emoji reaction button in dock */
+.btn-meet-emoji {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.05);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.45rem;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+  padding: 0;
+}
+
+@media (max-width: 640px) {
+  .btn-meet-emoji {
+    width: 36px;
+    height: 36px;
+    font-size: 1.3rem;
+  }
+}
+
+.btn-meet-emoji:hover {
+  background: rgba(255, 255, 255, 0.18);
+  transform: translateY(-4px) scale(1.25);
+}
+
+.btn-meet-emoji:active {
+  transform: scale(0.92);
+}

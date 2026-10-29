@@ -382,6 +382,37 @@ class AudioService {
       // Ignore
     }
   }
+
+  /**
+   * Sound effect for floating reaction emoji (bubbly pop)
+   */
+  playReactionSound() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+
+    try {
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sine';
+      const baseFreq = 500 + Math.random() * 220;
+      osc.frequency.setValueAtTime(baseFreq, now);
+      osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.7, now + 0.07);
+
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.002, now + 0.08);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.08);
+    } catch (e) {
+      // Ignore
+    }
+  }
 }
 
 export const audio = new AudioService();

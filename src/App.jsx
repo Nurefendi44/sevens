@@ -49,6 +49,7 @@ import { initBigTwo, playComboBigTwo, passTurnBigTwo, setBotTakeoverBigTwo } fro
 
 import ActionAnnouncementPopup from './components/ActionAnnouncementPopup.jsx';
 import LiveChatOverlay from './components/LiveChatOverlay.jsx';
+import FloatingReactionsOverlay from './components/FloatingReactionsOverlay.jsx';
 
 import {
   createSinglePlayerRoster,
@@ -85,6 +86,7 @@ import {
   Trophy,
   Crown,
   MessageSquare,
+  Smile,
 } from 'lucide-react';
 
 export default function App() {
@@ -92,6 +94,8 @@ export default function App() {
   const [isDealingAnimationActive, setIsDealingAnimationActive] = useState(false);
   const [multiplayerInitOptions, setMultiplayerInitOptions] = useState(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [activeReactions, setActiveReactions] = useState([]);
+  const [isReactionOpen, setIsReactionOpen] = useState(false);
 
   // Table View & Mobile Focus Settings (Persistent)
   const [showOpponents, setShowOpponents] = useState(() => {
@@ -560,6 +564,51 @@ export default function App() {
   };
 
   // ---------------------------------------------------------------------------
+  // GOOGLE MEET FLOATING REACTIONS HANDLERS
+  // ---------------------------------------------------------------------------
+  const handleIncomingReaction = (reaction) => {
+    if (!reaction || !reaction.emoji) return;
+    audio.playReactionSound();
+    const newReact = {
+      ...reaction,
+      id: reaction.id || `react_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      startX: reaction.startX || (40 + (Math.random() - 0.5) * 35),
+      driftX: (Math.random() - 0.5) * 70,
+      scale: 0.95 + Math.random() * 0.35,
+      duration: 2.6 + Math.random() * 0.7,
+    };
+    setActiveReactions((prev) => [...prev.slice(-30), newReact]);
+    setTimeout(() => {
+      setActiveReactions((prev) => prev.filter((r) => r.id !== newReact.id));
+    }, 3400);
+  };
+
+  const handleSendReaction = async (emoji, startX) => {
+    let senderName = getLocalPlayerName() || 'Anda';
+    let senderAvatar = '👤';
+    let senderId = myPlayerId || 'local_human';
+    if (isMultiplayerMode && currentRoom?.players) {
+      const myPlayer = (currentRoom.players || []).find((p) => p.id === myPlayerId);
+      if (myPlayer) {
+        senderName = myPlayer.name || senderName;
+        senderAvatar = myPlayer.avatar || senderAvatar;
+      }
+    }
+    const payload = {
+      senderId,
+      senderName,
+      senderAvatar,
+      emoji,
+      startX: startX || (40 + (Math.random() - 0.5) * 30),
+      timestamp: Date.now(),
+    };
+    handleIncomingReaction(payload);
+    if (isMultiplayerMode && currentRoom?.code) {
+      await multiplayerAdapter.sendRoomReaction(currentRoom.code, payload);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
   // 2. SUPABASE REALTIME SUBSCRIPTION
   // ---------------------------------------------------------------------------
   useEffect(() => {
@@ -652,7 +701,8 @@ export default function App() {
         }
       },
       null,
-      handleIncomingChatMessage
+      handleIncomingChatMessage,
+      handleIncomingReaction
     );
 
     return () => {
@@ -2398,6 +2448,23 @@ export default function App() {
             <span>Chat</span>
           </button>
 
+          {/* Dedicated Reaction Button in Desktop Header (Google Meet style) */}
+          <button
+            className="btn-header"
+            onClick={() => setIsReactionOpen((prev) => !prev)}
+            title="Kirim Reaksi Emote Terbang (Google Meet)"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              borderColor: 'rgba(251, 191, 36, 0.45)',
+              color: '#fbbf24',
+            }}
+          >
+            <Smile size={15} />
+            <span>Reaksi</span>
+          </button>
+
           <button
             className={`btn-icon ${isMuted ? 'active' : ''}`}
             onClick={handleToggleSound}
@@ -2442,6 +2509,16 @@ export default function App() {
             style={{ color: '#38bdf8' }}
           >
             <MessageSquare size={16} />
+          </button>
+
+          {/* Mobile Reaction Button */}
+          <button
+            className="btn-icon"
+            onClick={() => setIsReactionOpen((prev) => !prev)}
+            title="Reaksi Emote Terbang (Google Meet)"
+            style={{ color: '#fbbf24' }}
+          >
+            <Smile size={16} />
           </button>
 
           <button
@@ -2764,6 +2841,7 @@ export default function App() {
         onOpenHistory={() => setShowHistoryModal(true)}
         onOpenScoreboard={() => setShowScoreboardModal(true)}
         onOpenChat={() => setIsChatOpen(true)}
+        onOpenReactions={() => setIsReactionOpen(true)}
         isMuted={isMuted}
         onToggleSound={handleToggleSound}
         onRestart={() => {
@@ -2917,6 +2995,17 @@ export default function App() {
           onSendMessage={handleSendChatMessage}
           isOpen={isChatOpen}
           onToggleOpen={setIsChatOpen}
+        />
+      )}
+
+      {/* GOOGLE MEET FLOATING REACTIONS OVERLAY (Flying Upwards Animations) */}
+      {gameMode && (
+        <FloatingReactionsOverlay
+          activeReactions={activeReactions}
+          onSendReaction={handleSendReaction}
+          isOpen={isReactionOpen}
+          onToggleOpen={setIsReactionOpen}
+          myPlayerId={myPlayerId}
         />
       )}
     </div>

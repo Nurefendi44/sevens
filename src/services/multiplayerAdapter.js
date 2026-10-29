@@ -992,9 +992,40 @@ export const multiplayerAdapter = {
   },
 
   /**
-   * Subscribes to Realtime updates and live chat for a specific room
+   * Sends a floating reaction emote (Google Meet style) via Realtime Broadcast
    */
-  subscribeToRoom(roomCode, onRoomUpdate, onStatusChange = null, onChatMessage = null) {
+  async sendRoomReaction(roomCode, reactionPayload) {
+    if (!supabase) return { success: false, error: 'Supabase offline' };
+    const code = roomCode.trim().toUpperCase();
+    const channelName = `room_channel_${code}`;
+    let channel = this.activeChannels[code];
+    if (!channel) {
+      channel = supabase.channel(channelName);
+      this.activeChannels[code] = channel;
+      channel.subscribe();
+    }
+
+    try {
+      await channel.send({
+        type: 'broadcast',
+        event: 'room_reaction',
+        payload: {
+          ...reactionPayload,
+          id: `react_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          timestamp: Date.now(),
+        },
+      });
+      return { success: true };
+    } catch (err) {
+      console.warn('Gagal mengirim broadcast reaction:', err);
+      return { success: false, error: err.message };
+    }
+  },
+
+  /**
+   * Subscribes to Realtime updates, live chat, and reactions for a specific room
+   */
+  subscribeToRoom(roomCode, onRoomUpdate, onStatusChange = null, onChatMessage = null, onReaction = null) {
     if (!supabase) return () => {};
     const code = roomCode.trim().toUpperCase();
     const channelName = `room_channel_${code}`;
@@ -1018,6 +1049,11 @@ export const multiplayerAdapter = {
       .on('broadcast', { event: 'room_chat' }, ({ payload }) => {
         if (onChatMessage && payload) {
           onChatMessage(payload);
+        }
+      })
+      .on('broadcast', { event: 'room_reaction' }, ({ payload }) => {
+        if (onReaction && payload) {
+          onReaction(payload);
         }
       })
       .subscribe((status) => {

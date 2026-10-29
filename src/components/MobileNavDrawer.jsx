@@ -22,6 +22,7 @@ import {
   Trophy,
   Crown,
   MessageSquare,
+  Smile,
 } from 'lucide-react';
 
 export default function MobileNavDrawer({
@@ -42,6 +43,7 @@ export default function MobileNavDrawer({
   onOpenHistory,
   onOpenScoreboard,
   onOpenChat,
+  onOpenReactions,
   isMuted,
   onToggleSound,
   onRestart,
@@ -259,6 +261,25 @@ export default function MobileNavDrawer({
               <div className="menu-item-text">
                 <span>Chat Meja & Emote</span>
                 <small>Kirim pesan kilat atau ketik pesan obrolan</small>
+              </div>
+            </button>
+          )}
+
+          {/* Google Meet Reactions */}
+          {onOpenReactions && (
+            <button
+              className="mobile-menu-item"
+              onClick={() => {
+                onOpenReactions();
+                onClose();
+              }}
+            >
+              <div className="menu-item-icon">
+                <Smile size={18} color="#fbbf24" />
+              </div>
+              <div className="menu-item-text">
+                <span>Reaksi Emote (Google Meet)</span>
+                <small>Kirim emote animasi terbang melayang ke atas</small>
               </div>
             </button>
           )}
