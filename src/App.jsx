@@ -19,6 +19,7 @@ import {
 } from './services/multiplayerAdapter.js';
 import { isSupabaseConfigured } from './services/supabaseClient.js';
 
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import Board from './components/Board.jsx';
 import PlayerSeat from './components/PlayerSeat.jsx';
 import PlayerHand from './components/PlayerHand.jsx';
@@ -232,7 +233,13 @@ export default function App() {
           const cached = localStorage.getItem('sevens_cached_room');
           if (cached) {
             const parsed = JSON.parse(cached);
-            if (parsed && parsed.code === session.roomCode && parsed.game_state?.gameType === 'game41') {
+            if (
+              parsed &&
+              parsed.code === session.roomCode &&
+              parsed.game_state?.gameType === 'game41' &&
+              parsed.game_state?.players &&
+              parsed.game_state?.hands
+            ) {
               return parsed.game_state;
             }
           }
@@ -252,7 +259,13 @@ export default function App() {
           const cached = localStorage.getItem('sevens_cached_room');
           if (cached) {
             const parsed = JSON.parse(cached);
-            if (parsed && parsed.code === session.roomCode && parsed.game_state?.gameType === 'bigtwo') {
+            if (
+              parsed &&
+              parsed.code === session.roomCode &&
+              parsed.game_state?.gameType === 'bigtwo' &&
+              parsed.game_state?.players &&
+              parsed.game_state?.hands
+            ) {
               return parsed.game_state;
             }
           }
@@ -439,20 +452,31 @@ export default function App() {
     if (gameMode !== 'multiplayer' || !currentRoom?.code) return;
 
     const unsubscribe = multiplayerAdapter.subscribeToRoom(currentRoom.code, (updatedRoom) => {
-      setCurrentRoom(updatedRoom);
-
       if (updatedRoom.game_state) {
         const nextState = updatedRoom.game_state;
 
         if (nextState.gameType === 'bigtwo') {
           setActiveGameType('bigtwo');
-          if (nextState.players) {
+          if (nextState.players && nextState.hands) {
             setGameStateBigtwo(nextState);
             if (nextState.lastAction) {
               setRecentActionPopup(nextState.lastAction);
               if (nextState.lastAction.type === 'PLAY_COMBO') audio.playCardSound();
               else if (nextState.lastAction.type === 'PASS') audio.closeCardSound();
             }
+            setCurrentRoom(updatedRoom);
+          } else if (updatedRoom.status === 'playing') {
+            // Realtime payload might be compact/truncated; fetch full record immediately
+            multiplayerAdapter.getRoom(currentRoom.code).then(({ room }) => {
+              if (room?.game_state?.players && room?.game_state?.hands) {
+                setGameStateBigtwo(room.game_state);
+              }
+              setCurrentRoom(room || updatedRoom);
+            }).catch(() => {
+              setCurrentRoom(updatedRoom);
+            });
+          } else {
+            setCurrentRoom(updatedRoom);
           }
           return;
         }
@@ -691,7 +715,6 @@ export default function App() {
     const determinedGame = isBigTwo ? 'bigtwo' : isGame41 ? 'game41' : 'sevens';
     const res = await multiplayerAdapter.startGame(currentRoom.code, myPlayerId, configToUse, determinedGame);
     if (res.success) {
-      setCurrentRoom(res.room);
       if (isBigTwo) {
         setActiveGameType('bigtwo');
         setGameStateBigtwo(res.gameState);
@@ -703,6 +726,7 @@ export default function App() {
         setGameState(res.gameState);
         setIsDealingAnimationActive(true);
       }
+      setCurrentRoom(res.room);
       showToast('Permainan dimulai!');
     } else {
       setActiveFault({ message: res.error || 'Gagal memulai permainan.' });
@@ -1127,15 +1151,15 @@ export default function App() {
   // ---------------------------------------------------------------------------
   // BIG TWO (CAPSA BANTING) ACTIONS
   const isMyTurnBigtwo = isMultiplayerMode
-    ? gameStateBigtwo.currentPlayer === myPlayerId
+    ? gameStateBigtwo?.currentPlayer === myPlayerId
     : isSingleMode
-    ? gameStateBigtwo.currentPlayer === SINGLE_HUMAN_ID
+    ? gameStateBigtwo?.currentPlayer === SINGLE_HUMAN_ID
     : true;
 
   // Sound chime whenever user's turn arrives in multiplayer / single player mode
   const activeIsMyTurn = (isMultiplayerMode || isSingleMode)
     ? (activeGameType === 'bigtwo'
-        ? gameStateBigtwo.currentPlayer === (isMultiplayerMode ? myPlayerId : SINGLE_HUMAN_ID)
+        ? gameStateBigtwo?.currentPlayer === (isMultiplayerMode ? myPlayerId : SINGLE_HUMAN_ID)
         : activeGameType === 'game41'
         ? gameState41?.currentPlayer === (isMultiplayerMode ? myPlayerId : SINGLE_HUMAN_ID)
         : gameState?.currentPlayer === (isMultiplayerMode ? myPlayerId : SINGLE_HUMAN_ID))
@@ -1151,8 +1175,8 @@ export default function App() {
 
   const handlePlayBigTwoCombo = async (selectedCards) => {
     if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
-    const isCurrentBot = isBotPlayer(gameStateBigtwo, gameStateBigtwo.currentPlayer);
-    const actingPlayerId = isCurrentBot ? gameStateBigtwo.currentPlayer : (isMultiplayerMode ? myPlayerId : gameStateBigtwo.currentPlayer);
+    const isCurrentBot = isBotPlayer(gameStateBigtwo, gameStateBigtwo?.currentPlayer);
+    const actingPlayerId = isCurrentBot ? gameStateBigtwo?.currentPlayer : (isMultiplayerMode ? myPlayerId : gameStateBigtwo?.currentPlayer);
     const res = playComboBigTwo(gameStateBigtwo, actingPlayerId, selectedCards);
     if (res.success) {
       setGameStateBigtwo(res.gameState);
@@ -1173,8 +1197,8 @@ export default function App() {
 
   const handlePassBigTwo = async () => {
     if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
-    const isCurrentBot = isBotPlayer(gameStateBigtwo, gameStateBigtwo.currentPlayer);
-    const actingPlayerId = isCurrentBot ? gameStateBigtwo.currentPlayer : (isMultiplayerMode ? myPlayerId : gameStateBigtwo.currentPlayer);
+    const isCurrentBot = isBotPlayer(gameStateBigtwo, gameStateBigtwo?.currentPlayer);
+    const actingPlayerId = isCurrentBot ? gameStateBigtwo?.currentPlayer : (isMultiplayerMode ? myPlayerId : gameStateBigtwo?.currentPlayer);
     const res = passTurnBigTwo(gameStateBigtwo, actingPlayerId);
     if (res.success) {
       setGameStateBigtwo(res.gameState);
@@ -1195,7 +1219,7 @@ export default function App() {
       const nextState = setBotTakeoverBigTwo(gameStateBigtwo, playerId, isTakeover);
       setGameStateBigtwo(nextState);
 
-      const pObj = gameStateBigtwo.players?.find((p) => p.id === playerId);
+      const pObj = gameStateBigtwo?.players?.find((p) => p.id === playerId);
       if (isTakeover) {
         showToast(`🤖 Giliran ${pObj?.name || 'Pemain'} diambil alih oleh Bot AI (AFK > 2 Menit).`);
       } else {
@@ -1212,26 +1236,26 @@ export default function App() {
   // AFK & Turn Timer tracking (120 seconds = 2 minutes)
   useEffect(() => {
     if (activeGameType !== 'bigtwo') return;
-    if (gameStateBigtwo.gameStatus === 'GAME_OVER' || bigTwoWheelPicker?.isOpen) {
+    if (gameStateBigtwo?.gameStatus === 'GAME_OVER' || bigTwoWheelPicker?.isOpen) {
       setTurnElapsed(0);
       setShowAfkWarningModal(false);
       return;
     }
 
-    const currentId = gameStateBigtwo.currentPlayer;
+    const currentId = gameStateBigtwo?.currentPlayer;
     if (prevTurnPlayerIdRef.current !== currentId) {
       prevTurnPlayerIdRef.current = currentId;
-      turnStartTimeRef.current = gameStateBigtwo.turnStartedAt || Date.now();
+      turnStartTimeRef.current = gameStateBigtwo?.turnStartedAt || Date.now();
       setTurnElapsed(0);
       setShowAfkWarningModal(false);
     }
 
     const interval = setInterval(() => {
-      const startTime = gameStateBigtwo.turnStartedAt || turnStartTimeRef.current;
+      const startTime = gameStateBigtwo?.turnStartedAt || turnStartTimeRef.current;
       const elapsed = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
       setTurnElapsed(elapsed);
 
-      const currentPlayerObj = gameStateBigtwo.players?.find((p) => p.id === currentId);
+      const currentPlayerObj = gameStateBigtwo?.players?.find((p) => p.id === currentId);
       const isHumanTurn = currentPlayerObj && !currentPlayerObj.isBot && !currentPlayerObj.isBotTakeover;
 
       if (isHumanTurn && elapsed >= 120) {
@@ -1247,9 +1271,9 @@ export default function App() {
     return () => clearInterval(interval);
   }, [
     activeGameType,
-    gameStateBigtwo.currentPlayer,
-    gameStateBigtwo.turnStartedAt,
-    gameStateBigtwo.gameStatus,
+    gameStateBigtwo?.currentPlayer,
+    gameStateBigtwo?.turnStartedAt,
+    gameStateBigtwo?.gameStatus,
     bigTwoWheelPicker?.isOpen,
     myPlayerId,
     isHost,
@@ -1497,10 +1521,10 @@ export default function App() {
     let timer = null;
 
     if (activeGameType === 'bigtwo') {
-      if (gameStateBigtwo.gameStatus === 'GAME_OVER' || bigTwoWheelPicker?.isOpen) return;
-      const currentId = gameStateBigtwo.currentPlayer;
+      if (gameStateBigtwo?.gameStatus === 'GAME_OVER' || bigTwoWheelPicker?.isOpen) return;
+      const currentId = gameStateBigtwo?.currentPlayer;
       if (isBotPlayer(gameStateBigtwo, currentId)) {
-        const botObj = gameStateBigtwo.players.find((p) => p.id === currentId);
+        const botObj = gameStateBigtwo?.players?.find((p) => p.id === currentId);
         setBotThinking(
           botObj
             ? {
@@ -1522,18 +1546,18 @@ export default function App() {
         setBotThinking(null);
       }
     } else if (activeGameType === 'game41') {
-      if (gameState41.gameStatus === 'GAME_OVER' || gameState41.gameStatus === 'game_over') return;
-      const currentId = gameState41.currentPlayer;
+      if (gameState41?.gameStatus === 'GAME_OVER' || gameState41?.gameStatus === 'game_over') return;
+      const currentId = gameState41?.currentPlayer;
       if (isBotPlayer(gameState41, currentId)) {
-        const botObj = gameState41.players.find((p) => p.id === currentId);
+        const botObj = gameState41?.players?.find((p) => p.id === currentId);
         setBotThinking(botObj);
 
-        if (gameState41.turnPhase === 'DRAW') {
+        if (gameState41?.turnPhase === 'DRAW') {
           timer = setTimeout(() => {
             const move = chooseGame41BotMove(gameState41, currentId);
             handleDrawCard41(move.source);
           }, 850 + Math.random() * 350);
-        } else if (gameState41.turnPhase === 'DISCARD') {
+        } else if (gameState41?.turnPhase === 'DISCARD') {
           timer = setTimeout(() => {
             const move = chooseGame41BotMove(gameState41, currentId);
             setBotThinking(null);
@@ -1549,10 +1573,10 @@ export default function App() {
       }
     } else {
       // Sevens
-      if (gameState.gameStatus === GAME_STATUS.GAME_OVER) return;
-      const currentId = gameState.currentPlayer;
+      if (gameState?.gameStatus === GAME_STATUS.GAME_OVER) return;
+      const currentId = gameState?.currentPlayer;
       if (isBotPlayer(gameState, currentId)) {
-        const botObj = gameState.players?.find((p) => p.id === currentId);
+        const botObj = gameState?.players?.find((p) => p.id === currentId);
         setBotThinking(botObj);
         timer = setTimeout(() => {
           const move = chooseSevensBotMove(gameState, currentId);
@@ -1574,16 +1598,16 @@ export default function App() {
   }, [
     gameMode,
     activeGameType,
-    gameState.currentPlayer,
-    gameState.gameStatus,
-    gameState.turnNumber,
-    gameState41.currentPlayer,
-    gameState41.turnPhase,
-    gameState41.gameStatus,
-    gameState41.turnNumber,
-    gameStateBigtwo.currentPlayer,
-    gameStateBigtwo.gameStatus,
-    gameStateBigtwo.currentTrick,
+    gameState?.currentPlayer,
+    gameState?.gameStatus,
+    gameState?.turnNumber,
+    gameState41?.currentPlayer,
+    gameState41?.turnPhase,
+    gameState41?.gameStatus,
+    gameState41?.turnNumber,
+    gameStateBigtwo?.currentPlayer,
+    gameStateBigtwo?.gameStatus,
+    gameStateBigtwo?.currentTrick,
     bigTwoWheelPicker?.isOpen,
     isMultiplayerMode,
     isSingleMode,
@@ -2071,6 +2095,7 @@ export default function App() {
 
       {/* Main Game Table Container */}
       <main className="game-layout">
+        <ErrorBoundary>
         {/* Dealing & Shuffling Casino Animation Overlay */}
         <ShuffleDealingAnimation
           isActive={isDealingAnimationActive}
@@ -2096,7 +2121,7 @@ export default function App() {
         {activeGameType === 'bigtwo' ? (
           <TableBigTwo
             gameState={gameStateBigtwo}
-            myPlayerId={isMultiplayerMode ? myPlayerId : isSingleMode ? SINGLE_HUMAN_ID : gameStateBigtwo.currentPlayer}
+            myPlayerId={isMultiplayerMode ? myPlayerId : isSingleMode ? SINGLE_HUMAN_ID : gameStateBigtwo?.currentPlayer}
             isMyTurn={isMyTurnBigtwo}
             onPlayCombo={handlePlayBigTwoCombo}
             onPass={handlePassBigTwo}
@@ -2287,6 +2312,7 @@ export default function App() {
         />
           </>
         )}
+        </ErrorBoundary>
       </main>
 
       {/* MULTIPLAYER RECONNECTING OVERLAY */}
@@ -2399,7 +2425,7 @@ export default function App() {
       )}
 
       {/* Sevens Game Over Modal */}
-      {activeGameType === 'sevens' && gameState.gameStatus === GAME_STATUS.GAME_OVER && (
+      {activeGameType === 'sevens' && gameState?.gameStatus === GAME_STATUS.GAME_OVER && (
         <GameOverModal
           gameState={gameState}
           onRestart={() => handleRestart()}
@@ -2410,7 +2436,7 @@ export default function App() {
       )}
 
       {/* Game 41 Game Over Modal */}
-      {activeGameType === 'game41' && (gameState41.gameStatus === 'game_over' || gameState41.gameStatus === 'GAME_OVER') && (
+      {activeGameType === 'game41' && (gameState41?.gameStatus === 'game_over' || gameState41?.gameStatus === 'GAME_OVER') && (
         <GameOver41Modal
           gameState={gameState41}
           onRestart={handleRestart41}
@@ -2422,7 +2448,7 @@ export default function App() {
       )}
 
       {/* Big Two Game Over Modal */}
-      {activeGameType === 'bigtwo' && gameStateBigtwo.gameStatus === 'GAME_OVER' && (
+      {activeGameType === 'bigtwo' && gameStateBigtwo?.gameStatus === 'GAME_OVER' && (
         <GameOverBigTwoModal
           gameState={gameStateBigtwo}
           onRestart={handleRestartBigTwo}

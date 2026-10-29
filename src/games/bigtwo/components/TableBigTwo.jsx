@@ -54,7 +54,17 @@ export default function TableBigTwo({
     gameState.players.length === 0 ||
     !gameState.hands
   ) {
-    return null;
+    return (
+      <div className="bigtwo-table-felt" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '65vh', gap: '1.25rem' }}>
+        <div className="pulsing-green-dot" style={{ width: 18, height: 18 }} />
+        <div style={{ color: '#38bdf8', fontSize: '1.15rem', fontWeight: 700, letterSpacing: '0.5px' }}>
+          Menyiapkan Meja Big Two...
+        </div>
+        <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: 0 }}>
+          Membagikan kartu dan menyinkronkan meja permainan...
+        </p>
+      </div>
+    );
   }
 
   // Bottom perspective: In multiplayer viewer is myPlayerId, in single player it's always the human, in local pass-and-play it's currentPlayer
