@@ -10,16 +10,10 @@ const ICE_SERVERS = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
-    {
-      urls: [
-        'turn:relay.metered.ca:80',
-        'turn:relay.metered.ca:443',
-        'turn:relay.metered.ca:443?transport=tcp',
-      ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
+    { urls: 'stun:global.stun.twilio.com:3478' },
   ],
 };
 
@@ -114,17 +108,6 @@ class VoiceChatService {
         senderId: this.myPlayerId,
         senderName: this.myPlayerName,
       });
-
-      // Repeat broadcast after 1.2s to guarantee delivery if peer connected slightly later
-      setTimeout(() => {
-        if (this.isConnected && this.roomCode) {
-          this.sendSignal({
-            type: 'voice_join',
-            senderId: this.myPlayerId,
-            senderName: this.myPlayerName,
-          });
-        }
-      }, 1200);
 
       return true;
     } catch (err) {
@@ -253,10 +236,34 @@ class VoiceChatService {
 
     try {
       if (type === 'voice_join') {
-        // A peer joined or announced their voice presence.
-        // Clean any stale/dead peer connection first so handshake starts completely fresh
-        this.closePeer(senderId);
-        await this.initiateCall(senderId);
+        const existingPc = this.peerConnections.get(senderId);
+        if (existingPc && (existingPc.connectionState === 'connected' || existingPc.connectionState === 'connecting')) {
+          console.log(`[VoiceChat] Already connecting or connected to ${senderId}, ignore duplicate voice_join`);
+          return;
+        }
+
+        // Single deterministic initiator: the peer with the smaller ID creates the offer.
+        // The peer with the larger ID responds with voice_ack so the smaller ID can initiate if needed.
+        if (this.myPlayerId < senderId) {
+          if (existingPc) this.closePeer(senderId);
+          await this.initiateCall(senderId);
+        } else {
+          await this.sendSignal({
+            type: 'voice_ack',
+            senderId: this.myPlayerId,
+            targetId: senderId,
+          });
+        }
+      } else if (type === 'voice_ack') {
+        // Peer with larger ID acknowledged our presence, smaller ID initiates offer
+        const existingPc = this.peerConnections.get(senderId);
+        if (existingPc && (existingPc.connectionState === 'connected' || existingPc.connectionState === 'connecting')) {
+          return;
+        }
+        if (existingPc) this.closePeer(senderId);
+        if (this.myPlayerId < senderId) {
+          await this.initiateCall(senderId);
+        }
       } else if (type === 'voice_offer') {
         await this.handleOffer(senderId, data);
       } else if (type === 'voice_answer') {
