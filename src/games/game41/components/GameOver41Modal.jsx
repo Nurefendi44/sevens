@@ -7,6 +7,7 @@ export default function GameOver41Modal({
   onPlayAgain,
   onRestart,
   onBackToMenu,
+  onOpenScoreboard,
   isMultiplayer = false,
   isHost = true,
 }) {
@@ -183,11 +184,26 @@ export default function GameOver41Modal({
         </div>
 
         {/* Footer Actions */}
-        <div className="modal-footer" style={{ justifyContent: 'center', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="modal-footer" style={{ justifyContent: 'center', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <button className="btn-header" onClick={handleMenuClick} style={{ cursor: 'pointer' }}>
             <Home size={15} />
             <span>Menu Utama</span>
           </button>
+          {onOpenScoreboard && (
+            <button
+              className="btn-header"
+              onClick={onOpenScoreboard}
+              style={{
+                background: 'rgba(245, 158, 11, 0.15)',
+                borderColor: '#fbbf24',
+                color: '#fbbf24',
+                cursor: 'pointer',
+              }}
+            >
+              <Trophy size={15} />
+              <span>Papan Skor</span>
+            </button>
+          )}
           {(!isMultiplayer || isHost) ? (
             <button className="btn-header btn-gold" onClick={handleRestartClick} style={{ cursor: 'pointer' }}>
               <RotateCcw size={15} />

@@ -17,6 +17,8 @@ export default function PlayerHand({
   closedCards = [],
   globalAceDirection = null,
   config = null,
+  onReclaimControl,
+  turnDuration = 0,
 }) {
   const [showClosedDetails, setShowClosedDetails] = useState(false);
   const [isGridView, setIsGridView] = useState(false);
@@ -28,6 +30,25 @@ export default function PlayerHand({
 
   return (
     <div className="player-tray">
+      {/* AFK TAKE-OVER WARNING BANNER */}
+      {player?.isBotTakeover && (
+        <div className="bigtwo-afk-reclaim-banner">
+          <div className="afk-reclaim-banner-text">
+            <span className="afk-reclaim-icon">🤖</span>
+            <span>
+              Giliran Anda saat ini <strong>diambil alih oleh Bot AI</strong> karena AFK (&gt; 2 menit).
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn-afk-reclaim"
+            onClick={() => onReclaimControl && onReclaimControl(player.id)}
+          >
+            ✨ Ambil Alih Kendali
+          </button>
+        </div>
+      )}
+
       {/* Tray Header */}
       <div className="tray-header">
         <div className="tray-title-group">
@@ -39,6 +60,7 @@ export default function PlayerHand({
             </span>
           </div>
         </div>
+
 
         {/* Tray Toggles: Sorting & Closed Cards Detail */}
         <div className="tray-toggles">
@@ -159,8 +181,13 @@ export default function PlayerHand({
       <div className="action-controls-bar">
         <div className="action-status-indicator">
           {isCurrentTurn ? (
-            <div style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>
-              Giliran Anda. Pilih kartu dari tangan Anda untuk dimainkan atau ditutup.
+            <div style={{ color: 'var(--text-primary)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>Giliran Anda. Pilih kartu dari tangan Anda untuk dimainkan atau ditutup.</span>
+              {turnDuration >= 90 && (
+                <span style={{ color: '#fbbf24', fontWeight: 800 }}>
+                  ⚠️ AFK Otomatis Bot (sisa {Math.max(0, 120 - turnDuration)}s)
+                </span>
+              )}
             </div>
           ) : (
             <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
@@ -169,32 +196,45 @@ export default function PlayerHand({
           )}
         </div>
 
-        <div className="action-buttons-group">
-          {/* Play Card Button */}
-          <button
-            className="btn-action btn-play"
-            disabled={!isCurrentTurn || !isSelectedInHand}
-            onClick={() => selectedCard && onPlayCard(selectedCard)}
-          >
-            <span>Mainkan</span>
-            {selectedCard && isSelectedInHand && (
-              <span style={{ fontWeight: 800 }}>({selectedCard.label}{selectedCard.symbol})</span>
-            )}
-          </button>
+        {player?.isBotTakeover ? (
+          <div className="is-bot-takeover-dock">
+            <button
+              type="button"
+              className="btn-action-reclaim-main"
+              onClick={() => onReclaimControl && onReclaimControl(player.id)}
+            >
+              ✨ Ambil Alih Kendali (Saya Sudah Kembali)
+            </button>
+          </div>
+        ) : (
+          <div className="action-buttons-group">
+            {/* Play Card Button */}
+            <button
+              className="btn-action btn-play"
+              disabled={!isCurrentTurn || !isSelectedInHand}
+              onClick={() => selectedCard && onPlayCard(selectedCard)}
+            >
+              <span>Mainkan</span>
+              {selectedCard && isSelectedInHand && (
+                <span style={{ fontWeight: 800 }}>({selectedCard.label}{selectedCard.symbol})</span>
+              )}
+            </button>
 
-          {/* Close Card Button */}
-          <button
-            className="btn-action btn-close-card"
-            disabled={!isCurrentTurn || !isSelectedInHand}
-            onClick={() => selectedCard && onCloseCard(selectedCard)}
-          >
-            <span>Tutup Kartu (Close)</span>
-            {selectedCard && isSelectedInHand && (
-              <span style={{ fontWeight: 800 }}>({selectedCard.label}{selectedCard.symbol})</span>
-            )}
-          </button>
-        </div>
+            {/* Close Card Button */}
+            <button
+              className="btn-action btn-close-card"
+              disabled={!isCurrentTurn || !isSelectedInHand}
+              onClick={() => selectedCard && onCloseCard(selectedCard)}
+            >
+              <span>Tutup Kartu (Close)</span>
+              {selectedCard && isSelectedInHand && (
+                <span style={{ fontWeight: 800 }}>({selectedCard.label}{selectedCard.symbol})</span>
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
+
   );
 }

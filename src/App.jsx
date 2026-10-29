@@ -5,6 +5,7 @@ import {
   playCard as enginePlayCard,
   closeCard as engineCloseCard,
   sortHand,
+  setBotTakeoverSevens,
 } from './engine/gameEngine.js';
 import { GAME_STATUS } from './engine/constants.js';
 import { DEFAULT_CONFIG } from './engine/config.js';
@@ -37,7 +38,8 @@ import ModeSelectionScreen from './components/ModeSelectionScreen.jsx';
 import Table41 from './games/game41/components/Table41.jsx';
 import GameOver41Modal from './games/game41/components/GameOver41Modal.jsx';
 import RulesGuide41Modal from './games/game41/components/RulesGuide41Modal.jsx';
-import { initGame41, drawCard41, discardCard41, closeHand41 } from './games/game41/engine/engine41.js';
+import { initGame41, drawCard41, discardCard41, closeHand41, setBotTakeoverGame41 } from './games/game41/engine/engine41.js';
+
 
 import TableBigTwo from './games/bigtwo/components/TableBigTwo.jsx';
 import GameOverBigTwoModal from './games/bigtwo/components/GameOverBigTwoModal.jsx';
@@ -283,6 +285,22 @@ export default function App() {
   const turnStartTimeRef = useRef(Date.now());
   const prevTurnPlayerIdRef = useRef(null);
   const afkTriggeredTurnRef = useRef(new Set());
+  const botTimerRef = useRef(null);
+
+  const gameStateRef = useRef(gameState);
+  const gameState41Ref = useRef(gameState41);
+  const gameStateBigtwoRef = useRef(gameStateBigtwo);
+
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+  useEffect(() => {
+    gameState41Ref.current = gameState41;
+  }, [gameState41]);
+  useEffect(() => {
+    gameStateBigtwoRef.current = gameStateBigtwo;
+  }, [gameStateBigtwo]);
+
 
   // Cumulative Scoreboard Data (Games Played & Point Score, persisted in localStorage)
   const [scoreboardData, setScoreboardData] = useState(() => {
@@ -1215,48 +1233,101 @@ export default function App() {
   };
 
   const handleSetBotTakeover = async (playerId, isTakeover = true) => {
+    // 1. If player is reclaiming control (isTakeover === false):
+    // IMMEDIATELY CANCEL any pending bot execution so bot doesn't make a move on player's behalf
+    if (!isTakeover) {
+      if (botTimerRef.current) {
+        clearTimeout(botTimerRef.current);
+        botTimerRef.current = null;
+      }
+      setBotThinking(null);
+      turnStartTimeRef.current = Date.now();
+      setTurnElapsed(0);
+      afkTriggeredTurnRef.current.clear();
+    }
+
     if (activeGameType === 'bigtwo') {
       const nextState = setBotTakeoverBigTwo(gameStateBigtwo, playerId, isTakeover);
       setGameStateBigtwo(nextState);
+    } else if (activeGameType === 'game41') {
+      const nextState = setBotTakeoverGame41(gameState41, playerId, isTakeover);
+      setGameState41(nextState);
+    } else {
+      // Sevens
+      const nextState = setBotTakeoverSevens(gameState, playerId, isTakeover);
+      setGameState(nextState);
+    }
 
-      const pObj = gameStateBigtwo?.players?.find((p) => p.id === playerId);
-      if (isTakeover) {
-        showToast(`🤖 Giliran ${pObj?.name || 'Pemain'} diambil alih oleh Bot AI (AFK > 2 Menit).`);
-      } else {
-        showToast('✨ Anda telah mengambil alih kendali kartu kembali!');
-      }
+    const currentPlayers =
+      activeGameType === 'bigtwo'
+        ? gameStateBigtwo?.players
+        : activeGameType === 'game41'
+        ? gameState41?.players
+        : gameState?.players;
+    const pObj = currentPlayers?.find((p) => p.id === playerId);
 
-      if (isMultiplayerMode && currentRoom?.code) {
-        await multiplayerAdapter.toggleBotTakeover(currentRoom.code, playerId, isTakeover);
-      }
+    if (isTakeover) {
+      showToast(`🤖 Giliran ${pObj?.name || 'Pemain'} diambil alih oleh Bot AI (AFK > 2 Menit).`);
+    } else {
+      showToast('✨ Anda telah mengambil alih kendali kartu kembali!');
+    }
+
+    if (isMultiplayerMode && currentRoom?.code) {
+      await multiplayerAdapter.toggleBotTakeover(currentRoom.code, playerId, isTakeover);
     }
   };
 
-  // AFK & Turn Timer tracking (120 seconds = 2 minutes -> auto-switch to Bot AI like Mobile Legends)
+  // AFK & Turn Timer tracking (120 seconds = 2 minutes -> auto-switch to Bot AI like Mobile Legends for all games)
   useEffect(() => {
-    if (activeGameType !== 'bigtwo') return;
-    if (gameStateBigtwo?.gameStatus === 'GAME_OVER' || bigTwoWheelPicker?.isOpen) {
+    const isGameOver =
+      activeGameType === 'bigtwo'
+        ? gameStateBigtwo?.gameStatus === 'GAME_OVER' || bigTwoWheelPicker?.isOpen
+        : activeGameType === 'game41'
+        ? gameState41?.gameStatus === 'GAME_OVER' || gameState41?.gameStatus === 'game_over'
+        : gameState?.gameStatus === GAME_STATUS.GAME_OVER;
+
+    if (isGameOver) {
       setTurnElapsed(0);
       return;
     }
 
-    const currentId = gameStateBigtwo?.currentPlayer;
+    const currentId =
+      activeGameType === 'bigtwo'
+        ? gameStateBigtwo?.currentPlayer
+        : activeGameType === 'game41'
+        ? gameState41?.currentPlayer
+        : gameState?.currentPlayer;
+
+    const currentTurnStartedAt =
+      activeGameType === 'bigtwo'
+        ? gameStateBigtwo?.turnStartedAt
+        : activeGameType === 'game41'
+        ? gameState41?.turnStartedAt
+        : gameState?.turnStartedAt;
+
     if (prevTurnPlayerIdRef.current !== currentId) {
       prevTurnPlayerIdRef.current = currentId;
-      turnStartTimeRef.current = gameStateBigtwo?.turnStartedAt || Date.now();
+      turnStartTimeRef.current = currentTurnStartedAt || Date.now();
       setTurnElapsed(0);
     }
 
     const interval = setInterval(() => {
-      const startTime = gameStateBigtwo?.turnStartedAt || turnStartTimeRef.current;
+      const startTime = currentTurnStartedAt || turnStartTimeRef.current;
       const elapsed = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
       setTurnElapsed(elapsed);
 
-      const currentPlayerObj = gameStateBigtwo?.players?.find((p) => p.id === currentId);
+      const currentPlayers =
+        activeGameType === 'bigtwo'
+          ? gameStateBigtwo?.players
+          : activeGameType === 'game41'
+          ? gameState41?.players
+          : gameState?.players;
+
+      const currentPlayerObj = currentPlayers?.find((p) => p.id === currentId);
       const isHumanTurn = currentPlayerObj && !currentPlayerObj.isBot && !currentPlayerObj.isBotTakeover;
 
       if (isHumanTurn && elapsed >= 120) {
-        const turnKey = `${currentId}_${startTime}`;
+        const turnKey = `${activeGameType}_${currentId}_${startTime}`;
         if (!afkTriggeredTurnRef.current.has(turnKey)) {
           afkTriggeredTurnRef.current.add(turnKey);
 
@@ -1270,7 +1341,7 @@ export default function App() {
             : true;
 
           if (isMyActiveTurn || (isHost && isMultiplayerMode)) {
-            console.log(`[AFK AUTO-TAKEOVER] Pemain ${currentPlayerObj.name} (${currentId}) AFK > 120s. Langsung dialihkan ke Bot AI.`);
+            console.log(`[AFK AUTO-TAKEOVER] [${activeGameType}] Pemain ${currentPlayerObj?.name || currentId} (${currentId}) AFK > 120s. Langsung dialihkan ke Bot AI.`);
             handleSetBotTakeover(currentId, true);
           }
         }
@@ -1280,6 +1351,12 @@ export default function App() {
     return () => clearInterval(interval);
   }, [
     activeGameType,
+    gameState?.currentPlayer,
+    gameState?.turnStartedAt,
+    gameState?.gameStatus,
+    gameState41?.currentPlayer,
+    gameState41?.turnStartedAt,
+    gameState41?.gameStatus,
     gameStateBigtwo?.currentPlayer,
     gameStateBigtwo?.turnStartedAt,
     gameStateBigtwo?.gameStatus,
@@ -1289,6 +1366,7 @@ export default function App() {
     isMultiplayerMode,
     isSingleMode,
   ]);
+
 
   const getScoreSessionKey = (gameKey) => {
     if (isMultiplayerMode && currentRoom?.code) {
@@ -1512,7 +1590,7 @@ export default function App() {
   };
 
   // ---------------------------------------------------------------------------
-  // BOT AI AUTOMATION (SINGLE PLAYER MODE)
+  // BOT AI AUTOMATION (SINGLE PLAYER / HOST DRIVE)
   // ---------------------------------------------------------------------------
   const [botThinking, setBotThinking] = useState(null);
 
@@ -1525,10 +1603,12 @@ export default function App() {
 
     if (!canDriveBots) {
       setBotThinking(null);
+      if (botTimerRef.current) {
+        clearTimeout(botTimerRef.current);
+        botTimerRef.current = null;
+      }
       return;
     }
-
-    let timer = null;
 
     if (activeGameType === 'bigtwo') {
       if (gameStateBigtwo?.gameStatus === 'GAME_OVER' || bigTwoWheelPicker?.isOpen) return;
@@ -1543,8 +1623,15 @@ export default function App() {
               }
             : null
         );
-        timer = setTimeout(() => {
-          const move = chooseBigTwoBotMove(gameStateBigtwo, currentId);
+        botTimerRef.current = setTimeout(() => {
+          botTimerRef.current = null;
+          const freshState = gameStateBigtwoRef.current;
+          if (!isBotPlayer(freshState, freshState?.currentPlayer)) {
+            console.log('[Bot AI] Big Two move aborted: player reclaimed control.');
+            setBotThinking(null);
+            return;
+          }
+          const move = chooseBigTwoBotMove(freshState, freshState?.currentPlayer);
           setBotThinking(null);
           if (!move || move.action === 'pass') {
             handlePassBigTwo();
@@ -1560,16 +1647,37 @@ export default function App() {
       const currentId = gameState41?.currentPlayer;
       if (isBotPlayer(gameState41, currentId)) {
         const botObj = gameState41?.players?.find((p) => p.id === currentId);
-        setBotThinking(botObj);
+        setBotThinking(
+          botObj
+            ? {
+                ...botObj,
+                name: botObj.isBotTakeover ? `${botObj.name} (Bot Takeover)` : botObj.name,
+              }
+            : null
+        );
 
         if (gameState41?.turnPhase === 'DRAW') {
-          timer = setTimeout(() => {
-            const move = chooseGame41BotMove(gameState41, currentId);
+          botTimerRef.current = setTimeout(() => {
+            botTimerRef.current = null;
+            const freshState = gameState41Ref.current;
+            if (!isBotPlayer(freshState, freshState?.currentPlayer)) {
+              console.log('[Bot AI] Game 41 draw aborted: player reclaimed control.');
+              setBotThinking(null);
+              return;
+            }
+            const move = chooseGame41BotMove(freshState, freshState?.currentPlayer);
             handleDrawCard41(move.source);
           }, 850 + Math.random() * 350);
         } else if (gameState41?.turnPhase === 'DISCARD') {
-          timer = setTimeout(() => {
-            const move = chooseGame41BotMove(gameState41, currentId);
+          botTimerRef.current = setTimeout(() => {
+            botTimerRef.current = null;
+            const freshState = gameState41Ref.current;
+            if (!isBotPlayer(freshState, freshState?.currentPlayer)) {
+              console.log('[Bot AI] Game 41 discard aborted: player reclaimed control.');
+              setBotThinking(null);
+              return;
+            }
+            const move = chooseGame41BotMove(freshState, freshState?.currentPlayer);
             setBotThinking(null);
             if (move?.action === 'closeHand') {
               handleCloseHand41(move.card);
@@ -1587,9 +1695,23 @@ export default function App() {
       const currentId = gameState?.currentPlayer;
       if (isBotPlayer(gameState, currentId)) {
         const botObj = gameState?.players?.find((p) => p.id === currentId);
-        setBotThinking(botObj);
-        timer = setTimeout(() => {
-          const move = chooseSevensBotMove(gameState, currentId);
+        setBotThinking(
+          botObj
+            ? {
+                ...botObj,
+                name: botObj.isBotTakeover ? `${botObj.name} (Bot Takeover)` : botObj.name,
+              }
+            : null
+        );
+        botTimerRef.current = setTimeout(() => {
+          botTimerRef.current = null;
+          const freshState = gameStateRef.current;
+          if (!isBotPlayer(freshState, freshState?.currentPlayer)) {
+            console.log('[Bot AI] Sevens move aborted: player reclaimed control.');
+            setBotThinking(null);
+            return;
+          }
+          const move = chooseSevensBotMove(freshState, freshState?.currentPlayer);
           setBotThinking(null);
           if (move?.action === 'play') {
             handlePlayCard(move.card, move.direction);
@@ -1603,7 +1725,10 @@ export default function App() {
     }
 
     return () => {
-      if (timer) clearTimeout(timer);
+      if (botTimerRef.current) {
+        clearTimeout(botTimerRef.current);
+        botTimerRef.current = null;
+      }
     };
   }, [
     gameMode,
@@ -1611,10 +1736,12 @@ export default function App() {
     gameState?.currentPlayer,
     gameState?.gameStatus,
     gameState?.turnNumber,
+    gameState?.players?.find((p) => p.id === gameState?.currentPlayer)?.isBotTakeover,
     gameState41?.currentPlayer,
     gameState41?.turnPhase,
     gameState41?.gameStatus,
     gameState41?.turnNumber,
+    gameState41?.players?.find((p) => p.id === gameState41?.currentPlayer)?.isBotTakeover,
     gameStateBigtwo?.currentPlayer,
     gameStateBigtwo?.gameStatus,
     gameStateBigtwo?.currentTrick,
@@ -1636,7 +1763,7 @@ export default function App() {
   ));
   const currentTurnPlayerName = currentTurnPlayer?.name || 'Pemain Lain';
 
-  // Automatic Score Recording for Cumulative Scoreboard (Points model, not penalty)
+  // Automatic Score Recording for Cumulative Scoreboard (Points model)
   useEffect(() => {
     if (activeGameType === 'bigtwo' && gameStateBigtwo.gameStatus === 'GAME_OVER' && gameStateBigtwo.rankings) {
       recordGameEndScore('bigtwo', gameStateBigtwo.rankings, gameStateBigtwo.winner);
@@ -1648,6 +1775,20 @@ export default function App() {
       recordGameEndScore('game41', gameState41.rankings, gameState41.winner);
     }
   }, [gameState41.gameStatus]);
+
+  useEffect(() => {
+    if (activeGameType === 'sevens' && gameState?.gameStatus === GAME_STATUS.GAME_OVER && gameState?.scores) {
+      const rankings = (gameState.players || []).map((p) => ({
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar,
+        score: gameState.scores[p.id]?.totalScore ?? 0,
+        isWinner: (gameState.winners || []).includes(p.id),
+      })).sort((a, b) => b.score - a.score);
+      recordGameEndScore('sevens', rankings, gameState.winners?.[0]);
+    }
+  }, [gameState.gameStatus]);
+
 
   // Return to Mode Selection Screen (Home)
   const handleBackToModeSelect = () => {
@@ -2153,6 +2294,8 @@ export default function App() {
             myPlayerId={isMultiplayerMode ? myPlayerId : isSingleMode ? SINGLE_HUMAN_ID : gameState41.currentPlayer}
             isMultiplayer={isMultiplayerMode}
             onOpenRules={() => setShowRules41Modal(true)}
+            onReclaimControl={(playerId) => handleSetBotTakeover(playerId, false)}
+            turnDuration={turnElapsed}
           />
         ) : (
           <>
@@ -2320,6 +2463,8 @@ export default function App() {
           closedCards={gameState?.closedCards?.[trayPlayer?.id] || []}
           globalAceDirection={gameState?.globalAceDirection}
           config={gameConfig}
+          onReclaimControl={(playerId) => handleSetBotTakeover(playerId, false)}
+          turnDuration={turnElapsed}
         />
           </>
         )}
@@ -2441,6 +2586,7 @@ export default function App() {
           gameState={gameState}
           onRestart={() => handleRestart()}
           onBackToMenu={handleBackToModeSelect}
+          onOpenScoreboard={() => setShowScoreboardModal(true)}
           isMultiplayer={isMultiplayerMode}
           isHost={isHost}
         />
@@ -2453,6 +2599,7 @@ export default function App() {
           onRestart={handleRestart41}
           onPlayAgain={handleRestart41}
           onBackToMenu={handleBackToModeSelect}
+          onOpenScoreboard={() => setShowScoreboardModal(true)}
           isMultiplayer={isMultiplayerMode}
           isHost={isHost}
         />

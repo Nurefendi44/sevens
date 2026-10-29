@@ -1445,3 +1445,106 @@
   }
 }
 
+/* ------------------------------------------------------------------------------
+   UNIVERSAL AFK RECLAIM BANNER & FLOATING DOCK (MOBILE LEGENDS STYLE)
+   ------------------------------------------------------------------------------ */
+.bigtwo-afk-reclaim-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.22) 0%, rgba(14, 165, 233, 0.12) 100%);
+  border: 1.5px solid #38bdf8;
+  border-radius: 12px;
+  padding: 0.6rem 1rem;
+  margin: 0.4rem 0.75rem;
+  box-shadow: 0 4px 15px rgba(56, 189, 248, 0.25);
+  animation: fadeIn 0.3s ease-out;
+}
+
+.afk-reclaim-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.85rem;
+  color: #f0f9ff;
+  line-height: 1.4;
+}
+
+.afk-reclaim-icon {
+  font-size: 1.25rem;
+  animation: bounce 2s infinite;
+}
+
+.btn-afk-reclaim {
+  background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 0.55rem 1.15rem;
+  border: 1px solid #7dd3fc;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.4);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-afk-reclaim:hover {
+  transform: translateY(-2px) scale(1.03);
+  background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%);
+  box-shadow: 0 6px 18px rgba(56, 189, 248, 0.6);
+}
+
+.is-bot-takeover-dock {
+  background: rgba(15, 23, 42, 0.96) !important;
+  border: 1.5px solid #38bdf8 !important;
+  box-shadow: 0 10px 30px rgba(56, 189, 248, 0.4), 0 0 25px rgba(56, 189, 248, 0.25) !important;
+  padding: 0.5rem 1rem !important;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pulseTakeoverDock 2s infinite ease-in-out;
+}
+
+@keyframes pulseTakeoverDock {
+  0%, 100% {
+    box-shadow: 0 8px 25px rgba(56, 189, 248, 0.35), 0 0 15px rgba(56, 189, 248, 0.2);
+    border-color: #38bdf8;
+  }
+  50% {
+    box-shadow: 0 14px 40px rgba(56, 189, 248, 0.7), 0 0 30px rgba(56, 189, 248, 0.5);
+    border-color: #7dd3fc;
+  }
+}
+
+.btn-action-reclaim-main {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+  color: #0f172a;
+  font-size: 0.92rem;
+  font-weight: 900;
+  padding: 0.75rem 1.6rem;
+  border: 1.5px solid #bae6fd;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(56, 189, 248, 0.5);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 0.3px;
+}
+
+.btn-action-reclaim-main:hover {
+  transform: translateY(-2px) scale(1.03);
+  background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%);
+  box-shadow: 0 6px 25px rgba(56, 189, 248, 0.75);
+}
+
+.btn-action-reclaim-main:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+

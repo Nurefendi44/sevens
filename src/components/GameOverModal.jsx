@@ -6,6 +6,7 @@ export default function GameOverModal({
   gameState,
   onRestart,
   onBackToMenu,
+  onOpenScoreboard,
   isMultiplayer = false,
   isHost = true,
 }) {
@@ -186,11 +187,25 @@ export default function GameOverModal({
           </div>
         </div>
 
-        <div className="modal-footer" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+        <div className="modal-footer" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
           {onBackToMenu && (
             <button className="btn-header" onClick={onBackToMenu}>
               <Home size={15} />
               <span>Menu Utama</span>
+            </button>
+          )}
+          {onOpenScoreboard && (
+            <button
+              className="btn-header"
+              onClick={onOpenScoreboard}
+              style={{
+                background: 'rgba(245, 158, 11, 0.15)',
+                borderColor: '#fbbf24',
+                color: '#fbbf24',
+              }}
+            >
+              <Trophy size={15} />
+              <span>Papan Skor</span>
             </button>
           )}
           {(!isMultiplayer || isHost) ? (

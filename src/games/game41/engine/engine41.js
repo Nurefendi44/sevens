@@ -519,3 +519,39 @@ export function closeHand41(gameState, playerId, cardToDiscard = null) {
     winner: winnerPlayer,
   };
 }
+
+/**
+ * Sets or clears Bot Takeover for an AFK player in Kartu 41.
+ * @param {Object} gameState
+ * @param {string} playerId
+ * @param {boolean} isTakeover
+ * @returns {Object} updated gameState
+ */
+export function setBotTakeoverGame41(gameState, playerId, isTakeover = true) {
+  if (!gameState || !gameState.players) return gameState;
+  const updatedPlayers = gameState.players.map((p) => {
+    if (p.id === playerId) {
+      return { ...p, isBotTakeover: Boolean(isTakeover) };
+    }
+    return p;
+  });
+
+  const targetPlayer = gameState.players.find((p) => p.id === playerId);
+  const actionMsg = isTakeover
+    ? `🤖 Giliran ${targetPlayer?.name || 'Pemain'} diambil alih oleh Bot AI karena AFK (> 2 menit).`
+    : `✨ ${targetPlayer?.name || 'Pemain'} telah kembali dan mengambil alih kendali kartunya.`;
+
+  return {
+    ...gameState,
+    players: updatedPlayers,
+    turnStartedAt: Date.now(),
+    history: [
+      ...(gameState.history || []),
+      {
+        turn: gameState.turnNumber,
+        message: actionMsg,
+      },
+    ],
+  };
+}
+

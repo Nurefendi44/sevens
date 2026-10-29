@@ -28,6 +28,8 @@ export default function Table41({
   myPlayerId,
   isMultiplayer = false,
   onOpenRules,
+  onReclaimControl,
+  turnDuration = 0,
 }) {
   const [selectedCard, setSelectedCard] = useState(null);
   const [showConfirmClose, setShowConfirmClose] = useState(false);
@@ -185,6 +187,11 @@ export default function Table41({
               }...`
             )}
           </span>
+          {isMyTurn && turnDuration >= 90 && (
+            <span style={{ color: '#fbbf24', fontWeight: 800, fontSize: '0.75rem', background: 'rgba(245, 158, 11, 0.2)', padding: '2px 8px', borderRadius: '6px' }}>
+              ⚠️ AFK Otomatis Bot (sisa {Math.max(0, 120 - turnDuration)}s)
+            </span>
+          )}
         </div>
 
         {/* Piles & Passed Discard Container */}
@@ -251,6 +258,24 @@ export default function Table41({
 
       {/* BOTTOM: Player Hand Tray & Interactive Controls */}
       <div className="game41-tray">
+        {myPlayer?.isBotTakeover && (
+          <div className="bigtwo-afk-reclaim-banner">
+            <div className="afk-reclaim-banner-text">
+              <span className="afk-reclaim-icon">🤖</span>
+              <span>
+                Giliran Anda saat ini <strong>diambil alih oleh Bot AI</strong> karena AFK (&gt; 2 menit).
+              </span>
+            </div>
+            <button
+              type="button"
+              className="btn-afk-reclaim"
+              onClick={() => onReclaimControl && onReclaimControl(myPlayer.id)}
+            >
+              ✨ Ambil Alih Kendali
+            </button>
+          </div>
+        )}
+
         <div className="game41-tray-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <span style={{ fontSize: '1.3rem' }}>{myPlayer.avatar}</span>
@@ -457,94 +482,106 @@ export default function Table41({
             <span>Aturan 41</span>
           </button>
 
-          <div className="game41-actions-group">
-            {/* Draw from Stock or Passed Discard */}
-            {gameState.turnPhase === TURN_PHASE_41.DRAW && (
-              <>
-                <button
-                  className="btn-game41 btn-game41-draw"
-                  disabled={!canDraw || drawPileCount === 0}
-                  onClick={() => onDrawCard(DRAW_SOURCE_41.STOCK)}
-                >
-                  <ArrowDownToLine size={15} />
-                  <span>Ambil Dek ({drawPileCount})</span>
-                </button>
+          {myPlayer?.isBotTakeover ? (
+            <div className="is-bot-takeover-dock">
+              <button
+                type="button"
+                className="btn-action-reclaim-main"
+                onClick={() => onReclaimControl && onReclaimControl(myPlayer.id)}
+              >
+                ✨ Ambil Alih Kendali (Saya Sudah Kembali)
+              </button>
+            </div>
+          ) : (
+            <div className="game41-actions-group">
+              {/* Draw from Stock or Passed Discard */}
+              {gameState.turnPhase === TURN_PHASE_41.DRAW && (
+                <>
+                  <button
+                    className="btn-game41 btn-game41-draw"
+                    disabled={!canDraw || drawPileCount === 0}
+                    onClick={() => onDrawCard(DRAW_SOURCE_41.STOCK)}
+                  >
+                    <ArrowDownToLine size={15} />
+                    <span>Ambil Dek ({drawPileCount})</span>
+                  </button>
 
+                  <button
+                    className="btn-game41 btn-game41-draw"
+                    disabled={!canDraw || !isDiscardForMe || !passedDiscard?.card}
+                    onClick={() => onDrawCard(DRAW_SOURCE_41.DISCARD)}
+                    style={{
+                      background: isDiscardForMe
+                        ? 'linear-gradient(135deg, #059669, #10b981)'
+                        : 'rgba(255, 255, 255, 0.05)',
+                    }}
+                    title={
+                      isDiscardForMe
+                        ? `Ambil buangan ${passedDiscard.card.label}${passedDiscard.card.symbol} dari ${passedDiscard.fromPlayerName}`
+                        : 'Belum ada kartu buangan yang dioper ke Anda'
+                    }
+                  >
+                    <ArrowDownToLine size={15} />
+                    <span>
+                      {isDiscardForMe && passedDiscard?.card
+                        ? `Ambil Buangan ${passedDiscard.fromPlayerName} (${passedDiscard.card.label}${passedDiscard.card.symbol})`
+                        : 'Buangan Belum Untuk Anda'}
+                    </span>
+                  </button>
+                </>
+              )}
+
+              {/* Discard Card to Next Player */}
+              {gameState.turnPhase === TURN_PHASE_41.DISCARD && (
                 <button
-                  className="btn-game41 btn-game41-draw"
-                  disabled={!canDraw || !isDiscardForMe || !passedDiscard?.card}
-                  onClick={() => onDrawCard(DRAW_SOURCE_41.DISCARD)}
-                  style={{
-                    background: isDiscardForMe
-                      ? 'linear-gradient(135deg, #059669, #10b981)'
-                      : 'rgba(255, 255, 255, 0.05)',
-                  }}
-                  title={
-                    isDiscardForMe
-                      ? `Ambil buangan ${passedDiscard.card.label}${passedDiscard.card.symbol} dari ${passedDiscard.fromPlayerName}`
-                      : 'Belum ada kartu buangan yang dioper ke Anda'
-                  }
+                  className="btn-game41 btn-game41-discard"
+                  disabled={!canDiscard}
+                  onClick={() => selectedCard && onDiscardCard(selectedCard)}
                 >
-                  <ArrowDownToLine size={15} />
+                  <Trash2 size={15} />
                   <span>
-                    {isDiscardForMe && passedDiscard?.card
-                      ? `Ambil Buangan ${passedDiscard.fromPlayerName} (${passedDiscard.card.label}${passedDiscard.card.symbol})`
-                      : 'Buangan Belum Untuk Anda'}
+                    {selectedCard
+                      ? `Buang (${selectedCard.label}${selectedCard.symbol}) ke ${nextPlayer?.name || 'Pemain Berikutnya'}`
+                      : `Pilih 1 Kartu untuk Dibuang ke ${nextPlayer?.name || 'Pemain Berikutnya'}`}
                   </span>
                 </button>
-              </>
-            )}
+              )}
 
-            {/* Discard Card to Next Player */}
-            {gameState.turnPhase === TURN_PHASE_41.DISCARD && (
-              <button
-                className="btn-game41 btn-game41-discard"
-                disabled={!canDiscard}
-                onClick={() => selectedCard && onDiscardCard(selectedCard)}
-              >
-                <Trash2 size={15} />
-                <span>
-                  {selectedCard
-                    ? `Buang (${selectedCard.label}${selectedCard.symbol}) ke ${nextPlayer?.name || 'Pemain Berikutnya'}`
-                    : `Pilih 1 Kartu untuk Dibuang ke ${nextPlayer?.name || 'Pemain Berikutnya'}`}
-                </span>
-              </button>
-            )}
-
-            {/* TUTUP KARTU (KNOCK) BUTTON - Player can declare to close at any time during their turn if round >= 4 */}
-            {isMyTurn && (
-              <button
-                className="btn-game41 btn-game41-close-hand"
-                disabled={!canCloseRound || (gameState.turnPhase === TURN_PHASE_41.DISCARD && !selectedCard)}
-                onClick={() => setShowConfirmClose(true)}
-                title={
-                  !canCloseRound
-                    ? `Tutup Kartu baru dapat dilakukan mulai Putaran ke-4 (Saat ini Putaran ke-${currentRound})`
-                    : gameState.turnPhase === TURN_PHASE_41.DRAW
-                    ? `Tutup kartu sekarang dengan 4 kartu Anda (${activeEval.bestScore} pts)`
-                    : selectedCard
-                    ? `Buang ${selectedCard.label}${selectedCard.symbol} dan tutup kartu dengan sisa (${previewEval.bestScore} pts)`
-                    : 'Pilih 1 kartu buangan terlebih dahulu untuk menutup kartu'
-                }
-                style={{
-                  opacity: !canCloseRound ? 0.6 : 1,
-                  cursor: !canCloseRound ? 'not-allowed' : 'pointer',
-                  filter: !canCloseRound ? 'grayscale(0.5)' : 'none',
-                }}
-              >
-                <ShieldAlert size={15} />
-                <span>
-                  {!canCloseRound
-                    ? `Tutup Kartu (Putaran ${currentRound}/4)`
-                    : gameState.turnPhase === TURN_PHASE_41.DRAW
-                    ? `Tutup Kartu (${activeEval.bestScore} pts)`
-                    : selectedCard
-                    ? `Tutup Kartu (${previewEval.bestScore} pts)`
-                    : 'Pilih 1 Kartu untuk Tutup'}
-                </span>
-              </button>
-            )}
-          </div>
+              {/* TUTUP KARTU (KNOCK) BUTTON - Player can declare to close at any time during their turn if round >= 4 */}
+              {isMyTurn && (
+                <button
+                  className="btn-game41 btn-game41-close-hand"
+                  disabled={!canCloseRound || (gameState.turnPhase === TURN_PHASE_41.DISCARD && !selectedCard)}
+                  onClick={() => setShowConfirmClose(true)}
+                  title={
+                    !canCloseRound
+                      ? `Tutup Kartu baru dapat dilakukan mulai Putaran ke-4 (Saat ini Putaran ke-${currentRound})`
+                      : gameState.turnPhase === TURN_PHASE_41.DRAW
+                      ? `Tutup kartu sekarang dengan 4 kartu Anda (${activeEval.bestScore} pts)`
+                      : selectedCard
+                      ? `Buang ${selectedCard.label}${selectedCard.symbol} dan tutup kartu dengan sisa (${previewEval.bestScore} pts)`
+                      : 'Pilih 1 kartu buangan terlebih dahulu untuk menutup kartu'
+                  }
+                  style={{
+                    opacity: !canCloseRound ? 0.6 : 1,
+                    cursor: !canCloseRound ? 'not-allowed' : 'pointer',
+                    filter: !canCloseRound ? 'grayscale(0.5)' : 'none',
+                  }}
+                >
+                  <ShieldAlert size={15} />
+                  <span>
+                    {!canCloseRound
+                      ? `Tutup Kartu (Putaran ${currentRound}/4)`
+                      : gameState.turnPhase === TURN_PHASE_41.DRAW
+                      ? `Tutup Kartu (${activeEval.bestScore} pts)`
+                      : selectedCard
+                      ? `Tutup Kartu (${previewEval.bestScore} pts)`
+                      : 'Pilih 1 Kartu untuk Tutup'}
+                  </span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
