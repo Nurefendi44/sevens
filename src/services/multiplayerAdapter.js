@@ -220,6 +220,7 @@ export const multiplayerAdapter = {
         game_state: {
           config: {
             playerCount: targetMax,
+            roomPlayerCount: targetMax,
             deckMode: effectiveDeckMode,
           },
           gameType,
@@ -573,6 +574,18 @@ export const multiplayerAdapter = {
       gameState = initGame({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
     }
 
+    // Preserve original room capacity seats so room capacity is never lost after starting a match
+    const targetRoomSeats = configOverrides.roomPlayerCount ||
+      configOverrides.playerCount ||
+      room.game_state?.config?.roomPlayerCount ||
+      room.game_state?.config?.playerCount ||
+      actualPlayerCount;
+
+    if (gameState && gameState.config) {
+      gameState.config.roomPlayerCount = targetRoomSeats;
+      gameState.config.desiredPlayerCount = targetRoomSeats;
+    }
+
     const { data: updatedRoom, error: updateErr } = await supabase
       .from('rooms')
       .update({
@@ -707,17 +720,27 @@ export const multiplayerAdapter = {
     if (!room) return;
 
     const remainingPlayers = (room.players || []).filter((p) => p.id !== playerId);
-    const remainingHumans = remainingPlayers.filter((p) => !p.isBot);
+    const prevConfig = room.game_state?.config || {};
+    const prevSeats = prevConfig.roomPlayerCount || prevConfig.playerCount || 4;
+    const prevDeck = prevConfig.deckMode || (prevSeats > 4 ? 'double' : 'single');
+    const prevType = room.game_state?.gameType || 'bigtwo';
 
     if (remainingPlayers.length === 0 || remainingHumans.length === 0) {
       // Room empty or no humans left: preserve room in database for reuse!
-      // Keep existing non-null host_id, clean players, reset status to lobby
+      // Keep existing non-null host_id, clean players, reset status to lobby, preserve configured seats!
       await supabase
         .from('rooms')
         .update({
           players: [],
           status: 'lobby',
-          game_state: null,
+          game_state: {
+            config: {
+              playerCount: prevSeats,
+              roomPlayerCount: prevSeats,
+              deckMode: prevDeck,
+            },
+            gameType: prevType,
+          },
           updated_at: new Date().toISOString(),
         })
         .eq('code', code);
@@ -847,6 +870,11 @@ export const multiplayerAdapter = {
     const { room, error } = await this.getRoom(code);
     if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
 
+    const prevConfig = room.game_state?.config || {};
+    const prevSeats = prevConfig.roomPlayerCount || prevConfig.playerCount || 4;
+    const prevDeck = prevConfig.deckMode || (prevSeats > 4 ? 'double' : 'single');
+    const prevType = room.game_state?.gameType || 'bigtwo';
+
     // Reset players ready status, reset any bot takeover
     const cleanPlayers = (room.players || []).map((p) => ({
       ...p,
@@ -858,7 +886,14 @@ export const multiplayerAdapter = {
       .from('rooms')
       .update({
         status: 'lobby',
-        game_state: null,
+        game_state: {
+          config: {
+            playerCount: prevSeats,
+            roomPlayerCount: prevSeats,
+            deckMode: prevDeck,
+          },
+          gameType: prevType,
+        },
         players: cleanPlayers,
         updated_at: new Date().toISOString(),
       })
@@ -882,6 +917,11 @@ export const multiplayerAdapter = {
     const { room, error } = await this.getRoom(code);
     if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
 
+    const prevConfig = room.game_state?.config || {};
+    const prevSeats = prevConfig.roomPlayerCount || prevConfig.playerCount || 4;
+    const prevDeck = prevConfig.deckMode || (prevSeats > 4 ? 'double' : 'single');
+    const prevType = room.game_state?.gameType || 'bigtwo';
+
     const newHostPlayer = {
       id: playerId,
       name,
@@ -898,7 +938,14 @@ export const multiplayerAdapter = {
         host_id: playerId,
         players: [newHostPlayer],
         status: 'lobby',
-        game_state: null,
+        game_state: {
+          config: {
+            playerCount: prevSeats,
+            roomPlayerCount: prevSeats,
+            deckMode: prevDeck,
+          },
+          gameType: prevType,
+        },
         updated_at: new Date().toISOString(),
       })
       .eq('code', code)

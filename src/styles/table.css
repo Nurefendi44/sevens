@@ -1469,14 +1469,20 @@
   font-size: 0.85rem;
   color: #f0f9ff;
   line-height: 1.4;
+  flex: 1;
+  min-width: 0;
 }
 
 .afk-reclaim-icon {
   font-size: 1.25rem;
   animation: bounce 2s infinite;
+  flex-shrink: 0;
 }
 
 .btn-afk-reclaim {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
   color: #0f172a;
   font-size: 0.82rem;
@@ -1488,12 +1494,35 @@
   box-shadow: 0 4px 12px rgba(56, 189, 248, 0.4);
   transition: all 0.2s ease;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .btn-afk-reclaim:hover {
   transform: translateY(-2px) scale(1.03);
   background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%);
   box-shadow: 0 6px 18px rgba(56, 189, 248, 0.6);
+}
+
+@media (max-width: 640px) {
+  .bigtwo-afk-reclaim-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+    padding: 0.6rem 0.8rem;
+    margin: 0.4rem 0.5rem;
+  }
+
+  .afk-reclaim-banner-text {
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .btn-afk-reclaim {
+    width: 100%;
+    padding: 0.52rem 0.9rem;
+    font-size: 0.8rem;
+    white-space: normal;
+  }
 }
 
 .is-bot-takeover-dock {

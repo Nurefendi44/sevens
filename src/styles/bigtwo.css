@@ -511,7 +511,7 @@
 .bigtwo-cards-container.mode-fan {
   display: flex;
   align-items: flex-end;
-  padding: 1.25rem 0.75rem 1.25rem 0.75rem;
+  padding: 1.25rem 0.75rem 4.5rem 0.75rem;
   overflow-x: auto;
   overflow-y: visible;
   -webkit-overflow-scrolling: touch;
@@ -630,7 +630,7 @@
   }
 
   .bigtwo-cards-container.mode-fan {
-    padding: 1rem 0.5rem 1rem 0.5rem;
+    padding: 0.85rem 0.5rem 4.5rem 0.5rem;
   }
 
   .bigtwo-cards-container.mode-fan > .bigtwo-card-slot + .bigtwo-card-slot {
@@ -690,29 +690,35 @@
   align-items: center;
   gap: 0.65rem;
   color: #fee2e2;
+  flex: 1;
+  min-width: 0;
 }
 
 .afk-reclaim-icon {
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   animation: bounce 2s infinite ease-in-out;
+  flex-shrink: 0;
 }
 
 .afk-reclaim-text strong {
   display: block;
   font-size: 0.85rem;
   color: #fca5a5;
-  margin-bottom: 0.1rem;
+  margin-bottom: 0.15rem;
+  line-height: 1.35;
 }
 
 .afk-reclaim-text p {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: 0.76rem;
   color: #e2e8f0;
+  line-height: 1.35;
 }
 
 .btn-afk-reclaim {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.45rem;
   background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
   color: #0f172a;
@@ -725,12 +731,44 @@
   box-shadow: 0 4px 12px rgba(56, 189, 248, 0.4);
   transition: all 0.2s ease;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .btn-afk-reclaim:hover {
   transform: translateY(-2px) scale(1.03);
   background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%);
   box-shadow: 0 6px 18px rgba(56, 189, 248, 0.6);
+}
+
+@media (max-width: 640px) {
+  .bigtwo-afk-reclaim-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+    padding: 0.65rem 0.85rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .afk-reclaim-text {
+    width: 100%;
+    align-items: flex-start;
+    gap: 0.55rem;
+  }
+
+  .afk-reclaim-text strong {
+    font-size: 0.82rem;
+  }
+
+  .afk-reclaim-text p {
+    font-size: 0.74rem;
+  }
+
+  .btn-afk-reclaim {
+    width: 100%;
+    padding: 0.55rem 1rem;
+    font-size: 0.82rem;
+    white-space: normal;
+  }
 }
 
 /* ------------------------------------------------------------------------------

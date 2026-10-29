@@ -22,6 +22,8 @@ import {
   Bot,
   Trash2,
   RotateCcw,
+  Plus,
+  Minus,
 } from 'lucide-react';
 import '../styles/multiplayer.css';
 import { getLocalPlayerName } from '../services/multiplayerAdapter.js';
@@ -704,7 +706,7 @@ export default function MultiplayerLobby({
   // ---------------------------------------------------------------------------
   const myPlayer = players.find((p) => p.id === myPlayerId) || {};
   const isReady = Boolean(myPlayer.isReady);
-  const targetPlayerCount = room?.game_state?.config?.playerCount || 4;
+  const targetPlayerCount = room?.game_state?.config?.roomPlayerCount || room?.game_state?.config?.playerCount || 4;
   const canStart = players.length >= 2;
 
   const slots = Array.from({ length: targetPlayerCount }).map(
@@ -800,13 +802,66 @@ export default function MultiplayerLobby({
             </div>
           )}
 
-          {/* Status Bar Kursi */}
+          {/* Status Bar Kursi & Host Controls */}
           <div className="vip-seats-meta-bar">
             <span className="seats-counter-title">
               <Users size={15} />
-              <span>Daftar Kursi Pemain ({players.length}/{targetPlayerCount})</span>
+              <span>Daftar Kursi ({players.length}/{targetPlayerCount} Kursi)</span>
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+
+            <div className="vip-meta-actions-cluster">
+              {/* Host Stepper: Tambah / Kurangi Kursi Meja */}
+              {isHost && (
+                <div className="vip-seat-stepper" title="Atur kapasitas kursi meja permainan">
+                  <span className="seat-stepper-label">Kapasitas Kursi:</span>
+                  <button
+                    type="button"
+                    className="btn-seat-step"
+                    disabled={targetPlayerCount <= Math.max(2, players.length)}
+                    onClick={() => {
+                      const nextCount = Math.max(2, targetPlayerCount - 1);
+                      if (onUpdateRoomConfig) {
+                        onUpdateRoomConfig({
+                          playerCount: nextCount,
+                          roomPlayerCount: nextCount,
+                          ...(activeGameType === 'bigtwo' && nextCount <= 4 ? { deckMode: 'single' } : {}),
+                        });
+                      }
+                    }}
+                    title={
+                      targetPlayerCount <= Math.max(2, players.length)
+                        ? `Tidak bisa kurang dari ${Math.max(2, players.length)} kursi (sedang ada ${players.length} pemain)`
+                        : 'Kurangi 1 kursi meja'
+                    }
+                  >
+                    <Minus size={13} />
+                  </button>
+
+                  <span className="seat-stepper-value">
+                    <strong>{targetPlayerCount}</strong> Kursi
+                  </span>
+
+                  <button
+                    type="button"
+                    className="btn-seat-step"
+                    disabled={targetPlayerCount >= 6}
+                    onClick={() => {
+                      const nextCount = Math.min(6, targetPlayerCount + 1);
+                      if (onUpdateRoomConfig) {
+                        onUpdateRoomConfig({
+                          playerCount: nextCount,
+                          roomPlayerCount: nextCount,
+                          ...(activeGameType === 'bigtwo' && nextCount > 4 ? { deckMode: 'double' } : {}),
+                        });
+                      }
+                    }}
+                    title={targetPlayerCount >= 6 ? 'Maksimal 6 kursi permainan' : 'Tambah 1 kursi meja'}
+                  >
+                    <Plus size={13} />
+                  </button>
+                </div>
+              )}
+
               {isHost && players.length < targetPlayerCount && (
                 <button
                   type="button"
@@ -818,6 +873,7 @@ export default function MultiplayerLobby({
                   <span>+ Tambah Bot</span>
                 </button>
               )}
+
               <span className="seats-progress-pill">
                 {players.length} / {targetPlayerCount} Kursi Terisi
               </span>

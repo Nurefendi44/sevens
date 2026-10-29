@@ -349,7 +349,7 @@ export default function TableBigTwo({
               onClick={() => onReclaimControl && onReclaimControl(myPlayer.id)}
             >
               <Sparkles size={14} />
-              <span>Ambil Alih Kendali (Saya Sudah Kembali)</span>
+              <span>Ambil Alih Kendali</span>
             </button>
           </div>
         )}
