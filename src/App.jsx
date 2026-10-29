@@ -697,6 +697,9 @@ export default function App() {
           setIsVoiceMuted(status.isMuted);
           if (status.error) showToast(status.error);
         },
+        onPeerConnect: () => {
+          showToast('Live Voice terhubung dengan pemain! 🎙️🔊');
+        },
       });
 
       if (success) {

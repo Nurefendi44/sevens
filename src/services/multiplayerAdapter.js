@@ -1139,12 +1139,12 @@ export const multiplayerAdapter = {
     }
 
     try {
-      await channel.send({
+      const res = await channel.send({
         type: 'broadcast',
         event: 'voice_signal',
         payload: signalPayload,
       });
-      return { success: true };
+      return { success: res === 'ok' || !res, status: res };
     } catch (err) {
       console.warn('Gagal mengirim broadcast voice signal:', err);
       return { success: false, error: err.message };

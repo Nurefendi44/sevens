@@ -10,10 +10,16 @@ const ICE_SERVERS = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
-    { urls: 'stun:stun.services.mozilla.com' },
+    {
+      urls: [
+        'turn:relay.metered.ca:80',
+        'turn:relay.metered.ca:443',
+        'turn:relay.metered.ca:443?transport=tcp',
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ],
 };
 
@@ -41,6 +47,7 @@ class VoiceChatService {
     // Callbacks
     this.onSpeakingChange = null; // (playerId, isSpeaking) => void
     this.onStatusChange = null;   // ({ isConnected, isMuted, error }) => void
+    this.onPeerConnect = null;    // (playerId) => void
     this.speakingPeers = new Set();
   }
 
@@ -72,6 +79,7 @@ class VoiceChatService {
     this.myPlayerName = myPlayerName;
     this.onSpeakingChange = callbacks.onSpeakingChange || null;
     this.onStatusChange = callbacks.onStatusChange || null;
+    this.onPeerConnect = callbacks.onPeerConnect || null;
 
     try {
       // 1. Request microphone stream
@@ -106,6 +114,17 @@ class VoiceChatService {
         senderId: this.myPlayerId,
         senderName: this.myPlayerName,
       });
+
+      // Repeat broadcast after 1.2s to guarantee delivery if peer connected slightly later
+      setTimeout(() => {
+        if (this.isConnected && this.roomCode) {
+          this.sendSignal({
+            type: 'voice_join',
+            senderId: this.myPlayerId,
+            senderName: this.myPlayerName,
+          });
+        }
+      }, 1200);
 
       return true;
     } catch (err) {
@@ -230,10 +249,13 @@ class VoiceChatService {
     // If signal is targeted and not meant for this player, ignore
     if (targetId && targetId !== this.myPlayerId) return;
 
+    console.log(`📥 [VoiceChat] Received signal: ${type} from ${senderId}`);
+
     try {
       if (type === 'voice_join') {
         // A peer joined or announced their voice presence.
-        // As an active connected peer with a microphone, initiate a call to the newcomer!
+        // Clean any stale/dead peer connection first so handshake starts completely fresh
+        this.closePeer(senderId);
         await this.initiateCall(senderId);
       } else if (type === 'voice_offer') {
         await this.handleOffer(senderId, data);
@@ -265,6 +287,7 @@ class VoiceChatService {
       return this.peerConnections.get(peerId);
     }
 
+    console.log(`🤝 [VoiceChat] Creating RTCPeerConnection for ${peerId}`);
     const pc = new RTCPeerConnection(ICE_SERVERS);
 
     // Add local audio tracks to send voice
@@ -274,20 +297,49 @@ class VoiceChatService {
       });
     }
 
-    // Send local ICE candidates to remote peer
+    // Send local ICE candidates to remote peer (serialized to plain JSON)
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        const candData = event.candidate.toJSON
+          ? event.candidate.toJSON()
+          : {
+              candidate: event.candidate.candidate,
+              sdpMid: event.candidate.sdpMid,
+              sdpMLineIndex: event.candidate.sdpMLineIndex,
+              usernameFragment: event.candidate.usernameFragment,
+            };
+
         this.sendSignal({
           type: 'voice_ice',
           senderId: this.myPlayerId,
           targetId: peerId,
-          data: event.candidate,
+          data: candData,
         });
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log(`📡 [VoiceChat] ICE state with ${peerId}: ${pc.iceConnectionState}`);
+      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        console.log(`🎉 [VoiceChat] P2P ICE CONNECTED with ${peerId}!`);
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log(`📡 [VoiceChat] Connection state with ${peerId}: ${pc.connectionState}`);
+      if (pc.connectionState === 'connected') {
+        console.log(`🎉 [VoiceChat] PEER CONNECTED with ${peerId}! Audio packets flowing.`);
+        if (this.onPeerConnect) {
+          this.onPeerConnect(peerId);
+        }
+      } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        this.closePeer(peerId);
       }
     };
 
     // Receive remote audio track
     pc.ontrack = (event) => {
+      console.log(`🔊 [VoiceChat] Remote track received from ${peerId}`, event);
       let audioEl = this.remoteAudios.get(peerId);
       if (!audioEl) {
         audioEl = document.createElement('audio');
@@ -297,7 +349,7 @@ class VoiceChatService {
         audioEl.setAttribute('autoplay', 'true');
         audioEl.volume = 1.0;
         audioEl.muted = false;
-        // Avoid display: none because mobile WebKit (Safari/iOS) can suspend audio playback on hidden elements
+        // Offscreen positioning so mobile WebKit doesn't suspend audio decoding
         audioEl.style.position = 'fixed';
         audioEl.style.top = '-9999px';
         audioEl.style.left = '-9999px';
@@ -316,25 +368,30 @@ class VoiceChatService {
 
       audioEl.srcObject = stream;
 
-      // Ensure playback starts even under strict browser autoplay policies
+      // Also route directly to Web Audio API destination with 1.8x gain
+      // This forces loud speaker output on mobile and bypasses earpiece routing bug
+      this.routeStreamToAudioContext(peerId, stream);
+
+      // Explicitly trigger play to handle browser autoplay policies
       const playPromise = audioEl.play();
       if (playPromise !== undefined) {
-        playPromise.catch((err) => {
-          console.warn('[VoiceChat] Audio playback waiting for user gesture:', err);
-          const resumeAudio = () => {
-            audioEl.play().catch(() => {});
-            document.removeEventListener('click', resumeAudio);
-            document.removeEventListener('touchstart', resumeAudio);
-          };
-          document.addEventListener('click', resumeAudio, { once: true });
-          document.addEventListener('touchstart', resumeAudio, { once: true });
-        });
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-        this.closePeer(peerId);
+        playPromise
+          .then(() => {
+            console.log(`▶️ [VoiceChat] Remote audio playing for ${peerId}`);
+          })
+          .catch((err) => {
+            console.warn('[VoiceChat] Audio playback waiting for user gesture:', err);
+            const resumeAudio = () => {
+              audioEl.play().catch(() => {});
+              if (this.audioContext && this.audioContext.state === 'suspended') {
+                this.audioContext.resume().catch(() => {});
+              }
+              document.removeEventListener('click', resumeAudio);
+              document.removeEventListener('touchstart', resumeAudio);
+            };
+            document.addEventListener('click', resumeAudio, { once: true });
+            document.addEventListener('touchstart', resumeAudio, { once: true });
+          });
       }
     };
 
@@ -342,10 +399,35 @@ class VoiceChatService {
     return pc;
   }
 
+  routeStreamToAudioContext(peerId, stream) {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+
+      if (!this.audioContext || this.audioContext.state === 'closed') {
+        this.audioContext = new AudioCtx();
+      }
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume().catch(() => {});
+      }
+
+      const source = this.audioContext.createMediaStreamSource(stream);
+      const gainNode = this.audioContext.createGain();
+      gainNode.gain.value = 1.8; // Boost for mobile speaker clarity
+      source.connect(gainNode);
+      gainNode.connect(this.audioContext.destination);
+      console.log(`🔊 [VoiceChat] Routed remote stream to AudioContext for ${peerId}`);
+    } catch (e) {
+      console.warn('[VoiceChat] Could not route to AudioContext:', e);
+    }
+  }
+
   async initiateCall(peerId) {
     try {
+      console.log(`📡 [VoiceChat] Initiating call to ${peerId}`);
       const pc = this.getOrCreatePeerConnection(peerId);
       if (pc.signalingState !== 'stable') {
+        console.log(`[VoiceChat] Skip initiateCall, state is ${pc.signalingState}`);
         return;
       }
 
@@ -355,11 +437,16 @@ class VoiceChatService {
       });
       await pc.setLocalDescription(offer);
 
+      const offerData = {
+        type: offer.type,
+        sdp: offer.sdp,
+      };
+
       await this.sendSignal({
         type: 'voice_offer',
         senderId: this.myPlayerId,
         targetId: peerId,
-        data: offer,
+        data: offerData,
       });
     } catch (err) {
       console.warn('[VoiceChat] Failed to initiate call to', peerId, err);
@@ -368,27 +455,34 @@ class VoiceChatService {
 
   async handleOffer(peerId, offer) {
     try {
-      const pc = this.getOrCreatePeerConnection(peerId);
+      console.log(`📡 [VoiceChat] Handling offer from ${peerId}`);
+      let pc = this.peerConnections.get(peerId);
 
       const isCollision =
         offer.type === 'offer' &&
-        (pc.signalingState !== 'stable' || pc.connectionState === 'connecting');
+        pc &&
+        pc.signalingState !== 'stable';
 
       const isPolite = this.myPlayerId < peerId;
 
       if (isCollision) {
         if (!isPolite) {
-          // Impolite peer ignores colliding incoming offer
+          console.log(`[VoiceChat] Impolite peer ignoring colliding offer from ${peerId}`);
           return;
         }
         try {
           await pc.setLocalDescription({ type: 'rollback' });
         } catch (e) {
-          // Fallback if rollback is not supported
+          this.closePeer(peerId);
+          pc = null;
         }
       }
 
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      if (!pc) {
+        pc = this.getOrCreatePeerConnection(peerId);
+      }
+
+      await pc.setRemoteDescription(new RTCSessionDescription({ type: offer.type, sdp: offer.sdp }));
       await this.flushPendingCandidates(peerId);
 
       const answer = await pc.createAnswer({
@@ -396,11 +490,16 @@ class VoiceChatService {
       });
       await pc.setLocalDescription(answer);
 
+      const answerData = {
+        type: answer.type,
+        sdp: answer.sdp,
+      };
+
       await this.sendSignal({
         type: 'voice_answer',
         senderId: this.myPlayerId,
         targetId: peerId,
-        data: answer,
+        data: answerData,
       });
     } catch (err) {
       console.warn('[VoiceChat] Failed to handle offer from', peerId, err);
@@ -409,9 +508,10 @@ class VoiceChatService {
 
   async handleAnswer(peerId, answer) {
     try {
+      console.log(`📡 [VoiceChat] Handling answer from ${peerId}`);
       const pc = this.peerConnections.get(peerId);
       if (pc && pc.signalingState === 'have-local-offer') {
-        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        await pc.setRemoteDescription(new RTCSessionDescription({ type: answer.type, sdp: answer.sdp }));
         await this.flushPendingCandidates(peerId);
       }
     } catch (err) {
@@ -436,7 +536,10 @@ class VoiceChatService {
     }
 
     try {
-      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      const candInit = candidate.toJSON ? candidate.toJSON() : candidate;
+      if (candInit && candInit.candidate) {
+        await pc.addIceCandidate(new RTCIceCandidate(candInit));
+      }
     } catch (err) {
       console.warn('[VoiceChat] Failed to add ICE candidate:', err);
     }
@@ -451,7 +554,10 @@ class VoiceChatService {
       this.pendingCandidates.delete(peerId);
       for (const cand of queued) {
         try {
-          await pc.addIceCandidate(new RTCIceCandidate(cand));
+          const candInit = cand.toJSON ? cand.toJSON() : cand;
+          if (candInit && candInit.candidate) {
+            await pc.addIceCandidate(new RTCIceCandidate(candInit));
+          }
         } catch (err) {
           console.warn('[VoiceChat] Failed to add queued ICE candidate:', err);
         }
@@ -467,6 +573,7 @@ class VoiceChatService {
       try {
         pc.onicecandidate = null;
         pc.ontrack = null;
+        pc.oniceconnectionstatechange = null;
         pc.onconnectionstatechange = null;
         pc.close();
       } catch (e) {}
