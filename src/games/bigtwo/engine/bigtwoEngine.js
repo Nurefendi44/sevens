@@ -159,6 +159,7 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
     isFirstPlayOfGame: true,
     lowestCard: lowestCardFound,
     currentPlayer: startingPlayerId,
+    turnStartedAt: Date.now(),
     gameStatus: GAME_STATUS_BIGTWO.PLAYING,
     winner: null,
     disqualifiedPlayer: null,
@@ -541,6 +542,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
       consecutivePassCount: 0,
       isFirstPlayOfGame: false,
       currentPlayer: nextCurrentPlayerId,
+      turnStartedAt: Date.now(),
       history: [
         ...gameState.history,
         {
@@ -587,6 +589,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
       consecutivePassCount: 0,
       isFirstPlayOfGame: false,
       currentPlayer: playerId,
+      turnStartedAt: Date.now(),
       history: [
         ...gameState.history,
         {
@@ -625,6 +628,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
     consecutivePassCount: 0,
     isFirstPlayOfGame: false,
     currentPlayer: nextPlayer.id,
+    turnStartedAt: Date.now(),
     history: [
       ...gameState.history,
       {
@@ -695,6 +699,7 @@ export function passTurnBigTwo(gameState, playerId) {
       consecutivePassCount: 0,
       trickLeaderId: newLeaderId,
       currentPlayer: newLeaderId,
+      turnStartedAt: Date.now(),
       lastAction: {
         type: 'PASS',
         playerId,
@@ -723,6 +728,7 @@ export function passTurnBigTwo(gameState, playerId) {
     passedPlayers: updatedPassed,
     consecutivePassCount: (gameState.consecutivePassCount || 0) + 1,
     currentPlayer: nextPlayer.id,
+    turnStartedAt: Date.now(),
     lastAction: {
       type: 'PASS',
       playerId,
@@ -741,4 +747,39 @@ export function passTurnBigTwo(gameState, playerId) {
   };
 
   return { success: true, gameState: nextState };
+}
+
+/**
+ * Sets or clears Bot Takeover for an AFK player in Big Two
+ * @param {Object} gameState
+ * @param {string} playerId
+ * @param {boolean} isTakeover
+ * @returns {Object} updated gameState
+ */
+export function setBotTakeoverBigTwo(gameState, playerId, isTakeover = true) {
+  if (!gameState || !gameState.players) return gameState;
+  const updatedPlayers = gameState.players.map((p) => {
+    if (p.id === playerId) {
+      return { ...p, isBotTakeover: Boolean(isTakeover) };
+    }
+    return p;
+  });
+
+  const targetPlayer = gameState.players.find((p) => p.id === playerId);
+  const actionMsg = isTakeover
+    ? `🤖 Giliran ${targetPlayer?.name || 'Pemain'} diambil alih oleh Bot AI karena AFK (> 2 menit).`
+    : `✨ ${targetPlayer?.name || 'Pemain'} telah kembali dan mengambil alih kendali kartunya.`;
+
+  return {
+    ...gameState,
+    players: updatedPlayers,
+    turnStartedAt: Date.now(),
+    history: [
+      ...gameState.history,
+      {
+        turn: gameState.history.length + 1,
+        message: actionMsg,
+      },
+    ],
+  };
 }

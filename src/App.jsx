@@ -42,7 +42,7 @@ import TableBigTwo from './games/bigtwo/components/TableBigTwo.jsx';
 import GameOverBigTwoModal from './games/bigtwo/components/GameOverBigTwoModal.jsx';
 import RulesGuideBigTwoModal from './games/bigtwo/components/RulesGuideBigTwoModal.jsx';
 import BigTwoFirstTurnWheel from './games/bigtwo/components/BigTwoFirstTurnWheel.jsx';
-import { initBigTwo, playComboBigTwo, passTurnBigTwo } from './games/bigtwo/engine/bigtwoEngine.js';
+import { initBigTwo, playComboBigTwo, passTurnBigTwo, setBotTakeoverBigTwo } from './games/bigtwo/engine/bigtwoEngine.js';
 
 import ActionAnnouncementPopup from './components/ActionAnnouncementPopup.jsx';
 
@@ -199,23 +199,73 @@ export default function App() {
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
-  // Active Card Game: 'sevens' | 'game41'
+  // Active Card Game: 'sevens' | 'game41' | 'bigtwo'
   const [activeGameType, setActiveGameType] = useState(() => {
     if (typeof localStorage !== 'undefined') {
+      const session = getActiveSession();
+      if (session.roomCode) {
+        try {
+          const cached = localStorage.getItem('sevens_cached_room');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && parsed.game_state?.gameType) {
+              return parsed.game_state.gameType;
+            }
+          }
+        } catch (e) {}
+      }
       return localStorage.getItem('sevens_active_game_type') || 'sevens';
     }
     return 'sevens';
   });
 
   // Game 41 State (2-6 players)
-  const [gameState41, setGameState41] = useState(() => initGame41({ playerCount: 4 }));
+  const [gameState41, setGameState41] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      const session = getActiveSession();
+      if (session.roomCode) {
+        try {
+          const cached = localStorage.getItem('sevens_cached_room');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && parsed.code === session.roomCode && parsed.game_state?.gameType === 'game41') {
+              return parsed.game_state;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+    return initGame41({ playerCount: 4 });
+  });
   const [showRules41Modal, setShowRules41Modal] = useState(false);
 
-  // Big Two State (2-6 players)
-  const [gameStateBigtwo, setGameStateBigtwo] = useState(() => initBigTwo({ playerCount: 4 }));
+  // Big Two State (2-6 players, synchronously restored from cached room on refresh if available)
+  const [gameStateBigtwo, setGameStateBigtwo] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      const session = getActiveSession();
+      if (session.roomCode) {
+        try {
+          const cached = localStorage.getItem('sevens_cached_room');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && parsed.code === session.roomCode && parsed.game_state?.gameType === 'bigtwo') {
+              return parsed.game_state;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+    return initBigTwo({ playerCount: 4 });
+  });
   const [showRulesBigtwoModal, setShowRulesBigtwoModal] = useState(false);
   const [bigTwoWheelPicker, setBigTwoWheelPicker] = useState(null);
   const [pendingBigTwoWheel, setPendingBigTwoWheel] = useState(null);
+
+  // AFK & Turn Timer tracking state
+  const [turnElapsed, setTurnElapsed] = useState(0);
+  const [showAfkWarningModal, setShowAfkWarningModal] = useState(false);
+  const turnStartTimeRef = useRef(Date.now());
+  const prevTurnPlayerIdRef = useRef(null);
 
   // Cumulative Scoreboard Data (Games Played & Point Score, persisted in localStorage)
   const [scoreboardData, setScoreboardData] = useState(() => {
@@ -268,8 +318,11 @@ export default function App() {
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const session = getActiveSession();
-    if (session.roomCode && isSupabaseConfigured) {
-      multiplayerAdapter.getRoom(session.roomCode).then(({ room, error }) => {
+    const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const targetRoomCode = session.roomCode || urlParams?.get('room');
+
+    if (targetRoomCode && isSupabaseConfigured) {
+      multiplayerAdapter.getRoom(targetRoomCode).then(({ room, error }) => {
         setIsReconnecting(false);
         if (room && !error) {
           setCurrentRoom(room);
@@ -291,17 +344,89 @@ export default function App() {
           }
           // Only show toast if user reconnected cleanly
           showToast(`Terhubung ke Room ${room.code}`);
-        } else {
+        } else if (!error && room === null) {
+          // Room was explicitly deleted / not found in DB
           clearLocalSession();
           setCurrentRoom(null);
+        } else {
+          // Temporary network error / offline: retain session and do not kick player!
+          console.warn('Gagal memuat room server, mempertahankan sesi lokal:', error);
         }
-      }).catch(() => {
+      }).catch((err) => {
         setIsReconnecting(false);
+        console.warn('Reconnect error:', err);
       });
     } else {
       setIsReconnecting(false);
     }
   }, []);
+
+  // Keep URL query parameter synchronized with active room code (?room=CODE)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const url = new URL(window.location.href);
+      if (isMultiplayerMode && currentRoom?.code) {
+        if (url.searchParams.get('room') !== currentRoom.code) {
+          url.searchParams.set('room', currentRoom.code);
+          window.history.replaceState(null, '', url.toString());
+        }
+      } else {
+        if (url.searchParams.has('room') && !currentRoom?.code) {
+          url.searchParams.delete('room');
+          window.history.replaceState(null, '', url.pathname);
+        }
+      }
+    } catch {}
+  }, [isMultiplayerMode, currentRoom?.code]);
+
+  // Auto-resync when returning to tab or network comes back online
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleSyncOnVisible = () => {
+      if (document.visibilityState === 'visible' && isMultiplayerMode && currentRoom?.code && isSupabaseConfigured) {
+        multiplayerAdapter.getRoom(currentRoom.code).then(({ room, error }) => {
+          if (room && !error) {
+            setCurrentRoom(room);
+            if (room.game_state) {
+              if (room.game_state.gameType === 'bigtwo' && room.game_state.players) {
+                setGameStateBigtwo(room.game_state);
+              } else if (room.game_state.gameType === 'game41' && room.game_state.players) {
+                setGameState41(room.game_state);
+              } else if (room.game_state.players) {
+                setGameState(room.game_state);
+              }
+            }
+          }
+        }).catch(() => {});
+      }
+    };
+
+    window.addEventListener('online', handleSyncOnVisible);
+    document.addEventListener('visibilitychange', handleSyncOnVisible);
+
+    return () => {
+      window.removeEventListener('online', handleSyncOnVisible);
+      document.removeEventListener('visibilitychange', handleSyncOnVisible);
+    };
+  }, [isMultiplayerMode, currentRoom?.code]);
+
+  // BeforeUnload warning when actively playing online to prevent accidental exit
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleBeforeUnload = (e) => {
+      if (isMultiplayerMode && currentRoom?.status === 'playing') {
+        e.preventDefault();
+        e.returnValue = 'Permainan online sedang berlangsung. Anda yakin ingin me-refresh atau keluar?';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isMultiplayerMode, currentRoom?.status]);
 
   // ---------------------------------------------------------------------------
   // 2. SUPABASE REALTIME SUBSCRIPTION
@@ -1065,6 +1190,72 @@ export default function App() {
     }
   };
 
+  const handleSetBotTakeover = async (playerId, isTakeover = true) => {
+    if (activeGameType === 'bigtwo') {
+      const nextState = setBotTakeoverBigTwo(gameStateBigtwo, playerId, isTakeover);
+      setGameStateBigtwo(nextState);
+
+      const pObj = gameStateBigtwo.players?.find((p) => p.id === playerId);
+      if (isTakeover) {
+        showToast(`🤖 Giliran ${pObj?.name || 'Pemain'} diambil alih oleh Bot AI (AFK > 2 Menit).`);
+      } else {
+        showToast('✨ Anda telah mengambil alih kendali kartu kembali!');
+        setShowAfkWarningModal(false);
+      }
+
+      if (isMultiplayerMode && currentRoom?.code) {
+        await multiplayerAdapter.toggleBotTakeover(currentRoom.code, playerId, isTakeover);
+      }
+    }
+  };
+
+  // AFK & Turn Timer tracking (120 seconds = 2 minutes)
+  useEffect(() => {
+    if (activeGameType !== 'bigtwo') return;
+    if (gameStateBigtwo.gameStatus === 'GAME_OVER' || bigTwoWheelPicker?.isOpen) {
+      setTurnElapsed(0);
+      setShowAfkWarningModal(false);
+      return;
+    }
+
+    const currentId = gameStateBigtwo.currentPlayer;
+    if (prevTurnPlayerIdRef.current !== currentId) {
+      prevTurnPlayerIdRef.current = currentId;
+      turnStartTimeRef.current = gameStateBigtwo.turnStartedAt || Date.now();
+      setTurnElapsed(0);
+      setShowAfkWarningModal(false);
+    }
+
+    const interval = setInterval(() => {
+      const startTime = gameStateBigtwo.turnStartedAt || turnStartTimeRef.current;
+      const elapsed = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+      setTurnElapsed(elapsed);
+
+      const currentPlayerObj = gameStateBigtwo.players?.find((p) => p.id === currentId);
+      const isHumanTurn = currentPlayerObj && !currentPlayerObj.isBot && !currentPlayerObj.isBotTakeover;
+
+      if (isHumanTurn && elapsed >= 120) {
+        if (currentId === myPlayerId) {
+          setShowAfkWarningModal(true);
+        } else if (isHost && isMultiplayerMode) {
+          // Host automatically initiates bot takeover to keep the room moving
+          handleSetBotTakeover(currentId, true);
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [
+    activeGameType,
+    gameStateBigtwo.currentPlayer,
+    gameStateBigtwo.turnStartedAt,
+    gameStateBigtwo.gameStatus,
+    bigTwoWheelPicker?.isOpen,
+    myPlayerId,
+    isHost,
+    isMultiplayerMode,
+  ]);
+
   const getScoreSessionKey = (gameKey) => {
     if (isMultiplayerMode && currentRoom?.code) {
       return `${gameKey}_room_${currentRoom.code}`;
@@ -1310,7 +1501,14 @@ export default function App() {
       const currentId = gameStateBigtwo.currentPlayer;
       if (isBotPlayer(gameStateBigtwo, currentId)) {
         const botObj = gameStateBigtwo.players.find((p) => p.id === currentId);
-        setBotThinking(botObj);
+        setBotThinking(
+          botObj
+            ? {
+                ...botObj,
+                name: botObj.isBotTakeover ? `${botObj.name} (Bot Takeover)` : botObj.name,
+              }
+            : null
+        );
         timer = setTimeout(() => {
           const move = chooseBigTwoBotMove(gameStateBigtwo, currentId);
           setBotThinking(null);
@@ -1906,6 +2104,8 @@ export default function App() {
             onOpenRules={() => setShowRulesBigtwoModal(true)}
             onOpenWheel={handleBigTwoRespin}
             onError={showToast}
+            onReclaimControl={(playerId) => handleSetBotTakeover(playerId, false)}
+            turnDuration={turnElapsed}
           />
         ) : activeGameType === 'game41' ? (
           <Table41
@@ -2281,6 +2481,46 @@ export default function App() {
           actionLog={gameState.actionLog}
           onClose={() => setShowHistoryModal(false)}
         />
+      )}
+
+      {/* AFK 2-MINUTE CONFIRMATION MODAL (ACTIVE PLAYER ONLY) */}
+      {showAfkWarningModal && (
+        <div className="bigtwo-afk-modal-overlay">
+          <div className="bigtwo-afk-modal">
+            <div className="bigtwo-afk-modal-header">
+              <div className="bigtwo-afk-modal-icon">⚠️</div>
+              <h3 className="bigtwo-afk-modal-title">Peringatan AFK (&gt; 2 Menit)</h3>
+              <p className="bigtwo-afk-modal-desc">
+                Waktu giliran Anda telah mencapai 2 menit tanpa langkah. Untuk kelancaran bermain bersama, giliran Anda akan diambil alih oleh Bot AI.
+              </p>
+            </div>
+            <div className="bigtwo-afk-modal-actions">
+              <button
+                type="button"
+                className="btn-afk-resume"
+                onClick={() => {
+                  setShowAfkWarningModal(false);
+                  if (activeGameType === 'bigtwo') {
+                    setGameStateBigtwo((prev) => ({ ...prev, turnStartedAt: Date.now() }));
+                  }
+                  showToast('Silakan pilih dan mainkan kartu Anda!');
+                }}
+              >
+                <span>✨ Saya Sudah Kembali (Lanjut Main)</span>
+              </button>
+              <button
+                type="button"
+                className="btn-afk-yield-bot"
+                onClick={() => {
+                  setShowAfkWarningModal(false);
+                  handleSetBotTakeover(myPlayerId, true);
+                }}
+              >
+                Serahkan Giliran ke Bot AI Sekarang
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

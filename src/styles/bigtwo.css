@@ -655,3 +655,186 @@
     font-size: 0.74rem;
   }
 }
+
+/* ------------------------------------------------------------------------------
+   AFK BOT TAKEOVER BANNER & RECLAIM CONTROLS
+   ------------------------------------------------------------------------------ */
+.bigtwo-afk-reclaim-banner {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.22) 0%, rgba(220, 38, 38, 0.35) 100%);
+  border: 1.5px solid rgba(239, 68, 68, 0.55);
+  backdrop-filter: blur(12px);
+  border-radius: 12px;
+  padding: 0.65rem 1rem;
+  margin-bottom: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  box-shadow: 0 4px 20px rgba(220, 38, 38, 0.25);
+  animation: afkGlow 2.5s infinite alternate ease-in-out;
+}
+
+@keyframes afkGlow {
+  0% {
+    box-shadow: 0 4px 15px rgba(220, 38, 38, 0.2);
+    border-color: rgba(239, 68, 68, 0.5);
+  }
+  100% {
+    box-shadow: 0 4px 25px rgba(239, 68, 68, 0.45);
+    border-color: rgba(248, 113, 113, 0.8);
+  }
+}
+
+.afk-reclaim-text {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: #fee2e2;
+}
+
+.afk-reclaim-icon {
+  font-size: 1.5rem;
+  animation: bounce 2s infinite ease-in-out;
+}
+
+.afk-reclaim-text strong {
+  display: block;
+  font-size: 0.85rem;
+  color: #fca5a5;
+  margin-bottom: 0.1rem;
+}
+
+.afk-reclaim-text p {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #e2e8f0;
+}
+
+.btn-afk-reclaim {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+  color: #0f172a;
+  font-size: 0.8rem;
+  font-weight: 800;
+  padding: 0.55rem 1.15rem;
+  border: 1px solid #7dd3fc;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.4);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-afk-reclaim:hover {
+  transform: translateY(-2px) scale(1.03);
+  background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%);
+  box-shadow: 0 6px 18px rgba(56, 189, 248, 0.6);
+}
+
+/* ------------------------------------------------------------------------------
+   AFK 2-MINUTE CONFIRMATION MODAL OVERLAY
+   ------------------------------------------------------------------------------ */
+.bigtwo-afk-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(8px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.bigtwo-afk-modal {
+  background: #0f172a;
+  border: 1.5px solid rgba(239, 68, 68, 0.5);
+  border-radius: 18px;
+  padding: 1.5rem;
+  max-width: 440px;
+  width: 100%;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(239, 68, 68, 0.25);
+  text-align: center;
+  animation: zoomIn 0.25s ease-out;
+}
+
+@keyframes zoomIn {
+  from {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.bigtwo-afk-modal-header {
+  margin-bottom: 1rem;
+}
+
+.bigtwo-afk-modal-icon {
+  font-size: 2.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.bigtwo-afk-modal-title {
+  color: #f87171;
+  font-size: 1.2rem;
+  font-weight: 800;
+  margin-bottom: 0.35rem;
+}
+
+.bigtwo-afk-modal-desc {
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  margin-bottom: 1.25rem;
+}
+
+.bigtwo-afk-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.btn-afk-resume {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  border: 1px solid #34d399;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.btn-afk-resume:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(16, 185, 129, 0.4);
+}
+
+.btn-afk-yield-bot {
+  background: rgba(30, 41, 59, 0.8);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  padding: 0.65rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-afk-yield-bot:hover {
+  background: rgba(51, 65, 85, 0.9);
+  color: #f1f5f9;
+}
+

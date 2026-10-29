@@ -61,6 +61,7 @@ export function isBotPlayer(gameState, playerId) {
   if (p) {
     if (p.isBot === true) return true;
     if (p.isHuman === false) return true;
+    if (p.isBotTakeover === true) return true;
   }
   return String(playerId).startsWith('bot_');
 }

@@ -15,6 +15,13 @@ import {
 } from 'lucide-react';
 import '../../../styles/bigtwo.css';
 
+function formatTime(seconds) {
+  const s = Math.max(0, Math.floor(seconds || 0));
+  const mins = Math.floor(s / 60);
+  const secs = s % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
 export default function TableBigTwo({
   gameState,
   myPlayerId,
@@ -25,6 +32,8 @@ export default function TableBigTwo({
   onOpenRules,
   onOpenWheel,
   onError,
+  onReclaimControl,
+  turnDuration = 0,
 }) {
   const [selectedCards, setSelectedCards] = useState([]);
   const [isGridView, setIsGridView] = useState(false);
@@ -218,6 +227,25 @@ export default function TableBigTwo({
                   >
                     👑 JUARA {finishedEntry.rank}{finishedEntry.pointsEarned !== undefined ? ` (+${finishedEntry.pointsEarned} Poin)` : ''}
                   </span>
+                ) : p.isBotTakeover ? (
+                  <span
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.25)',
+                      color: '#fca5a5',
+                      border: '1px solid rgba(239, 68, 68, 0.45)',
+                      fontSize: '0.62rem',
+                      fontWeight: 700,
+                      padding: '0.1rem 0.45rem',
+                      borderRadius: '999px',
+                      marginLeft: 'auto',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                    }}
+                    title="Pemain AFK (> 2 menit) dan giliran sedang diambil alih oleh Bot"
+                  >
+                    🤖 Bot (AFK)
+                  </span>
                 ) : isOpponentPassed ? (
                   <span
                     style={{
@@ -234,7 +262,12 @@ export default function TableBigTwo({
                     LEWAT
                   </span>
                 ) : isOpponentTurn ? (
-                  <span className="turn-indicator-badge">Giliran</span>
+                  <span
+                    className="turn-indicator-badge"
+                    style={turnDuration >= 90 ? { background: '#f59e0b', color: '#0f172a' } : {}}
+                  >
+                    Giliran {turnDuration > 0 ? `(${formatTime(turnDuration)})` : ''}
+                  </span>
                 ) : null}
               </div>
 
@@ -291,6 +324,26 @@ export default function TableBigTwo({
 
       {/* BOTTOM: Player Tray & Hand Controls */}
       <div className="bigtwo-tray">
+        {myPlayer?.isBotTakeover && (
+          <div className="bigtwo-afk-reclaim-banner">
+            <div className="afk-reclaim-text">
+              <span className="afk-reclaim-icon">🤖</span>
+              <div>
+                <strong>Giliran Sedang Diambil Alih Bot (Status AFK)</strong>
+                <p>Giliran Anda sementara digantikan oleh Bot AI. Kartu Anda tetap aman.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn-afk-reclaim"
+              onClick={() => onReclaimControl && onReclaimControl(myPlayer.id)}
+            >
+              <Sparkles size={14} />
+              <span>Ambil Alih Kendali (Saya Sudah Kembali)</span>
+            </button>
+          </div>
+        )}
+
         <div className="bigtwo-tray-header">
           <div className="tray-hand-info">
             <span className="tray-avatar">{myPlayer.avatar || '👑'}</span>
@@ -316,7 +369,12 @@ export default function TableBigTwo({
                 })()}
               </span>
             ) : isMyTurn ? (
-              <span className="bigtwo-inline-turn-pill">🔥 Giliran Anda</span>
+              <span
+                className="bigtwo-inline-turn-pill"
+                style={turnDuration >= 90 ? { borderColor: '#f59e0b', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.18)' } : {}}
+              >
+                🔥 Giliran Anda {turnDuration > 0 ? `(${formatTime(turnDuration)} / 02:00)` : ''}
+              </span>
             ) : null}
 
             {gameState.passedPlayers?.includes(myPlayer.id) && !gameState.finishedPlayers?.some((f) => f.id === myPlayer.id) && (

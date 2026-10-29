@@ -268,12 +268,17 @@ export const multiplayerAdapter = {
     const maxPlayers = room.game_state?.config?.playerCount || 4;
 
     // Check if player already in room (reconnect scenario)
-    const existingPlayer = players.find(
-      (p) => p.id === playerId || p.name.toLowerCase() === name.toLowerCase()
-    );
+    const normalizedName = name.trim().toLowerCase();
+    const existingPlayer =
+      players.find(
+        (p) => p.id === playerId || (p.name && p.name.trim().toLowerCase() === normalizedName)
+      ) ||
+      (room.game_state?.players || []).find(
+        (p) => p.id === playerId || (p.name && p.name.trim().toLowerCase() === normalizedName)
+      );
 
     if (existingPlayer) {
-      // Reconnect
+      // Reconnect: persist matching player id and name
       setLocalSession(existingPlayer.id, existingPlayer.name, code);
       return {
         success: true,
@@ -683,16 +688,65 @@ export const multiplayerAdapter = {
       .update({
         host_id: nextHostId,
         players: remainingPlayers,
-        status: remainingPlayers.length < 4 && room.status === 'playing' ? 'lobby' : room.status,
+        status: remainingPlayers.length < 2 && room.status === 'playing' ? 'lobby' : room.status,
         updated_at: new Date().toISOString(),
       })
       .eq('code', code);
   },
 
   /**
+   * Sets or clears Bot Takeover for an AFK player
+   */
+  async toggleBotTakeover(roomCode, playerId, isTakeover = true) {
+    if (!supabase) return { success: false, error: 'Supabase offline' };
+    const code = roomCode.trim().toUpperCase();
+    const { room, error } = await this.getRoom(code);
+    if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+
+    const updatedPlayers = (room.players || []).map((p) => {
+      if (p.id === playerId) {
+        return { ...p, isBotTakeover: Boolean(isTakeover) };
+      }
+      return p;
+    });
+
+    let updatedGameState = room.game_state;
+    if (updatedGameState && updatedGameState.players) {
+      const gsPlayers = updatedGameState.players.map((p) => {
+        if (p.id === playerId) {
+          return { ...p, isBotTakeover: Boolean(isTakeover) };
+        }
+        return p;
+      });
+      updatedGameState = {
+        ...updatedGameState,
+        players: gsPlayers,
+        turnStartedAt: Date.now(),
+      };
+    }
+
+    const { data: updatedRoom, error: updateErr } = await supabase
+      .from('rooms')
+      .update({
+        players: updatedPlayers,
+        game_state: updatedGameState,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('code', code)
+      .select()
+      .single();
+
+    if (updateErr) {
+      return { success: false, error: updateErr.message };
+    }
+
+    return { success: true, room: updatedRoom };
+  },
+
+  /**
    * Subscribes to Realtime updates for a specific room
    */
-  subscribeToRoom(roomCode, onRoomUpdate) {
+  subscribeToRoom(roomCode, onRoomUpdate, onStatusChange = null) {
     if (!supabase) return () => {};
     const code = roomCode.trim().toUpperCase();
     const channelName = `room_channel_${code}`;
@@ -714,6 +768,7 @@ export const multiplayerAdapter = {
         }
       )
       .subscribe((status) => {
+        if (onStatusChange) onStatusChange(status);
         if (status === 'SUBSCRIBED') {
           // Channel connected
         }
