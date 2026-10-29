@@ -82,6 +82,7 @@ import {
   Columns3,
   Rows3,
   Trophy,
+  Crown,
 } from 'lucide-react';
 
 export default function App() {
@@ -505,6 +506,15 @@ export default function App() {
     if (gameMode !== 'multiplayer' || !currentRoom?.code) return;
 
     const unsubscribe = multiplayerAdapter.subscribeToRoom(currentRoom.code, (updatedRoom) => {
+      setCurrentRoom(updatedRoom);
+
+      if (updatedRoom.status === 'lobby') {
+        // Reset local in-game state when returning to lobby
+        setGameStateBigtwo({});
+        setGameState41({});
+        return;
+      }
+
       if (updatedRoom.game_state) {
         const nextState = updatedRoom.game_state;
 
@@ -827,6 +837,41 @@ export default function App() {
       setCurrentRoom(res.room);
     } else {
       showToast(res.error || 'Gagal mengeluarkan bot.');
+    }
+  };
+
+  const handleClaimHost = async () => {
+    if (!currentRoom?.code || !myPlayerId) return;
+    try {
+      const res = await multiplayerAdapter.claimHost(currentRoom.code, myPlayerId);
+      if (res.success && res.room) {
+        setCurrentRoom(res.room);
+        showToast('👑 Anda sekarang adalah Host Meja!');
+      } else {
+        showToast(res.error || 'Gagal mengambil alih host.');
+      }
+    } catch (err) {
+      console.error('Error claiming host:', err);
+      showToast('Terjadi kesalahan saat mengambil alih host.');
+    }
+  };
+
+  const handleResetRoom = async () => {
+    if (!currentRoom?.code) return;
+    if (!window.confirm('Reset permainan dan skor meja ini kembali ke Ruang Tunggu (Lobby)?')) return;
+    try {
+      const res = await multiplayerAdapter.resetRoomState(currentRoom.code, myPlayerId);
+      if (res.success && res.room) {
+        setCurrentRoom(res.room);
+        setGameStateBigtwo({});
+        setGameState41({});
+        showToast('🔄 Meja dan skor telah berhasil di-reset!');
+      } else {
+        showToast(res.error || 'Gagal mereset room.');
+      }
+    } catch (err) {
+      console.error('Error resetting room:', err);
+      showToast('Terjadi kesalahan saat mereset room.');
     }
   };
 
@@ -2166,14 +2211,40 @@ export default function App() {
           )}
 
           {isMultiplayerMode && currentRoom && (
-            <button
-              className="btn-header btn-danger-hover"
-              onClick={handleLeaveRoom}
-              title="Keluar dari room"
-            >
-              <LogOut size={15} />
-              <span>Keluar Room</span>
-            </button>
+            <>
+              {!isHost && (
+                <button
+                  className="btn-header"
+                  style={{ borderColor: 'rgba(245, 158, 11, 0.45)', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.12)' }}
+                  onClick={handleClaimHost}
+                  title="Ambil alih peran Host untuk meja ini"
+                >
+                  <Crown size={15} />
+                  <span>Ambil Alih Host</span>
+                </button>
+              )}
+
+              {isHost && (
+                <button
+                  className="btn-header"
+                  style={{ borderColor: 'rgba(56, 189, 248, 0.45)', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)' }}
+                  onClick={handleResetRoom}
+                  title="Reset permainan & skor meja kembali ke lobby"
+                >
+                  <RotateCcw size={15} />
+                  <span>Reset Meja & Skor</span>
+                </button>
+              )}
+
+              <button
+                className="btn-header btn-danger-hover"
+                onClick={handleLeaveRoom}
+                title="Keluar dari room"
+              >
+                <LogOut size={15} />
+                <span>Keluar Room</span>
+              </button>
+            </>
           )}
 
           <button
@@ -2550,6 +2621,8 @@ export default function App() {
           activeGameType={activeGameType}
           initialDeckMode={multiplayerInitOptions?.deckMode || 'double'}
           initialPlayerCount={multiplayerInitOptions?.playerCount || 4}
+          onClaimHost={handleClaimHost}
+          onResetRoom={handleResetRoom}
         />
       )}
 
@@ -2583,6 +2656,8 @@ export default function App() {
           else handleRestart();
         }}
         isHost={isHost}
+        onClaimHost={handleClaimHost}
+        onResetRoom={handleResetRoom}
         onLeaveRoom={handleLeaveRoom}
         onBackToMenu={handleBackToModeSelect}
         activeGameType={activeGameType}

@@ -20,6 +20,7 @@ import {
   Columns3,
   Rows3,
   Trophy,
+  Crown,
 } from 'lucide-react';
 
 export default function MobileNavDrawer({
@@ -43,6 +44,8 @@ export default function MobileNavDrawer({
   onToggleSound,
   onRestart,
   isHost,
+  onClaimHost = null,
+  onResetRoom = null,
   onLeaveRoom,
   onSwitchMode,
   onBackToMenu,
@@ -319,6 +322,46 @@ export default function MobileNavDrawer({
               <div className="menu-item-text">
                 <span>Kocok Ulang & Mulai Baru</span>
                 <small>Kocok 52 kartu dan mulai ronde baru</small>
+              </div>
+            </button>
+          )}
+
+          {/* Claim Host (Multiplayer non-host) */}
+          {isMultiplayerMode && currentRoom && !isHost && onClaimHost && (
+            <button
+              className="mobile-menu-item"
+              style={{ borderLeft: '3px solid #fbbf24', background: 'rgba(245, 158, 11, 0.08)' }}
+              onClick={() => {
+                onClaimHost();
+                onClose();
+              }}
+            >
+              <div className="menu-item-icon">
+                <Crown size={18} color="#fbbf24" />
+              </div>
+              <div className="menu-item-text">
+                <span style={{ color: '#fbbf24', fontWeight: 700 }}>Ambil Alih Host</span>
+                <small>Jadikan akun Anda sebagai Host meja ini</small>
+              </div>
+            </button>
+          )}
+
+          {/* Reset Room / Skor (Multiplayer Host) */}
+          {isMultiplayerMode && currentRoom && isHost && onResetRoom && (
+            <button
+              className="mobile-menu-item"
+              style={{ borderLeft: '3px solid #38bdf8', background: 'rgba(56, 189, 248, 0.08)' }}
+              onClick={() => {
+                onResetRoom();
+                onClose();
+              }}
+            >
+              <div className="menu-item-icon">
+                <RotateCcw size={18} color="#38bdf8" />
+              </div>
+              <div className="menu-item-text">
+                <span style={{ color: '#38bdf8', fontWeight: 700 }}>Reset Meja & Skor</span>
+                <small>Bersihkan skor ronde dan kembali ke ruang tunggu</small>
               </div>
             </button>
           )}

@@ -288,6 +288,39 @@ export const multiplayerAdapter = {
       };
     }
 
+    // Reuse scenario: Room empty / previously abandoned by all players
+    if (players.length === 0) {
+      const newHostPlayer = {
+        id: playerId,
+        name,
+        seatIndex: 0,
+        isHost: true,
+        isReady: true,
+        avatar: AVATARS[0] || '👤',
+        joinedAt: Date.now(),
+      };
+
+      const { data: updatedRoom, error: updateErr } = await supabase
+        .from('rooms')
+        .update({
+          host_id: playerId,
+          players: [newHostPlayer],
+          status: 'lobby',
+          game_state: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', room.id)
+        .select()
+        .single();
+
+      if (updateErr) {
+        return { success: false, error: updateErr.message };
+      }
+
+      setLocalSession(playerId, name, code);
+      return { success: true, room: updatedRoom, player: newHostPlayer };
+    }
+
     // Room status checks
     if (room.status !== 'lobby') {
       return { success: false, error: 'Permainan di room ini sudah berlangsung.' };
@@ -671,16 +704,31 @@ export const multiplayerAdapter = {
     const remainingPlayers = (room.players || []).filter((p) => p.id !== playerId);
 
     if (remainingPlayers.length === 0) {
-      // Room empty, delete or archive
-      await supabase.from('rooms').delete().eq('code', code);
+      // Room empty: preserve room in database for reuse instead of deleting!
+      await supabase
+        .from('rooms')
+        .update({
+          host_id: null,
+          players: [],
+          status: 'lobby',
+          game_state: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('code', code);
       return;
     }
 
     let nextHostId = room.host_id;
     if (room.host_id === playerId) {
-      // Transfer host to first remaining player
-      remainingPlayers[0].isHost = true;
-      nextHostId = remainingPlayers[0].id;
+      // Transfer host to first remaining human player, or first remaining player
+      const nextHuman = remainingPlayers.find((p) => !p.isBot);
+      if (nextHuman) {
+        nextHuman.isHost = true;
+        nextHostId = nextHuman.id;
+      } else if (remainingPlayers[0]) {
+        remainingPlayers[0].isHost = true;
+        nextHostId = remainingPlayers[0].id;
+      }
     }
 
     await supabase
@@ -740,6 +788,79 @@ export const multiplayerAdapter = {
       return { success: false, error: updateErr.message };
     }
 
+    return { success: true, room: updatedRoom };
+  },
+
+  /**
+   * Transfers or claims host role to a player
+   */
+  async claimHost(roomCode, newHostId) {
+    if (!supabase) return { success: false, error: 'Supabase offline' };
+    const code = roomCode.trim().toUpperCase();
+    const { room, error } = await this.getRoom(code);
+    if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+
+    const updatedPlayers = (room.players || []).map((p) => ({
+      ...p,
+      isHost: p.id === newHostId,
+    }));
+
+    let updatedGameState = room.game_state;
+    if (updatedGameState && updatedGameState.players) {
+      updatedGameState = {
+        ...updatedGameState,
+        players: updatedGameState.players.map((p) => ({
+          ...p,
+          isHost: p.id === newHostId,
+        })),
+      };
+    }
+
+    const { data: updatedRoom, error: updateErr } = await supabase
+      .from('rooms')
+      .update({
+        host_id: newHostId,
+        players: updatedPlayers,
+        game_state: updatedGameState,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('code', code)
+      .select()
+      .single();
+
+    if (updateErr) return { success: false, error: updateErr.message };
+    return { success: true, room: updatedRoom };
+  },
+
+  /**
+   * Resets room to lobby: clears game_state, resets scores, sets status to lobby
+   */
+  async resetRoomState(roomCode, requesterId) {
+    if (!supabase) return { success: false, error: 'Supabase offline' };
+    const code = roomCode.trim().toUpperCase();
+    const { room, error } = await this.getRoom(code);
+    if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+
+    // Reset players ready status, reset any bot takeover
+    const cleanPlayers = (room.players || []).map((p) => ({
+      ...p,
+      isReady: p.id === (room.host_id || requesterId),
+      isBotTakeover: false,
+    }));
+
+    const { data: updatedRoom, error: updateErr } = await supabase
+      .from('rooms')
+      .update({
+        status: 'lobby',
+        game_state: null,
+        players: cleanPlayers,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('code', code)
+      .select()
+      .single();
+
+    if (updateErr) return { success: false, error: updateErr.message };
     return { success: true, room: updatedRoom };
   },
 

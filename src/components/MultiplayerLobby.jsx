@@ -21,6 +21,7 @@ import {
   User,
   Bot,
   Trash2,
+  RotateCcw,
 } from 'lucide-react';
 import '../styles/multiplayer.css';
 import { getLocalPlayerName } from '../services/multiplayerAdapter.js';
@@ -116,10 +117,13 @@ export default function MultiplayerLobby({
   activeGameType = 'sevens',
   initialDeckMode = 'double',
   initialPlayerCount = 4,
+  onClaimHost = null,
+  onResetRoom = null,
 }) {
   const players = room?.players || [];
   const isParticipant = Boolean(room && players.some((p) => p.id === myPlayerId));
   const effectiveInviteCode = inviteRoomCode || (!isParticipant && room?.code ? room.code : null);
+  const hasActiveHost = players.some((p) => (p.id === room?.host_id || p.isHost) && !p.isBot);
 
   const [activeTab, setActiveTab] = useState(() =>
     effectiveInviteCode ? 'join' : 'create'
@@ -719,6 +723,27 @@ export default function MultiplayerLobby({
             </div>
           )}
 
+          {!hasActiveHost && (
+            <div className="mp-alert mp-alert-host-missing">
+              <div className="mp-host-missing-text">
+                <Crown size={18} />
+                <span>
+                  <strong>Kursi Host Kosong:</strong> Host meja ini telah keluar atau offline. Anda dapat mengambil alih kendali meja sekarang.
+                </span>
+              </div>
+              {onClaimHost && (
+                <button
+                  type="button"
+                  className="btn-claim-host-chip"
+                  onClick={onClaimHost}
+                >
+                  <Crown size={14} />
+                  <span>Ambil Alih Host</span>
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Status Bar Kursi */}
           <div className="vip-seats-meta-bar">
             <span className="seats-counter-title">
@@ -912,14 +937,40 @@ export default function MultiplayerLobby({
 
           {/* Bottom Action Controls */}
           <div className="vip-lobby-footer">
-            <button
-              type="button"
-              className="btn-leave-room"
-              onClick={onLeaveRoom}
-            >
-              <LogOut size={16} />
-              <span>Keluar Meja</span>
-            </button>
+            <div className="vip-secondary-actions">
+              <button
+                type="button"
+                className="btn-leave-room"
+                onClick={onLeaveRoom}
+              >
+                <LogOut size={16} />
+                <span>Keluar Meja</span>
+              </button>
+
+              {!isHost && onClaimHost && (
+                <button
+                  type="button"
+                  className="btn-claim-host"
+                  onClick={onClaimHost}
+                  title="Ambil alih peran Host untuk mengontrol meja ini"
+                >
+                  <Crown size={16} />
+                  <span>Ambil Alih Host</span>
+                </button>
+              )}
+
+              {isHost && onResetRoom && (
+                <button
+                  type="button"
+                  className="btn-reset-room"
+                  onClick={onResetRoom}
+                  title="Reset status permainan dan skor meja kembali ke awal"
+                >
+                  <RotateCcw size={16} />
+                  <span>Reset Game & Skor</span>
+                </button>
+              )}
+            </div>
 
             <div className="vip-primary-actions">
               {!isHost && (
