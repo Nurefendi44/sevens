@@ -627,8 +627,8 @@ export default function MultiplayerLobby({
                         setRoomCodeInput(extractCleanRoomCode(pasted));
                       }}
                       onChange={(e) => {
-                        const val = e.target.value;
-                        setRoomCodeInput(extractCleanRoomCode(val));
+                        const val = e.target.value.replace(/[^A-Za-z0-9-]/g, '').slice(0, 10).toUpperCase();
+                        setRoomCodeInput(val);
                       }}
                       onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
                       className="mp-code-field"

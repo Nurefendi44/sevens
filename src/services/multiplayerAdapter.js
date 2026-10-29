@@ -24,9 +24,9 @@ const STORAGE_ROOM_CODE = 'sevens_room_code';
 export function getGameTypeFromRoomCode(code) {
   if (!code || typeof code !== 'string') return null;
   const upper = code.trim().toUpperCase();
-  if (upper.startsWith('B2-') || upper.startsWith('B2_') || upper.startsWith('BT-')) return 'bigtwo';
-  if (upper.startsWith('R41-') || upper.startsWith('R41_') || upper.startsWith('41-')) return 'game41';
-  if (upper.startsWith('SV-') || upper.startsWith('SV_') || upper.startsWith('7K-')) return 'sevens';
+  if (upper.startsWith('B2-') || upper.startsWith('B2_') || upper.startsWith('BT-') || (upper.startsWith('B2') && upper.length >= 6)) return 'bigtwo';
+  if (upper.startsWith('R41-') || upper.startsWith('R41_') || upper.startsWith('41-') || (upper.startsWith('R41') && upper.length >= 7)) return 'game41';
+  if (upper.startsWith('SV-') || upper.startsWith('SV_') || upper.startsWith('7K-') || (upper.startsWith('SV') && upper.length >= 6)) return 'sevens';
   return null;
 }
 
@@ -38,23 +38,35 @@ export function extractCleanRoomCode(rawText) {
   const text = rawText.trim();
 
   // 1. URL query param ?room=B2-XXXX or &room=SV-XXXX
-  const urlParamMatch = text.match(/[?&]room=([A-Za-z0-9_-]{4,10})/i);
+  const urlParamMatch = text.match(/[?&]room=([A-Za-z0-9_-]{3,12})/i);
   if (urlParamMatch) return urlParamMatch[1].toUpperCase();
 
-  // 2. Explicit game prefix pattern (B2-XXXX, R41-XXXX, SV-XXXX)
-  const prefixMatch = text.match(/\b(B2-[A-Za-z0-9]{3,6}|R41-[A-Za-z0-9]{3,6}|SV-[A-Za-z0-9]{3,6})\b/i);
+  // 2. Explicit game prefix pattern with hyphen (B2-XXXX, R41-XXXX, SV-XXXX)
+  const prefixMatch = text.match(/\b(B2-[A-Za-z0-9]{2,8}|R41-[A-Za-z0-9]{2,8}|SV-[A-Za-z0-9]{2,8})\b/i);
   if (prefixMatch) return prefixMatch[1].toUpperCase();
 
-  // 3. Explicit "Room/Kode: CODE" pattern
-  const roomWordMatch = text.match(/(?:room|kode)\s*[:#-]?\s*([A-Za-z0-9_-]{4,10})/i);
+  // 3. Explicit game prefix pattern without hyphen (B2XXXX -> B2-XXXX)
+  const noHyphenMatch = text.match(/\b(B2[A-Za-z0-9]{4}|SV[A-Za-z0-9]{4})\b/i);
+  if (noHyphenMatch) {
+    const val = noHyphenMatch[1].toUpperCase();
+    return `${val.slice(0, 2)}-${val.slice(2)}`;
+  }
+  const noHyphenR41 = text.match(/\b(R41[A-Za-z0-9]{4})\b/i);
+  if (noHyphenR41) {
+    const val = noHyphenR41[1].toUpperCase();
+    return `R41-${val.slice(3)}`;
+  }
+
+  // 4. Explicit "Room/Kode: CODE" pattern
+  const roomWordMatch = text.match(/(?:room|kode)\s*[:#-]?\s*([A-Za-z0-9_-]{3,12})/i);
   if (roomWordMatch) return roomWordMatch[1].toUpperCase();
 
-  // 4. Standalone 6-character legacy code (e.g. K7P9X2)
+  // 5. Standalone 6-character legacy code (e.g. K7P9X2)
   const legacyMatch = text.match(/\b([A-Za-z0-9]{6})\b/i);
   if (legacyMatch) return legacyMatch[1].toUpperCase();
 
-  // 5. Clean fallback allowing letters, digits, and hyphens
-  return text.replace(/[^A-Za-z0-9-]/g, '').slice(0, 10).toUpperCase();
+  // 6. Clean fallback allowing letters, digits, and hyphens
+  return text.replace(/[^A-Za-z0-9-]/g, '').slice(0, 12).toUpperCase();
 }
 
 /**
@@ -215,18 +227,46 @@ export const multiplayerAdapter = {
    */
   async getRoom(roomCode) {
     if (!supabase) return { error: 'Supabase belum terkonfigurasi.' };
-    const match = (roomCode || '').match(/[?&]room=([A-Za-z0-9]{4,8})/i) ||
-                  (roomCode || '').match(/(?:room|kode)\s*[:#-]?\s*([A-Za-z0-9]{4,8})/i) ||
-                  (roomCode || '').match(/\b([A-Za-z0-9]{6})\b/i);
-    const code = match ? match[1].toUpperCase() : (roomCode || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase();
-    const { data, error } = await supabase
+    const code = extractCleanRoomCode(roomCode);
+    if (!code) return { error: 'Kode room tidak valid.' };
+
+    // 1. Direct search with cleaned code
+    let { data, error } = await supabase
       .from('rooms')
       .select('*')
       .eq('code', code)
       .maybeSingle();
 
     if (error) return { error: error.message };
-    return { room: data };
+    if (data) return { room: data };
+
+    // 2. Fallback: If code has hyphen, try without hyphen (e.g. SV-ABCD -> SVABCD)
+    if (code.includes('-')) {
+      const altCode = code.replace(/-/g, '');
+      const altRes = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('code', altCode)
+        .maybeSingle();
+      if (altRes.data) return { room: altRes.data };
+    } else {
+      // 3. Fallback: If code starts with B2, SV, or R41 without hyphen, try with hyphen
+      let formattedWithHyphen = null;
+      if (code.startsWith('B2') && code.length > 2) formattedWithHyphen = `B2-${code.slice(2)}`;
+      else if (code.startsWith('SV') && code.length > 2) formattedWithHyphen = `SV-${code.slice(2)}`;
+      else if (code.startsWith('R41') && code.length > 3) formattedWithHyphen = `R41-${code.slice(3)}`;
+
+      if (formattedWithHyphen) {
+        const altRes = await supabase
+          .from('rooms')
+          .select('*')
+          .eq('code', formattedWithHyphen)
+          .maybeSingle();
+        if (altRes.data) return { room: altRes.data };
+      }
+    }
+
+    return { room: null };
   },
 
   /**
@@ -290,22 +330,18 @@ export const multiplayerAdapter = {
       return { success: false, error: 'Supabase belum terkonfigurasi pada .env file.' };
     }
 
-    const code = extractCleanRoomCode(roomCode);
     const name = playerName.trim() || 'Pemain';
     const playerId = getLocalPlayerId();
 
-    const { data: room, error } = await supabase
-      .from('rooms')
-      .select('*')
-      .eq('code', code)
-      .maybeSingle();
+    const { room, error } = await this.getRoom(roomCode);
 
     if (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error };
     }
     if (!room) {
-      return { success: false, error: `Room ${code} tidak ditemukan! Pastikan kode room benar.` };
+      return { success: false, error: `Room ${roomCode} tidak ditemukan! Pastikan kode room benar.` };
     }
+    const code = room.code;
 
     const players = room.players || [];
     const maxPlayers = room.game_state?.config?.playerCount || 4;
@@ -348,13 +384,25 @@ export const multiplayerAdapter = {
         joinedAt: Date.now(),
       };
 
+      const prevConfig = room.game_state?.config || {};
+      const targetSeats = prevConfig.roomPlayerCount || prevConfig.playerCount || 4;
+      const targetDeck = prevConfig.deckMode || (targetSeats > 4 ? 'double' : 'single');
+      const targetType = room.game_state?.gameType || getGameTypeFromRoomCode(code) || 'sevens';
+
       const { data: updatedRoom, error: updateErr } = await supabase
         .from('rooms')
         .update({
           host_id: playerId,
           players: [newHostPlayer],
           status: 'lobby',
-          game_state: null,
+          game_state: {
+            config: {
+              playerCount: targetSeats,
+              roomPlayerCount: targetSeats,
+              deckMode: targetDeck,
+            },
+            gameType: targetType,
+          },
           updated_at: new Date().toISOString(),
         })
         .eq('id', room.id)
@@ -414,9 +462,9 @@ export const multiplayerAdapter = {
    */
   async toggleReady(roomCode, playerId, isReady) {
     if (!supabase) return;
-    const code = roomCode.trim().toUpperCase();
-    const { room } = await this.getRoom(code);
+    const { room } = await this.getRoom(roomCode);
     if (!room) return;
+    const code = room.code;
 
     const updatedPlayers = (room.players || []).map((p) => {
       if (p.id === playerId) {
@@ -439,9 +487,9 @@ export const multiplayerAdapter = {
    */
   async addBot(roomCode, hostId) {
     if (!supabase) return { success: false, error: 'Supabase offline.' };
-    const code = roomCode.trim().toUpperCase();
-    const { room, error } = await this.getRoom(code);
+    const { room, error } = await this.getRoom(roomCode);
     if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+    const code = room.code;
 
     if (room.host_id !== hostId) {
       return { success: false, error: 'Hanya Host yang dapat menambahkan bot!' };
@@ -497,9 +545,9 @@ export const multiplayerAdapter = {
    */
   async removeBot(roomCode, hostId, botId) {
     if (!supabase) return { success: false, error: 'Supabase offline.' };
-    const code = roomCode.trim().toUpperCase();
-    const { room, error } = await this.getRoom(code);
+    const { room, error } = await this.getRoom(roomCode);
     if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+    const code = room.code;
 
     if (room.host_id !== hostId) {
       return { success: false, error: 'Hanya Host yang dapat mengeluarkan bot!' };
@@ -536,9 +584,9 @@ export const multiplayerAdapter = {
    */
   async updateRoomConfig(roomCode, hostId, configUpdates = {}) {
     if (!supabase) return { success: false, error: 'Supabase offline.' };
-    const code = roomCode.trim().toUpperCase();
-    const { room, error } = await this.getRoom(code);
+    const { room, error } = await this.getRoom(roomCode);
     if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+    const code = room.code;
 
     if (room.host_id !== hostId) {
       return { success: false, error: 'Hanya Host yang dapat mengubah konfigurasi meja!' };
@@ -571,11 +619,11 @@ export const multiplayerAdapter = {
   /**
    * Host starts the game for all players
    */
-  async startGame(roomCode, hostId, configOverrides = {}) {
+  async startGame(roomCode, hostId, configOverrides = {}, forceGameType = null) {
     if (!supabase) return { success: false, error: 'Supabase offline.' };
-    const code = roomCode.trim().toUpperCase();
-    const { room, error } = await this.getRoom(code);
-    if (error || !room) return { success: false, error: error || 'Room not found.' };
+    const { room, error } = await this.getRoom(roomCode);
+    if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+    const code = room.code;
 
     if (room.host_id !== hostId) {
       return { success: false, error: 'Hanya HOST yang dapat memulai permainan!' };
@@ -603,7 +651,13 @@ export const multiplayerAdapter = {
     }));
 
     // Initialize state from decoupled Game Engine with correct player count & gameType
-    const determinedGameType = configOverrides?.gameType || room.game_state?.gameType || 'sevens';
+    const determinedGameType =
+      forceGameType ||
+      configOverrides?.gameType ||
+      room.game_state?.gameType ||
+      getGameTypeFromRoomCode(code) ||
+      'sevens';
+
     let gameState;
     if (determinedGameType === 'bigtwo') {
       const effectiveDeckMode = actualPlayerCount > 4
@@ -680,9 +734,9 @@ export const multiplayerAdapter = {
    */
   async restartGame(roomCode, hostId, configOverrides = {}) {
     if (!supabase) return { success: false };
-    const code = roomCode.trim().toUpperCase();
-    const { room } = await this.getRoom(code);
+    const { room } = await this.getRoom(roomCode);
     if (!room || room.host_id !== hostId) return { success: false };
+    const code = room.code;
 
     const formattedPlayers = (room.players || []).map((p, idx) => ({
       id: p.id,
@@ -699,7 +753,11 @@ export const multiplayerAdapter = {
     }
 
     const actualPlayerCount = formattedPlayers.length;
-    const determinedGameType = configOverrides?.gameType || room.game_state?.gameType || 'sevens';
+    const determinedGameType =
+      configOverrides?.gameType ||
+      room.game_state?.gameType ||
+      getGameTypeFromRoomCode(code) ||
+      'sevens';
     const prevWinnerId = configOverrides?.firstPlayerId || room.game_state?.winner?.id || null;
     let nextGameState;
     const carriedSessionScores = room.game_state?.sessionScores || {};
@@ -757,15 +815,16 @@ export const multiplayerAdapter = {
     clearLocalSession();
     if (!supabase) return;
 
-    const code = roomCode.trim().toUpperCase();
-    const { room } = await this.getRoom(code);
+    const { room } = await this.getRoom(roomCode);
     if (!room) return;
+    const code = room.code;
 
     const remainingPlayers = (room.players || []).filter((p) => p.id !== playerId);
+    const remainingHumans = remainingPlayers.filter((p) => !p.isBot);
     const prevConfig = room.game_state?.config || {};
     const prevSeats = prevConfig.roomPlayerCount || prevConfig.playerCount || 4;
     const prevDeck = prevConfig.deckMode || (prevSeats > 4 ? 'double' : 'single');
-    const prevType = room.game_state?.gameType || 'bigtwo';
+    const prevType = room.game_state?.gameType || getGameTypeFromRoomCode(code) || 'sevens';
 
     if (remainingPlayers.length === 0 || remainingHumans.length === 0) {
       // Room empty or no humans left: preserve room in database for reuse!
@@ -818,9 +877,9 @@ export const multiplayerAdapter = {
    */
   async toggleBotTakeover(roomCode, playerId, isTakeover = true) {
     if (!supabase) return { success: false, error: 'Supabase offline' };
-    const code = roomCode.trim().toUpperCase();
-    const { room, error } = await this.getRoom(code);
+    const { room, error } = await this.getRoom(roomCode);
     if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+    const code = room.code;
 
     const updatedPlayers = (room.players || []).map((p) => {
       if (p.id === playerId) {
@@ -867,9 +926,9 @@ export const multiplayerAdapter = {
    */
   async claimHost(roomCode, newHostId) {
     if (!supabase) return { success: false, error: 'Supabase offline' };
-    const code = roomCode.trim().toUpperCase();
-    const { room, error } = await this.getRoom(code);
+    const { room, error } = await this.getRoom(roomCode);
     if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+    const code = room.code;
 
     const updatedPlayers = (room.players || []).map((p) => ({
       ...p,
@@ -908,14 +967,14 @@ export const multiplayerAdapter = {
    */
   async resetRoomState(roomCode, requesterId) {
     if (!supabase) return { success: false, error: 'Supabase offline' };
-    const code = roomCode.trim().toUpperCase();
-    const { room, error } = await this.getRoom(code);
+    const { room, error } = await this.getRoom(roomCode);
     if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+    const code = room.code;
 
     const prevConfig = room.game_state?.config || {};
     const prevSeats = prevConfig.roomPlayerCount || prevConfig.playerCount || 4;
     const prevDeck = prevConfig.deckMode || (prevSeats > 4 ? 'double' : 'single');
-    const prevType = room.game_state?.gameType || 'bigtwo';
+    const prevType = room.game_state?.gameType || getGameTypeFromRoomCode(code) || 'sevens';
 
     // Reset players ready status, reset any bot takeover
     const cleanPlayers = (room.players || []).map((p) => ({
@@ -952,17 +1011,17 @@ export const multiplayerAdapter = {
    */
   async forceResetAndJoinRoom(roomCode, playerName) {
     if (!supabase) return { success: false, error: 'Supabase offline' };
-    const code = roomCode.trim().toUpperCase();
     const name = playerName.trim() || 'Host';
     const playerId = getLocalPlayerId();
 
-    const { room, error } = await this.getRoom(code);
+    const { room, error } = await this.getRoom(roomCode);
     if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+    const code = room.code;
 
     const prevConfig = room.game_state?.config || {};
     const prevSeats = prevConfig.roomPlayerCount || prevConfig.playerCount || 4;
     const prevDeck = prevConfig.deckMode || (prevSeats > 4 ? 'double' : 'single');
-    const prevType = room.game_state?.gameType || 'bigtwo';
+    const prevType = room.game_state?.gameType || getGameTypeFromRoomCode(code) || 'sevens';
 
     const newHostPlayer = {
       id: playerId,

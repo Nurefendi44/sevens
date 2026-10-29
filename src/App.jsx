@@ -412,7 +412,7 @@ export default function App() {
     const currentMyId = session.playerId || getLocalPlayerId();
 
     // If user opened an invite link for a different room, clear old stale session immediately
-    if (inviteParam && session.roomCode && session.roomCode !== inviteParam) {
+    if (inviteParam && session.roomCode && extractCleanRoomCode(session.roomCode) !== inviteParam) {
       clearLocalSession();
     }
 
