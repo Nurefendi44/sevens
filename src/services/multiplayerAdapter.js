@@ -19,15 +19,60 @@ const STORAGE_PLAYER_NAME = 'sevens_player_name';
 const STORAGE_ROOM_CODE = 'sevens_room_code';
 
 /**
- * Generates random 6-character alphanumeric room code (e.g. 'K7P9X2')
+ * Detects gameType from unique room code prefix (B2- = Big Two, R41- = Remi 41, SV- = Sevens)
  */
-export function generateRoomCode() {
+export function getGameTypeFromRoomCode(code) {
+  if (!code || typeof code !== 'string') return null;
+  const upper = code.trim().toUpperCase();
+  if (upper.startsWith('B2-') || upper.startsWith('B2_') || upper.startsWith('BT-')) return 'bigtwo';
+  if (upper.startsWith('R41-') || upper.startsWith('R41_') || upper.startsWith('41-')) return 'game41';
+  if (upper.startsWith('SV-') || upper.startsWith('SV_') || upper.startsWith('7K-')) return 'sevens';
+  return null;
+}
+
+/**
+ * Extracts and cleans room code from URL or raw text, preserving game prefixes and hyphens
+ */
+export function extractCleanRoomCode(rawText) {
+  if (!rawText || typeof rawText !== 'string') return '';
+  const text = rawText.trim();
+
+  // 1. URL query param ?room=B2-XXXX or &room=SV-XXXX
+  const urlParamMatch = text.match(/[?&]room=([A-Za-z0-9_-]{4,10})/i);
+  if (urlParamMatch) return urlParamMatch[1].toUpperCase();
+
+  // 2. Explicit game prefix pattern (B2-XXXX, R41-XXXX, SV-XXXX)
+  const prefixMatch = text.match(/\b(B2-[A-Za-z0-9]{3,6}|R41-[A-Za-z0-9]{3,6}|SV-[A-Za-z0-9]{3,6})\b/i);
+  if (prefixMatch) return prefixMatch[1].toUpperCase();
+
+  // 3. Explicit "Room/Kode: CODE" pattern
+  const roomWordMatch = text.match(/(?:room|kode)\s*[:#-]?\s*([A-Za-z0-9_-]{4,10})/i);
+  if (roomWordMatch) return roomWordMatch[1].toUpperCase();
+
+  // 4. Standalone 6-character legacy code (e.g. K7P9X2)
+  const legacyMatch = text.match(/\b([A-Za-z0-9]{6})\b/i);
+  if (legacyMatch) return legacyMatch[1].toUpperCase();
+
+  // 5. Clean fallback allowing letters, digits, and hyphens
+  return text.replace(/[^A-Za-z0-9-]/g, '').slice(0, 10).toUpperCase();
+}
+
+/**
+ * Generates random unique room code with game-specific prefix:
+ * - Big Two: 'B2-XXXX'
+ * - Remi 41: 'R41-XXXX'
+ * - Sevens: 'SV-XXXX'
+ */
+export function generateRoomCode(gameType = 'sevens') {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  let rand = '';
+  for (let i = 0; i < 4; i++) {
+    rand += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return code;
+  const normalizedGame = (gameType || 'sevens').toLowerCase();
+  if (normalizedGame === 'bigtwo') return `B2-${rand}`;
+  if (normalizedGame === 'game41') return `R41-${rand}`;
+  return `SV-${rand}`;
 }
 
 /**
@@ -193,7 +238,7 @@ export const multiplayerAdapter = {
     }
 
     const name = hostName.trim() || 'Host';
-    const code = generateRoomCode();
+    const code = generateRoomCode(gameType);
     const playerId = getLocalPlayerId();
     const targetMax = [2, 3, 4, 5, 6].includes(Number(maxPlayers)) ? Number(maxPlayers) : 4;
     const effectiveDeckMode = targetMax > 4
@@ -245,10 +290,7 @@ export const multiplayerAdapter = {
       return { success: false, error: 'Supabase belum terkonfigurasi pada .env file.' };
     }
 
-    const match = (roomCode || '').match(/[?&]room=([A-Za-z0-9]{4,8})/i) ||
-                  (roomCode || '').match(/(?:room|kode)\s*[:#-]?\s*([A-Za-z0-9]{4,8})/i) ||
-                  (roomCode || '').match(/\b([A-Za-z0-9]{6})\b/i);
-    const code = match ? match[1].toUpperCase() : (roomCode || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase();
+    const code = extractCleanRoomCode(roomCode);
     const name = playerName.trim() || 'Pemain';
     const playerId = getLocalPlayerId();
 

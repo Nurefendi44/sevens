@@ -40,31 +40,31 @@ export function extractCleanRoomCode(rawText) {
   const text = rawText.trim();
 
   // 1. Check if URL contains query param ?room=CODE or &room=CODE
-  const roomParamMatch = text.match(/[?&]room=([A-Za-z0-9]{4,8})/i);
+  const roomParamMatch = text.match(/[?&]room=([A-Za-z0-9_-]{4,10})/i);
   if (roomParamMatch) {
     return roomParamMatch[1].toUpperCase();
   }
 
-  // 2. Check for explicit "Room CODE" or "Kode CODE" pattern
-  const roomWordMatch = text.match(/(?:room|kode)\s*[:#-]?\s*([A-Za-z0-9]{4,8})/i);
+  // 2. Check for explicit game prefix pattern (B2-XXXX, R41-XXXX, SV-XXXX)
+  const prefixMatch = text.match(/\b(B2-[A-Za-z0-9]{3,6}|R41-[A-Za-z0-9]{3,6}|SV-[A-Za-z0-9]{3,6})\b/i);
+  if (prefixMatch) {
+    return prefixMatch[1].toUpperCase();
+  }
+
+  // 3. Check for explicit "Room CODE" or "Kode CODE" pattern
+  const roomWordMatch = text.match(/(?:room|kode)\s*[:#-]?\s*([A-Za-z0-9_-]{4,10})/i);
   if (roomWordMatch) {
     return roomWordMatch[1].toUpperCase();
   }
 
-  // 3. If starts with 6-character alphanumeric code followed by space/text
-  const startCodeMatch = text.match(/^([A-Za-z0-9]{6})\b/i);
-  if (startCodeMatch) {
-    return startCodeMatch[1].toUpperCase();
-  }
-
-  // 4. Any standalone 6-character alphanumeric word in text
+  // 4. Standalone 6-character alphanumeric word in text
   const standaloneMatch = text.match(/\b([A-Za-z0-9]{6})\b/i);
   if (standaloneMatch) {
     return standaloneMatch[1].toUpperCase();
   }
 
-  // 5. Direct typing / clean alphanumeric characters (max 6 chars)
-  return text.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase();
+  // 5. Direct typing / clean characters allowing letters, numbers, and hyphens (max 10 chars)
+  return text.replace(/[^A-Za-z0-9-]/g, '').slice(0, 10).toUpperCase();
 }
 
 const GAME_META = {
@@ -153,11 +153,12 @@ export default function MultiplayerLobby({
   }, [effectiveInviteCode]);
 
 
-  // Generate invite share link (Clean URL)
+  // Generate invite share link (Clean URL with room and game type)
   const getInviteUrl = () => {
     const origin = window.location.origin;
     const pathname = window.location.pathname;
-    return `${origin}${pathname}?room=${room?.code || ''}`;
+    const gameParam = activeGameType ? `&game=${activeGameType}` : '';
+    return `${origin}${pathname}?room=${room?.code || ''}${gameParam}`;
   };
 
   // Copy room code to clipboard
@@ -603,7 +604,7 @@ export default function MultiplayerLobby({
                   <label htmlFor="room-code-input" className="mp-capacity-label">
                     <KeyRound size={14} />
                     <span>
-                      Masukkan 6 Digit Kode Room atau Tempel Link Undangan WA
+                      Masukkan Kode Room (cth: {activeGameType === 'bigtwo' ? 'B2-XXXX' : activeGameType === 'game41' ? 'R41-XXXX' : 'SV-XXXX'}) atau Link Undangan
                     </span>
                   </label>
 
@@ -611,8 +612,14 @@ export default function MultiplayerLobby({
                     <input
                       id="room-code-input"
                       type="text"
-                      placeholder="CONTOH: 3C5RZP"
-                      maxLength={6}
+                      placeholder={
+                        activeGameType === 'bigtwo'
+                          ? 'CONTOH: B2-K7P9'
+                          : activeGameType === 'game41'
+                          ? 'CONTOH: R41-K7P9'
+                          : 'CONTOH: SV-K7P9'
+                      }
+                      maxLength={12}
                       value={roomCodeInput}
                       onPaste={(e) => {
                         e.preventDefault();
@@ -621,16 +628,7 @@ export default function MultiplayerLobby({
                       }}
                       onChange={(e) => {
                         const val = e.target.value;
-                        if (val.length > 6 || /[\s?&=:#-]/.test(val)) {
-                          setRoomCodeInput(extractCleanRoomCode(val));
-                        } else {
-                          setRoomCodeInput(
-                            val
-                              .replace(/[^A-Za-z0-9]/g, '')
-                              .slice(0, 6)
-                              .toUpperCase()
-                          );
-                        }
+                        setRoomCodeInput(extractCleanRoomCode(val));
                       }}
                       onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
                       className="mp-code-field"

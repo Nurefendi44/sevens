@@ -17,6 +17,8 @@ import {
   clearLocalSession,
   getLocalPlayerId,
   getLocalPlayerName,
+  getGameTypeFromRoomCode,
+  extractCleanRoomCode,
 } from './services/multiplayerAdapter.js';
 import { isSupabaseConfigured } from './services/supabaseClient.js';
 
@@ -132,7 +134,7 @@ export default function App() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const r = params.get('room');
-      return r ? r.trim().toUpperCase() : null;
+      return r ? extractCleanRoomCode(r) : null;
     }
     return null;
   });
@@ -151,11 +153,17 @@ export default function App() {
   const [currentRoom, setCurrentRoom] = useState(() => {
     if (typeof localStorage !== 'undefined') {
       const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-      const urlRoom = urlParams?.get('room')?.trim().toUpperCase();
+      const rawRoom = urlParams?.get('room');
+      const urlRoom = rawRoom ? extractCleanRoomCode(rawRoom) : null;
       const session = getActiveSession();
 
       // If user opened an invite link (?room=...) that doesn't match an active room session,
-      // start with null so the user is prompted to enter their name!
+      // clear the stale previous session so they don't get trapped in the old game!
+      if (urlRoom && session.roomCode && session.roomCode !== urlRoom) {
+        clearLocalSession();
+        return null;
+      }
+
       if (urlRoom && (!session.roomCode || session.roomCode !== urlRoom)) {
         return null;
       }
@@ -241,6 +249,18 @@ export default function App() {
   // Active Card Game: 'sevens' | 'game41' | 'bigtwo'
   const [activeGameType, setActiveGameType] = useState(() => {
     if (typeof localStorage !== 'undefined') {
+      const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      const rawRoom = urlParams?.get('room');
+      const urlRoom = rawRoom ? extractCleanRoomCode(rawRoom) : null;
+      const urlGame = urlParams?.get('game')?.toLowerCase();
+
+      // Priority 1: Game explicitly declared in URL or detected from room code prefix (B2- / R41- / SV-)
+      const detectedFromUrl = urlGame || (urlRoom ? getGameTypeFromRoomCode(urlRoom) : null);
+      if (detectedFromUrl) {
+        localStorage.setItem('sevens_active_game_type', detectedFromUrl);
+        return detectedFromUrl;
+      }
+
       const session = getActiveSession();
       if (session.roomCode) {
         try {
@@ -386,19 +406,35 @@ export default function App() {
   useEffect(() => {
     const session = getActiveSession();
     const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-    const inviteParam = urlParams?.get('room')?.trim().toUpperCase() || null;
+    const rawInvite = urlParams?.get('room');
+    const inviteParam = rawInvite ? extractCleanRoomCode(rawInvite) : null;
+    const urlGame = urlParams?.get('game')?.toLowerCase();
     const currentMyId = session.playerId || getLocalPlayerId();
 
-    // If an invite room link is opened, prioritize checking that room
-    const targetRoomCode = (inviteParam && (!session.roomCode || session.roomCode !== inviteParam))
-      ? inviteParam
-      : (session.roomCode || inviteParam);
+    // If user opened an invite link for a different room, clear old stale session immediately
+    if (inviteParam && session.roomCode && session.roomCode !== inviteParam) {
+      clearLocalSession();
+    }
+
+    // Determine target room code
+    const targetRoomCode = inviteParam || session.roomCode;
+
+    // Detect game type from room code prefix or URL query param
+    const detectedGame = urlGame || (targetRoomCode ? getGameTypeFromRoomCode(targetRoomCode) : null);
+    if (detectedGame) {
+      setActiveGameType(detectedGame);
+    }
 
     if (targetRoomCode && isSupabaseConfigured) {
       multiplayerAdapter.getRoom(targetRoomCode).then(({ room, error }) => {
         setIsReconnecting(false);
         if (room && !error) {
-          const roomGameType = room.game_state?.gameType || room.config?.gameType || 'bigtwo';
+          const roomGameType =
+            room.game_state?.gameType ||
+            getGameTypeFromRoomCode(room.code) ||
+            urlGame ||
+            room.config?.gameType ||
+            'sevens';
           setActiveGameType(roomGameType);
 
           // Check if viewer is ALREADY a participant in this room
@@ -455,18 +491,34 @@ export default function App() {
     try {
       const url = new URL(window.location.href);
       if (isMultiplayerMode && currentRoom?.code) {
+        let changed = false;
         if (url.searchParams.get('room') !== currentRoom.code) {
           url.searchParams.set('room', currentRoom.code);
+          changed = true;
+        }
+        if (activeGameType && url.searchParams.get('game') !== activeGameType) {
+          url.searchParams.set('game', activeGameType);
+          changed = true;
+        }
+        if (changed) {
           window.history.replaceState(null, '', url.toString());
         }
       } else if (!inviteRoomCode) {
+        let changed = false;
         if (url.searchParams.has('room') && !currentRoom?.code) {
           url.searchParams.delete('room');
+          changed = true;
+        }
+        if (url.searchParams.has('game') && !currentRoom?.code) {
+          url.searchParams.delete('game');
+          changed = true;
+        }
+        if (changed) {
           window.history.replaceState(null, '', url.pathname);
         }
       }
     } catch {}
-  }, [isMultiplayerMode, currentRoom?.code, inviteRoomCode]);
+  }, [isMultiplayerMode, currentRoom?.code, activeGameType, inviteRoomCode]);
 
   // Auto-resync when returning to tab or network comes back online
   useEffect(() => {
@@ -809,11 +861,12 @@ export default function App() {
   // Share Invite Link from Topbar
   const handleShareTopBarLink = async () => {
     if (!currentRoom?.code) return;
-    const url = `${window.location.origin}${window.location.pathname}?room=${currentRoom.code}`;
+    const gameParam = activeGameType ? `&game=${activeGameType}` : '';
+    const url = `${window.location.origin}${window.location.pathname}?room=${currentRoom.code}${gameParam}`;
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Room Sevens: ${currentRoom.code}`,
+          title: `Room ${activeGameType === 'bigtwo' ? 'Capsa Banting' : activeGameType === 'game41' ? 'Remi 41' : 'Tujuh Sekop'}: ${currentRoom.code}`,
           url,
         });
         return;
@@ -883,11 +936,15 @@ export default function App() {
   };
 
   const handleJoinRoom = async (code, username) => {
-    const res = await multiplayerAdapter.joinRoom(code, username);
+    const cleanCode = extractCleanRoomCode(code);
+    const res = await multiplayerAdapter.joinRoom(cleanCode, username);
     if (res.success) {
       setCurrentRoom(res.room);
       setMyPlayerId(res.player.id);
-      const roomGame = res.room.game_state?.gameType || activeGameType;
+      const roomGame =
+        res.room.game_state?.gameType ||
+        getGameTypeFromRoomCode(res.room.code) ||
+        activeGameType;
       setActiveGameType(roomGame);
 
       if (res.room.game_state?.players) {
@@ -2133,9 +2190,17 @@ export default function App() {
 
         <ModeSelectionScreen
           selectedGame={activeGameType}
-          onSelectGame={(game) => setActiveGameType(game)}
+          onSelectGame={(game) => {
+            if (currentRoom && activeGameType !== game) {
+              handleLeaveRoom();
+            }
+            setActiveGameType(game);
+          }}
           onSelectMode={(mode, playerCount, game, options = {}) => {
             const chosenGame = game || activeGameType;
+            if (currentRoom && activeGameType !== chosenGame) {
+              handleLeaveRoom();
+            }
             setActiveGameType(chosenGame);
 
             if (mode === 'single') {
