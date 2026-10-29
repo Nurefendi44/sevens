@@ -296,7 +296,15 @@ class VoiceChatService {
         audioEl.setAttribute('playsinline', 'true');
         audioEl.setAttribute('autoplay', 'true');
         audioEl.volume = 1.0;
-        audioEl.style.display = 'none';
+        audioEl.muted = false;
+        // Avoid display: none because mobile WebKit (Safari/iOS) can suspend audio playback on hidden elements
+        audioEl.style.position = 'fixed';
+        audioEl.style.top = '-9999px';
+        audioEl.style.left = '-9999px';
+        audioEl.style.width = '1px';
+        audioEl.style.height = '1px';
+        audioEl.style.opacity = '0.01';
+        audioEl.style.pointerEvents = 'none';
         document.body.appendChild(audioEl);
         this.remoteAudios.set(peerId, audioEl);
       }
