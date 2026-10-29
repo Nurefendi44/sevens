@@ -288,8 +288,13 @@ export const multiplayerAdapter = {
       };
     }
 
-    // Reuse scenario: Room empty / previously abandoned by all players
-    if (players.length === 0) {
+    // Reuse scenario: Room empty, no real humans, or game was abandoned/stale (> 2 mins without moves)
+    const humanPlayers = players.filter((p) => !p.isBot);
+    const isStaleGame =
+      room.updated_at &&
+      Date.now() - new Date(room.updated_at).getTime() > 120000;
+
+    if (players.length === 0 || humanPlayers.length === 0 || (room.status !== 'lobby' && isStaleGame)) {
       const newHostPlayer = {
         id: playerId,
         name,
@@ -702,13 +707,14 @@ export const multiplayerAdapter = {
     if (!room) return;
 
     const remainingPlayers = (room.players || []).filter((p) => p.id !== playerId);
+    const remainingHumans = remainingPlayers.filter((p) => !p.isBot);
 
-    if (remainingPlayers.length === 0) {
-      // Room empty: preserve room in database for reuse instead of deleting!
+    if (remainingPlayers.length === 0 || remainingHumans.length === 0) {
+      // Room empty or no humans left: preserve room in database for reuse!
+      // Keep existing non-null host_id, clean players, reset status to lobby
       await supabase
         .from('rooms')
         .update({
-          host_id: null,
           players: [],
           status: 'lobby',
           game_state: null,
@@ -862,6 +868,47 @@ export const multiplayerAdapter = {
 
     if (updateErr) return { success: false, error: updateErr.message };
     return { success: true, room: updatedRoom };
+  },
+
+  /**
+   * Force resets an abandoned or stuck room and joins directly as the new Host
+   */
+  async forceResetAndJoinRoom(roomCode, playerName) {
+    if (!supabase) return { success: false, error: 'Supabase offline' };
+    const code = roomCode.trim().toUpperCase();
+    const name = playerName.trim() || 'Host';
+    const playerId = getLocalPlayerId();
+
+    const { room, error } = await this.getRoom(code);
+    if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+
+    const newHostPlayer = {
+      id: playerId,
+      name,
+      seatIndex: 0,
+      isHost: true,
+      isReady: true,
+      avatar: AVATARS[0] || '👤',
+      joinedAt: Date.now(),
+    };
+
+    const { data: updatedRoom, error: updateErr } = await supabase
+      .from('rooms')
+      .update({
+        host_id: playerId,
+        players: [newHostPlayer],
+        status: 'lobby',
+        game_state: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('code', code)
+      .select()
+      .single();
+
+    if (updateErr) return { success: false, error: updateErr.message };
+
+    setLocalSession(playerId, name, code);
+    return { success: true, room: updatedRoom, player: newHostPlayer };
   },
 
   /**

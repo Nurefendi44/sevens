@@ -119,6 +119,7 @@ export default function MultiplayerLobby({
   initialPlayerCount = 4,
   onClaimHost = null,
   onResetRoom = null,
+  onForceResetAndJoin = null,
 }) {
   const players = room?.players || [];
   const isParticipant = Boolean(room && players.some((p) => p.id === myPlayerId));
@@ -411,9 +412,36 @@ export default function MultiplayerLobby({
             )}
 
             {errorMsg && (
-              <div className="mp-alert mp-alert-error">
-                <AlertCircle size={18} />
-                <span>{errorMsg}</span>
+              <div className="mp-alert mp-alert-error mp-alert-with-action">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertCircle size={18} />
+                  <span>{errorMsg}</span>
+                </div>
+                {(errorMsg.includes('berlangsung') || errorMsg.includes('penuh') || errorMsg.includes('sudah')) && onForceResetAndJoin && (
+                  <button
+                    type="button"
+                    className="btn-alert-force-reset"
+                    disabled={isLoading}
+                    onClick={async () => {
+                      if (!usernameInput.trim()) {
+                        setErrorMsg('Silakan isi nama panggilan Anda terlebih dahulu.');
+                        return;
+                      }
+                      const codeToUse = extractCleanRoomCode(roomCodeInput || effectiveInviteCode || '');
+                      if (!codeToUse) {
+                        setErrorMsg('Masukkan kode room yang valid terlebih dahulu.');
+                        return;
+                      }
+                      setIsLoading(true);
+                      setErrorMsg('');
+                      await onForceResetAndJoin(codeToUse, usernameInput.trim());
+                      setIsLoading(false);
+                    }}
+                  >
+                    <RotateCcw size={15} />
+                    <span>Reset Meja Ini & Masuk Sebagai Host Baru</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -635,6 +663,34 @@ export default function MultiplayerLobby({
                   </span>
                   <ArrowRight size={18} />
                 </button>
+
+                {onForceResetAndJoin && (
+                  <button
+                    type="button"
+                    className="btn-quick-force-reset"
+                    disabled={isLoading}
+                    onClick={async () => {
+                      if (!usernameInput.trim()) {
+                        setErrorMsg('Silakan isi nama panggilan Anda terlebih dahulu.');
+                        return;
+                      }
+                      const codeToUse = extractCleanRoomCode(roomCodeInput || effectiveInviteCode || '');
+                      if (!codeToUse) {
+                        setErrorMsg('Masukkan kode room yang valid terlebih dahulu.');
+                        return;
+                      }
+                      if (!window.confirm(`Reset permainan di Room ${codeToUse} dan masuk sebagai Host baru?`)) return;
+                      setIsLoading(true);
+                      setErrorMsg('');
+                      await onForceResetAndJoin(codeToUse, usernameInput.trim());
+                      setIsLoading(false);
+                    }}
+                    title="Gunakan ini jika room sebelumnya macet, ditinggalkan pemain lama, atau ingin memulai sesi baru"
+                  >
+                    <RotateCcw size={14} />
+                    <span>Reset Meja Ini & Ambil Alih Sebagai Host</span>
+                  </button>
+                )}
               </div>
             )}
           </div>

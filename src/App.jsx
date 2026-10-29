@@ -875,6 +875,25 @@ export default function App() {
     }
   };
 
+  const handleForceResetAndJoin = async (roomCode, playerName) => {
+    try {
+      const res = await multiplayerAdapter.forceResetAndJoinRoom(roomCode, playerName);
+      if (res.success && res.room) {
+        setCurrentRoom(res.room);
+        setMyPlayerId(res.player.id);
+        setGameMode('multiplayer');
+        setGameStateBigtwo({});
+        setGameState41({});
+        showToast(`👑 Berhasil mereset Room ${res.room.code}! Anda sekarang adalah Host.`);
+      } else {
+        showToast(res.error || 'Gagal mereset room.');
+      }
+    } catch (err) {
+      console.error('Error force resetting room:', err);
+      showToast('Terjadi kesalahan saat mereset room.');
+    }
+  };
+
   // Restart / Reset Game
   const handleRestart = async (configOverrides) => {
     const nextCfg = configOverrides || gameConfig;
@@ -2623,6 +2642,7 @@ export default function App() {
           initialPlayerCount={multiplayerInitOptions?.playerCount || 4}
           onClaimHost={handleClaimHost}
           onResetRoom={handleResetRoom}
+          onForceResetAndJoin={handleForceResetAndJoin}
         />
       )}
 
