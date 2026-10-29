@@ -147,6 +147,10 @@ export default function App() {
   });
 
   const [myPlayerId, setMyPlayerId] = useState(() => getLocalPlayerId());
+  const isSingleMode = gameMode === 'single';
+  const isMultiplayerMode = gameMode === 'multiplayer';
+  const isHost = isMultiplayerMode && currentRoom?.host_id === myPlayerId;
+
   const [copiedRoomCode, setCopiedRoomCode] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [isReconnecting, setIsReconnecting] = useState(() => {
@@ -803,10 +807,6 @@ export default function App() {
   // ---------------------------------------------------------------------------
   // ACTIVE PLAYER & PERSPECTIVE SEATING
   // ---------------------------------------------------------------------------
-  const isSingleMode = gameMode === 'single';
-  const isMultiplayerMode = gameMode === 'multiplayer';
-  const isHost = isMultiplayerMode && currentRoom?.host_id === myPlayerId;
-
   // Determine which player's cards to show in the bottom tray
   // In multiplayer: Always the user's cards (myPlayerId)
   // In single player: Always human player (SINGLE_HUMAN_ID)
