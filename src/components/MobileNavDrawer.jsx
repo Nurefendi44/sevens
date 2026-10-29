@@ -326,8 +326,8 @@ export default function MobileNavDrawer({
             </button>
           )}
 
-          {/* Claim Host (Multiplayer non-host) */}
-          {isMultiplayerMode && currentRoom && !isHost && onClaimHost && (
+          {/* Claim Host (Only when Host is missing / left) */}
+          {isMultiplayerMode && currentRoom && !isHost && !(currentRoom.players || []).some((p) => (p.id === currentRoom.host_id || p.isHost) && !p.isBot) && onClaimHost && (
             <button
               className="mobile-menu-item"
               style={{ borderLeft: '3px solid #fbbf24', background: 'rgba(245, 158, 11, 0.08)' }}
@@ -341,7 +341,7 @@ export default function MobileNavDrawer({
               </div>
               <div className="menu-item-text">
                 <span style={{ color: '#fbbf24', fontWeight: 700 }}>Ambil Alih Host</span>
-                <small>Jadikan akun Anda sebagai Host meja ini</small>
+                <small>Host sebelumnya keluar, jadikan akun Anda sebagai Host</small>
               </div>
             </button>
           )}

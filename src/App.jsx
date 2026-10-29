@@ -2280,12 +2280,12 @@ export default function App() {
 
           {isMultiplayerMode && currentRoom && (
             <>
-              {!isHost && (
+              {!isHost && !(currentRoom.players || []).some((p) => (p.id === currentRoom.host_id || p.isHost) && !p.isBot) && (
                 <button
                   className="btn-header"
                   style={{ borderColor: 'rgba(245, 158, 11, 0.45)', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.12)' }}
                   onClick={handleClaimHost}
-                  title="Ambil alih peran Host untuk meja ini"
+                  title="Ambil alih peran Host karena Host sebelumnya keluar atau tidak aktif"
                 >
                   <Crown size={15} />
                   <span>Ambil Alih Host</span>

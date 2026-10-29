@@ -1003,12 +1003,12 @@ export default function MultiplayerLobby({
                 <span>Keluar Meja</span>
               </button>
 
-              {!isHost && onClaimHost && (
+              {!isHost && !hasActiveHost && onClaimHost && (
                 <button
                   type="button"
                   className="btn-claim-host"
                   onClick={onClaimHost}
-                  title="Ambil alih peran Host untuk mengontrol meja ini"
+                  title="Ambil alih peran Host karena Host sebelumnya keluar atau tidak aktif"
                 >
                   <Crown size={16} />
                   <span>Ambil Alih Host</span>
