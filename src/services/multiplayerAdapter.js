@@ -13,6 +13,9 @@ import { initBigTwo } from '../games/bigtwo/engine/bigtwoEngine.js';
 export const AVATARS = ['👤', '🦊', '🐼', '🦁', '🐯', '🐨'];
 export const SEAT_POSITIONS = ['bottom', 'left', 'top', 'right', 'top_left', 'top_right'];
 
+// Matchmaking: minimum humans/bots needed before an auto-start countdown begins (max is 6)
+export const MATCHMAKING_MIN_PLAYERS = 4;
+
 // Local storage session keys
 const STORAGE_PLAYER_ID = 'sevens_player_id';
 const STORAGE_PLAYER_NAME = 'sevens_player_name';
@@ -458,22 +461,20 @@ export const multiplayerAdapter = {
   },
 
   /**
-   * MATCHMAKING: finds the oldest open matchmaking room for this game & table size,
+   * MATCHMAKING: finds the oldest open matchmaking room for this game (single dynamic 4-6 player queue),
    * or creates a new one where the caller becomes HOST (earliest in queue = host).
    * Backed by atomic Postgres RPC `matchmake` (see supabase/migrations/20261030_matchmaking.sql).
    */
-  async findMatch(playerName, gameType = 'sevens', maxPlayers = 4) {
+  async findMatch(playerName, gameType = 'sevens') {
     if (!supabase) {
       return { success: false, error: 'Supabase belum terkonfigurasi pada .env file.' };
     }
 
-    const targetMax = [4, 5, 6].includes(Number(maxPlayers)) ? Number(maxPlayers) : 4;
     const name = (playerName || '').trim() || 'Pemain';
     const playerId = getLocalPlayerId();
 
     const { data, error } = await supabase.rpc('matchmake', {
       p_game_type: gameType || 'sevens',
-      p_max_players: targetMax,
       p_player: { id: playerId, name, avatar: AVATARS[0], joinedAt: Date.now() },
     });
 
@@ -512,7 +513,7 @@ export const multiplayerAdapter = {
   /**
    * Host fills ALL empty seats with bots in one update (used by matchmaking prompt)
    */
-  async fillBots(roomCode, hostId) {
+  async fillBots(roomCode, hostId, targetCount = null) {
     if (!supabase) return { success: false, error: 'Supabase offline.' };
     const { room, error } = await this.getRoom(roomCode);
     if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
@@ -525,7 +526,8 @@ export const multiplayerAdapter = {
     }
 
     const currentPlayers = room.players || [];
-    const maxPlayers = room.game_state?.config?.roomPlayerCount || room.game_state?.config?.playerCount || 4;
+    const seatCapacity = room.game_state?.config?.roomPlayerCount || room.game_state?.config?.playerCount || 4;
+    const maxPlayers = targetCount ? Math.min(targetCount, seatCapacity) : seatCapacity;
     const missing = maxPlayers - currentPlayers.length;
     if (missing <= 0) return { success: true, room };
 

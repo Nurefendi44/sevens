@@ -1,17 +1,21 @@
 -- ==============================================================================
--- MATCHMAKING (QUICK MATCH)
--- Pemain pertama yang masuk antrean otomatis menjadi HOST. Pemain berikutnya
--- mengisi room matchmaking yang paling lama (created_at ASC) dan belum penuh.
+-- MATCHMAKING (QUICK MATCH) - MEJA DINAMIS 4-6 PEMAIN
+-- Semua pemain satu game masuk SATU antrean. Pemain paling awal menjadi HOST.
+-- Meja menampung maksimal 6 pemain; game dimulai (otomatis oleh client host)
+-- saat minimal 4 pemain terkumpul dan tidak ada yang bergabung lagi sesaat,
+-- atau langsung saat meja penuh (6).
 --
 -- Jalankan sekali di Supabase Dashboard -> SQL Editor.
 -- Tidak mengubah struktur tabel; penanda room matchmaking disimpan di
 -- rooms.game_state->'matchmaking' = true.
 -- ==============================================================================
 
+-- Hapus versi lama (ukuran meja tetap) jika pernah terpasang
+DROP FUNCTION IF EXISTS public.matchmake(text, int, jsonb);
+
 CREATE OR REPLACE FUNCTION public.matchmake(
-  p_game_type   text,
-  p_max_players int,
-  p_player      jsonb
+  p_game_type text,
+  p_player    jsonb
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -19,8 +23,8 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+  v_max       constant int := 6;
   v_room      public.rooms%ROWTYPE;
-  v_players   jsonb;
   v_player    jsonb;
   v_seat      int;
   v_code      text;
@@ -32,16 +36,12 @@ DECLARE
   v_avatars   text[] := ARRAY['👤','🦊','🐼','🦁','🐯','🐨'];
   v_game      text := COALESCE(NULLIF(p_game_type, ''), 'sevens');
 BEGIN
-  IF p_max_players NOT IN (4, 5, 6) THEN
-    RAISE EXCEPTION 'Matchmaking hanya untuk 4, 5, atau 6 pemain';
-  END IF;
-
   IF p_player->>'id' IS NULL THEN
     RAISE EXCEPTION 'Player id wajib diisi';
   END IF;
 
-  -- Serialize antrean per (game, ukuran meja) agar tidak ada dua host sekaligus
-  PERFORM pg_advisory_xact_lock(hashtext('matchmake:' || v_game || ':' || p_max_players));
+  -- Serialize antrean per game agar tidak ada dua host sekaligus
+  PERFORM pg_advisory_xact_lock(hashtext('matchmake:' || v_game));
 
   -- Cari room matchmaking terlama yang masih hidup, belum penuh, dan ada manusianya
   SELECT * INTO v_room
@@ -49,11 +49,7 @@ BEGIN
   WHERE r.status = 'lobby'
     AND r.game_state->>'matchmaking' = 'true'
     AND COALESCE(r.game_state->>'gameType', 'sevens') = v_game
-    AND COALESCE(
-          (r.game_state->'config'->>'roomPlayerCount')::int,
-          (r.game_state->'config'->>'playerCount')::int
-        ) = p_max_players
-    AND jsonb_array_length(r.players) BETWEEN 1 AND p_max_players - 1
+    AND jsonb_array_length(r.players) BETWEEN 1 AND v_max - 1
     AND r.updated_at > now() - interval '75 seconds'
     AND EXISTS (
       SELECT 1 FROM jsonb_array_elements(r.players) e
@@ -96,7 +92,8 @@ BEGIN
 
   -- Tidak ada room: buat baru, pemain ini menjadi HOST (paling awal di antrean)
   v_prefix := CASE v_game WHEN 'bigtwo' THEN 'B2-' WHEN 'game41' THEN 'R41-' ELSE 'SV-' END;
-  v_deck := CASE WHEN v_game = 'bigtwo' AND p_max_players > 4 THEN 'double' ELSE 'single' END;
+  -- Big Two > 4 pemain memakai double deck; client otomatis memakai single saat tepat 4 pemain
+  v_deck := CASE WHEN v_game = 'bigtwo' THEN 'double' ELSE 'single' END;
 
   v_player := jsonb_build_object(
     'id', p_player->>'id',
@@ -129,8 +126,8 @@ BEGIN
     jsonb_build_array(v_player),
     jsonb_build_object(
       'config', jsonb_build_object(
-        'playerCount', p_max_players,
-        'roomPlayerCount', p_max_players,
+        'playerCount', v_max,
+        'roomPlayerCount', v_max,
         'deckMode', v_deck
       ),
       'gameType', v_game,
@@ -143,6 +140,6 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.matchmake(text, int, jsonb) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.matchmake(text, jsonb) TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload schema';

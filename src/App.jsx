@@ -19,6 +19,7 @@ import {
   getLocalPlayerName,
   getGameTypeFromRoomCode,
   extractCleanRoomCode,
+  MATCHMAKING_MIN_PLAYERS,
 } from './services/multiplayerAdapter.js';
 import { isSupabaseConfigured } from './services/supabaseClient.js';
 
@@ -994,8 +995,8 @@ export default function App() {
   };
 
   // MATCHMAKING: earliest player in the queue becomes the host of a new room
-  const handleFindMatch = async (username, maxPlayers = 4, gameType = activeGameType) => {
-    const res = await multiplayerAdapter.findMatch(username, gameType, maxPlayers);
+  const handleFindMatch = async (username, gameType = activeGameType) => {
+    const res = await multiplayerAdapter.findMatch(username, gameType);
     if (res.success) {
       enterJoinedRoom(
         res,
@@ -1010,7 +1011,7 @@ export default function App() {
   // MATCHMAKING: host chooses to fill remaining seats with bots and start immediately
   const handleFillBotsAndStart = async () => {
     if (!currentRoom?.code || !isHost) return;
-    const res = await multiplayerAdapter.fillBots(currentRoom.code, myPlayerId);
+    const res = await multiplayerAdapter.fillBots(currentRoom.code, myPlayerId, MATCHMAKING_MIN_PLAYERS);
     if (res.success && res.room) {
       setCurrentRoom(res.room);
       await handleStartGame(res.room);
@@ -1036,11 +1037,12 @@ export default function App() {
       ? (roomDeckMode || 'double')
       : 'single';
 
+    const mmOverride = room.game_state?.matchmaking ? { roomPlayerCount: actualPlayerCount } : {};
     const configToUse = isBigTwo
-      ? { gameType: 'bigtwo', ...room.game_state?.config, deckMode: effectiveDeckMode }
+      ? { gameType: 'bigtwo', ...room.game_state?.config, deckMode: effectiveDeckMode, ...mmOverride }
       : isGame41
-      ? { gameType: 'game41' }
-      : gameConfig;
+      ? { gameType: 'game41', ...mmOverride }
+      : { ...gameConfig, ...mmOverride };
     const determinedGame = isBigTwo ? 'bigtwo' : isGame41 ? 'game41' : 'sevens';
     const res = await multiplayerAdapter.startGame(room.code, myPlayerId, configToUse, determinedGame);
     if (res.success) {
