@@ -125,6 +125,7 @@ export default function MultiplayerLobby({
   inviteRoomCode = null,
   activeGameType = 'sevens',
   initialDeckMode = 'double',
+  initialPlayerCount = 4,
   onClaimHost = null,
   onResetRoom = null,
   onForceResetAndJoin = null,
