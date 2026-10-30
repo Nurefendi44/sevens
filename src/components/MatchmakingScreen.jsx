@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Crown, LogOut, Bot, Hourglass, Swords, Radar, Play, Sparkles, X } from 'lucide-react';
+import { Crown, LogOut, Bot, Hourglass, Swords, Radar, Play, Sparkles, X, Mic, MicOff } from 'lucide-react';
 import '../styles/matchmaking.css';
 
 const SUIT_PARTICLES = ['♠', '♥', '♦', '♣', '♠', '♥', '♦', '♣', '♠', '♥'];
@@ -32,6 +32,10 @@ export default function MatchmakingScreen({
   onStartGame,
   onLeave,
   roomCode,
+  isVoiceConnected = false,
+  isVoiceMuted = true,
+  speakingPlayers = new Set(),
+  onToggleVoice = null,
 }) {
   const [elapsed, setElapsed] = useState(0);
 
@@ -89,7 +93,30 @@ export default function MatchmakingScreen({
         {/* Top bar */}
         <div className="mmx-topbar">
           <span className="mmx-game-pill">{meta?.badge || 'MATCHMAKING'}</span>
-          <span className="mmx-room-chip">Room {roomCode}</span>
+          <div className="mmx-topbar-right">
+            {onToggleVoice && (
+              <button
+                type="button"
+                className={`mmx-voice-btn ${isVoiceConnected && !isVoiceMuted ? 'active' : ''}`}
+                onClick={onToggleVoice}
+                title={
+                  isVoiceConnected
+                    ? isVoiceMuted
+                      ? 'Nyalakan Mic (Unmute)'
+                      : 'Matikan Mic (Mute)'
+                    : 'Nyalakan Live Voice Chat'
+                }
+              >
+                {isVoiceConnected && !isVoiceMuted ? (
+                  <Mic size={14} className={speakingPlayers?.has?.(myPlayerId) ? 'pulse-speaking' : ''} />
+                ) : (
+                  <MicOff size={14} />
+                )}
+                <span>{isVoiceConnected ? (isVoiceMuted ? 'Muted' : 'Voice On') : 'Voice'}</span>
+              </button>
+            )}
+            <span className="mmx-room-chip">Room {roomCode}</span>
+          </div>
         </div>
 
         {/* Radar / countdown center */}
@@ -152,6 +179,7 @@ export default function MatchmakingScreen({
               );
             }
             const isMe = p.id === myPlayerId;
+            const isSpeaking = speakingPlayers?.has?.(p.id);
             return (
               <div
                 key={p.id}
@@ -179,7 +207,7 @@ export default function MatchmakingScreen({
                     <X size={12} />
                   </button>
                 )}
-                <div className="mmx-slot-avatar">
+                <div className={`mmx-slot-avatar ${isSpeaking ? 'speaking-avatar-ring' : ''}`}>
                   <span>{p.avatar || (p.isBot ? '🤖' : '🃏')}</span>
                 </div>
                 <span className="mmx-slot-name">{p.name}</span>

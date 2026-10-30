@@ -77,10 +77,12 @@ class VoiceChatService {
     this.roomCode = null;
     this.myPlayerId = null;
     this.myPlayerName = null;
+    this.sessionId = null;
     this.localStream = null;
     this.audioContext = null;
     this.analyser = null;
     this.animFrameId = null;
+    this.heartbeatTimer = null;
 
     this.isMuted = true;
     this.isConnected = false;
@@ -92,6 +94,8 @@ class VoiceChatService {
     this.remoteAudios = new Map();
     // Map: peerId -> Array of RTCIceCandidateInit (queued candidates before remote description is set)
     this.pendingCandidates = new Map();
+    // Map: peerId -> sessionId
+    this.peerSessions = new Map();
 
     // Callbacks
     this.onSpeakingChange = null; // (playerId, isSpeaking) => void
@@ -127,6 +131,7 @@ class VoiceChatService {
     this.roomCode = roomCode.trim().toUpperCase();
     this.myPlayerId = myPlayerId;
     this.myPlayerName = myPlayerName;
+    this.sessionId = `vs_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     this.onSpeakingChange = callbacks.onSpeakingChange || null;
     this.onStatusChange = callbacks.onStatusChange || null;
     this.onPeerConnect = callbacks.onPeerConnect || null;
@@ -134,7 +139,18 @@ class VoiceChatService {
     try {
       this.iceConfig = await loadIceServers();
 
-      // 1. Request microphone stream
+      // Immediately unlock browser audio context within the user gesture click handler
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        if (!this.audioContext || this.audioContext.state === 'closed') {
+          this.audioContext = new AudioCtx();
+        }
+        if (this.audioContext.state === 'suspended') {
+          await this.audioContext.resume().catch(() => {});
+        }
+      }
+
+      // 1. Request microphone stream with voice-optimized constraints
       this.localStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -144,7 +160,7 @@ class VoiceChatService {
         video: false,
       });
 
-      // Default to UNMUTED when intentionally clicking join, or MUTED if requested
+      // Default to UNMUTED when intentionally clicking join
       this.isMuted = false;
       this.setMute(false);
 
@@ -160,12 +176,37 @@ class VoiceChatService {
         });
       }
 
-      // 3. Broadcast voice_join to all peers in the room
+      // 3. Broadcast initial voice_join with sessionId
       await this.sendSignal({
         type: 'voice_join',
         senderId: this.myPlayerId,
         senderName: this.myPlayerName,
+        sessionId: this.sessionId,
       });
+
+      // Repeat broadcast after 1.2s to ensure delivery to peers joining simultaneously
+      setTimeout(() => {
+        if (this.isConnected && this.roomCode) {
+          this.sendSignal({
+            type: 'voice_join',
+            senderId: this.myPlayerId,
+            senderName: this.myPlayerName,
+            sessionId: this.sessionId,
+          });
+        }
+      }, 1200);
+
+      // Start periodic 4-second presence heartbeat
+      if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = setInterval(() => {
+        if (this.isConnected && this.roomCode) {
+          this.sendSignal({
+            type: 'voice_ping',
+            senderId: this.myPlayerId,
+            sessionId: this.sessionId,
+          });
+        }
+      }, 4000);
 
       return true;
     } catch (err) {
@@ -217,11 +258,17 @@ class VoiceChatService {
    * Leave voice chat & release microphone
    */
   async leaveRoom() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+
     if (this.isConnected && this.roomCode) {
       try {
         await this.sendSignal({
           type: 'voice_leave',
           senderId: this.myPlayerId,
+          sessionId: this.sessionId,
         });
       } catch (e) {}
     }
@@ -252,6 +299,7 @@ class VoiceChatService {
     });
     this.peerConnections.clear();
     this.pendingCandidates.clear();
+    this.peerSessions.clear();
 
     // Remove remote audio elements
     this.remoteAudios.forEach((audioEl) => {
@@ -278,11 +326,64 @@ class VoiceChatService {
   }
 
   /**
+   * Re-sync and recover microphone & audio tracks when user switches back from background app
+   */
+  async resumeFromBackground() {
+    if (!this.isConnected || !this.roomCode) return;
+
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      try {
+        await this.audioContext.resume();
+      } catch (e) {}
+    }
+
+    if (this.localStream) {
+      const deadTrack = this.localStream.getAudioTracks().find((t) => t.readyState === 'ended');
+      if (deadTrack) {
+        console.log('[VoiceChat] Local mic track ended during background; refreshing stream...');
+        try {
+          const freshStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+            video: false,
+          });
+          freshStream.getAudioTracks().forEach((track) => {
+            track.enabled = !this.isMuted;
+          });
+          const newTrack = freshStream.getAudioTracks()[0];
+          this.peerConnections.forEach((pc) => {
+            const senders = pc.getSenders ? pc.getSenders() : [];
+            const audioSender = senders.find((s) => s.track && s.track.kind === 'audio');
+            if (audioSender && newTrack) {
+              audioSender.replaceTrack(newTrack).catch(() => {});
+            }
+          });
+          this.localStream = freshStream;
+          this.setupAudioAnalysis(freshStream);
+        } catch (e) {
+          console.warn('[VoiceChat] Failed to refresh mic after background:', e);
+        }
+      }
+    }
+
+    // Re-announce presence to re-establish dropped peer connections
+    await this.sendSignal({
+      type: 'voice_join',
+      senderId: this.myPlayerId,
+      senderName: this.myPlayerName,
+      sessionId: this.sessionId,
+    });
+  }
+
+  /**
    * Handle incoming WebRTC signaling message
    */
   async handleIncomingSignal(signal) {
     if (!signal || !this.isConnected || !this.localStream) return;
-    const { type, senderId, targetId, data } = signal;
+    const { type, senderId, targetId, sessionId, data } = signal;
 
     // Ignore signals sent by self
     if (senderId === this.myPlayerId) return;
@@ -295,32 +396,84 @@ class VoiceChatService {
     try {
       if (type === 'voice_join') {
         const existingPc = this.peerConnections.get(senderId);
-        if (existingPc && (existingPc.connectionState === 'connected' || existingPc.connectionState === 'connecting')) {
-          console.log(`[VoiceChat] Already connecting or connected to ${senderId}, ignore duplicate voice_join`);
-          return;
+        const prevSession = this.peerSessions.get(senderId);
+        const isNewSession = Boolean(sessionId && prevSession && prevSession !== sessionId);
+
+        if (sessionId) {
+          this.peerSessions.set(senderId, sessionId);
         }
 
-        // Single deterministic initiator: the peer with the smaller ID creates the offer.
-        // The peer with the larger ID responds with voice_ack so the smaller ID can initiate if needed.
-        if (this.myPlayerId < senderId) {
-          if (existingPc) this.closePeer(senderId);
-          await this.initiateCall(senderId);
-        } else {
+        // If the peer refreshed or started a fresh session, drop any stale connection
+        if (isNewSession) {
+          console.log(`[VoiceChat] Peer ${senderId} started new session (${sessionId}), resetting peer connection`);
+          this.closePeer(senderId);
+        } else if (
+          existingPc &&
+          (existingPc.connectionState === 'connected' || existingPc.connectionState === 'connecting')
+        ) {
+          // Send voice_ack back so peer knows connection is active
           await this.sendSignal({
             type: 'voice_ack',
             senderId: this.myPlayerId,
             targetId: senderId,
+            sessionId: this.sessionId,
+          });
+          return;
+        }
+
+        // Single deterministic initiator: the peer with the smaller ID creates the offer.
+        // The peer with the larger ID responds with voice_ack so the smaller ID can initiate.
+        if (this.myPlayerId < senderId) {
+          this.closePeer(senderId);
+          await this.initiateCall(senderId);
+        } else {
+          this.closePeer(senderId);
+          await this.sendSignal({
+            type: 'voice_ack',
+            senderId: this.myPlayerId,
+            targetId: senderId,
+            sessionId: this.sessionId,
           });
         }
       } else if (type === 'voice_ack') {
-        // Peer with larger ID acknowledged our presence, smaller ID initiates offer
+        if (sessionId) this.peerSessions.set(senderId, sessionId);
         const existingPc = this.peerConnections.get(senderId);
-        if (existingPc && (existingPc.connectionState === 'connected' || existingPc.connectionState === 'connecting')) {
+        if (
+          existingPc &&
+          (existingPc.connectionState === 'connected' || existingPc.connectionState === 'connecting')
+        ) {
           return;
         }
-        if (existingPc) this.closePeer(senderId);
+        this.closePeer(senderId);
         if (this.myPlayerId < senderId) {
           await this.initiateCall(senderId);
+        }
+      } else if (type === 'voice_ping') {
+        // Heartbeat: ensure connection with sender is intact
+        if (sessionId) {
+          const prevSession = this.peerSessions.get(senderId);
+          if (prevSession && prevSession !== sessionId) {
+            this.closePeer(senderId);
+          }
+          this.peerSessions.set(senderId, sessionId);
+        }
+        const existingPc = this.peerConnections.get(senderId);
+        const isHealthy =
+          existingPc &&
+          (existingPc.connectionState === 'connected' || existingPc.connectionState === 'connecting');
+
+        if (!isHealthy) {
+          if (this.myPlayerId < senderId) {
+            this.closePeer(senderId);
+            await this.initiateCall(senderId);
+          } else {
+            await this.sendSignal({
+              type: 'voice_ack',
+              senderId: this.myPlayerId,
+              targetId: senderId,
+              sessionId: this.sessionId,
+            });
+          }
         }
       } else if (type === 'voice_offer') {
         await this.handleOffer(senderId, data);
@@ -329,12 +482,13 @@ class VoiceChatService {
       } else if (type === 'voice_ice') {
         await this.handleIceCandidate(senderId, data);
       } else if (type === 'voice_speaking') {
-        const isPeerSpeaking = !!signal.isSpeaking;
+        const isPeerSpeaking = Boolean(signal.isSpeaking);
         if (this.onSpeakingChange) {
           this.onSpeakingChange(senderId, isPeerSpeaking);
         }
       } else if (type === 'voice_leave') {
         this.closePeer(senderId);
+        this.peerSessions.delete(senderId);
         if (this.onSpeakingChange) {
           this.onSpeakingChange(senderId, false);
         }
@@ -390,6 +544,8 @@ class VoiceChatService {
       console.log(`📡 [VoiceChat] ICE state with ${peerId}: ${pc.iceConnectionState}`);
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
         console.log(`🎉 [VoiceChat] P2P ICE CONNECTED with ${peerId}!`);
+      } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+        console.warn(`⚠️ [VoiceChat] ICE ${pc.iceConnectionState} with ${peerId}`);
       }
     };
 
@@ -406,7 +562,7 @@ class VoiceChatService {
             isConnected: this.isConnected,
             isMuted: this.isMuted,
             error: this.iceConfig.hasTurn
-              ? 'Koneksi voice gagal tersambung. Coba bergabung ulang.'
+              ? 'Koneksi voice terputus. Mencoba menyambung kembali...'
               : 'Koneksi voice gagal (jaringan memblokir P2P). Server TURN belum dikonfigurasi.',
           });
         }
@@ -426,7 +582,7 @@ class VoiceChatService {
         audioEl.setAttribute('autoplay', 'true');
         audioEl.volume = 1.0;
         audioEl.muted = false;
-        // Offscreen positioning so mobile WebKit doesn't suspend audio decoding
+        // Position offscreen so mobile WebKit keeps decoding active
         audioEl.style.position = 'fixed';
         audioEl.style.top = '-9999px';
         audioEl.style.left = '-9999px';
@@ -445,11 +601,7 @@ class VoiceChatService {
 
       audioEl.srcObject = stream;
 
-      // Also route directly to Web Audio API destination with 1.8x gain
-      // This forces loud speaker output on mobile and bypasses earpiece routing bug
-      this.routeStreamToAudioContext(peerId, stream);
-
-      // Explicitly trigger play to handle browser autoplay policies
+      // Play directly through HTMLAudioElement (cleanest mobile speaker output without double AEC gating)
       const playPromise = audioEl.play();
       if (playPromise !== undefined) {
         playPromise
@@ -460,9 +612,6 @@ class VoiceChatService {
             console.warn('[VoiceChat] Audio playback waiting for user gesture:', err);
             const resumeAudio = () => {
               audioEl.play().catch(() => {});
-              if (this.audioContext && this.audioContext.state === 'suspended') {
-                this.audioContext.resume().catch(() => {});
-              }
               document.removeEventListener('click', resumeAudio);
               document.removeEventListener('touchstart', resumeAudio);
             };
@@ -474,29 +623,6 @@ class VoiceChatService {
 
     this.peerConnections.set(peerId, pc);
     return pc;
-  }
-
-  routeStreamToAudioContext(peerId, stream) {
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-
-      if (!this.audioContext || this.audioContext.state === 'closed') {
-        this.audioContext = new AudioCtx();
-      }
-      if (this.audioContext.state === 'suspended') {
-        this.audioContext.resume().catch(() => {});
-      }
-
-      const source = this.audioContext.createMediaStreamSource(stream);
-      const gainNode = this.audioContext.createGain();
-      gainNode.gain.value = 1.8; // Boost for mobile speaker clarity
-      source.connect(gainNode);
-      gainNode.connect(this.audioContext.destination);
-      console.log(`🔊 [VoiceChat] Routed remote stream to AudioContext for ${peerId}`);
-    } catch (e) {
-      console.warn('[VoiceChat] Could not route to AudioContext:', e);
-    }
   }
 
   async initiateCall(peerId) {
@@ -540,7 +666,9 @@ class VoiceChatService {
         pc &&
         pc.signalingState !== 'stable';
 
-      const isPolite = this.myPlayerId < peerId;
+      // Smaller ID is caller (impolite). Larger ID is callee (polite).
+      // Polite peer yields to colliding offers and rolls back.
+      const isPolite = this.myPlayerId > peerId;
 
       if (isCollision) {
         if (!isPolite) {

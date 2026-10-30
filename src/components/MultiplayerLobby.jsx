@@ -125,10 +125,13 @@ export default function MultiplayerLobby({
   inviteRoomCode = null,
   activeGameType = 'sevens',
   initialDeckMode = 'double',
-  initialPlayerCount = 4,
   onClaimHost = null,
   onResetRoom = null,
   onForceResetAndJoin = null,
+  isVoiceConnected = false,
+  isVoiceMuted = true,
+  speakingPlayers = new Set(),
+  onToggleVoice = null,
 }) {
   const players = room?.players || [];
   const isParticipant = Boolean(room && players.some((p) => p.id === myPlayerId));
@@ -865,6 +868,10 @@ export default function MultiplayerLobby({
         onStartGame={() => onStartGame(room)}
         onLeave={onLeaveRoom}
         roomCode={room?.code}
+        isVoiceConnected={isVoiceConnected}
+        isVoiceMuted={isVoiceMuted}
+        speakingPlayers={speakingPlayers}
+        onToggleVoice={onToggleVoice}
       />
     );
   }

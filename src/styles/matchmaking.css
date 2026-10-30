@@ -146,6 +146,38 @@
 .mmx-game-pill { color: var(--mmx-accent); }
 .mmx-room-chip { color: #cbd5e1; border-color: rgba(255, 255, 255, 0.15); }
 
+.mmx-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mmx-voice-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.32rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(15, 23, 42, 0.65);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+}
+.mmx-voice-btn:hover {
+  background: rgba(15, 23, 42, 0.9);
+  color: #f1f5f9;
+}
+.mmx-voice-btn.active {
+  border-color: rgba(16, 185, 129, 0.6);
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+
 /* ---------- Radar ---------- */
 .mmx-radar-wrap {
   margin-top: clamp(1rem, 4vh, 2.2rem);

@@ -532,6 +532,11 @@ export default function App() {
 
     const handleSyncOnVisible = () => {
       if (document.visibilityState === 'visible' && isMultiplayerMode && currentRoom?.code && isSupabaseConfigured) {
+        // Recover voice chat connection & mic stream if dropped during background
+        try {
+          voiceChat.resumeFromBackground();
+        } catch (e) {}
+
         multiplayerAdapter.getRoom(currentRoom.code).then(({ room, error }) => {
           if (room && !error) {
             setCurrentRoom(room);
@@ -3063,6 +3068,10 @@ export default function App() {
           onClaimHost={handleClaimHost}
           onResetRoom={handleResetRoom}
           onForceResetAndJoin={handleForceResetAndJoin}
+          isVoiceConnected={isVoiceConnected}
+          isVoiceMuted={isVoiceMuted}
+          speakingPlayers={speakingPlayers}
+          onToggleVoice={handleToggleVoice}
         />
       )}
 
