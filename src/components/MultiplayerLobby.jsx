@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Users,
   Copy,
@@ -24,6 +24,9 @@ import {
   RotateCcw,
   Plus,
   Minus,
+  Search,
+  Zap,
+  Hourglass,
 } from 'lucide-react';
 import '../styles/multiplayer.css';
 import { getLocalPlayerName } from '../services/multiplayerAdapter.js';
@@ -109,6 +112,9 @@ export default function MultiplayerLobby({
   onLeaveRoom,
   onCreateRoom,
   onJoinRoom,
+  onFindMatch,
+  onFillBotsAndStart,
+  onTouchRoom,
   onAddBot,
   onRemoveBot,
   onUpdateRoomConfig,
@@ -129,7 +135,7 @@ export default function MultiplayerLobby({
   const hasActiveHost = players.some((p) => (p.id === room?.host_id || p.isHost) && !p.isBot);
 
   const [activeTab, setActiveTab] = useState(() =>
-    effectiveInviteCode ? 'join' : 'create'
+    effectiveInviteCode ? 'join' : 'match'
   );
   const [selectedPlayerCount, setSelectedPlayerCount] = useState(initialPlayerCount || 4);
   const [deckMode, setDeckMode] = useState(initialDeckMode || 'double');
@@ -141,6 +147,70 @@ export default function MultiplayerLobby({
   );
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [matchPlayerCount, setMatchPlayerCount] = useState(() =>
+    [4, 5, 6].includes(Number(initialPlayerCount)) ? Number(initialPlayerCount) : 4
+  );
+
+  // ---------------------------------------------------------------------------
+  // MATCHMAKING LOBBY STATE: auto-start countdown, wait prompt, host heartbeat
+  // ---------------------------------------------------------------------------
+  const isMatchmakingRoom = Boolean(room?.game_state?.matchmaking);
+  const seatTarget =
+    room?.game_state?.config?.roomPlayerCount || room?.game_state?.config?.playerCount || 4;
+  const isRoomFull = players.length >= seatTarget;
+  const playerCountNow = players.length;
+  const roomCodeNow = room?.code;
+
+  const [countdown, setCountdown] = useState(null);
+  const [waitSeconds, setWaitSeconds] = useState(0);
+  const [snoozeUntil, setSnoozeUntil] = useState(0);
+  const onStartGameRef = useRef(onStartGame);
+  const onTouchRoomRef = useRef(onTouchRoom);
+
+  useEffect(() => {
+    onStartGameRef.current = onStartGame;
+    onTouchRoomRef.current = onTouchRoom;
+  });
+
+  // Waiting timer (restarts whenever someone joins/leaves)
+  useEffect(() => {
+    setWaitSeconds(0);
+    setSnoozeUntil(0);
+    if (!(isParticipant && isMatchmakingRoom && !isRoomFull)) return undefined;
+    const id = setInterval(() => setWaitSeconds((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [isParticipant, isMatchmakingRoom, isRoomFull, playerCountNow, roomCodeNow]);
+
+  // Auto-start: when the table is full, count down 5s then HOST starts the game
+  useEffect(() => {
+    if (!(isParticipant && isMatchmakingRoom && isRoomFull)) {
+      setCountdown(null);
+      return undefined;
+    }
+    let remaining = 5;
+    setCountdown(remaining);
+    const id = setInterval(() => {
+      remaining -= 1;
+      setCountdown(Math.max(remaining, 0));
+      if (remaining <= 0) {
+        clearInterval(id);
+        if (isHost && onStartGameRef.current) onStartGameRef.current();
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isParticipant, isMatchmakingRoom, isRoomFull, isHost, roomCodeNow]);
+
+  // Host heartbeat keeps the room visible in the matchmaking queue (drops ghost rooms)
+  useEffect(() => {
+    if (!(isParticipant && isMatchmakingRoom && isHost && !isRoomFull)) return undefined;
+    const id = setInterval(() => {
+      if (onTouchRoomRef.current) onTouchRoomRef.current();
+    }, 20000);
+    return () => clearInterval(id);
+  }, [isParticipant, isMatchmakingRoom, isHost, isRoomFull, roomCodeNow]);
+
+  const showBotPrompt =
+    isHost && isMatchmakingRoom && !isRoomFull && waitSeconds >= Math.max(20, snoozeUntil);
 
   const meta = GAME_META[activeGameType] || GAME_META.sevens;
 
@@ -279,6 +349,23 @@ export default function MultiplayerLobby({
       } else {
         setErrorMsg(res.error || 'Gagal bergabung ke room.');
       }
+    }
+  };
+
+  // Handle Matchmaking (Cari Lawan)
+  const handleFindMatchClick = async (e) => {
+    e?.preventDefault();
+    if (!usernameInput.trim()) {
+      setErrorMsg('Silakan masukkan nama panggilan Anda terlebih dahulu!');
+      return;
+    }
+    if (!onFindMatch) return;
+    setErrorMsg('');
+    setIsLoading(true);
+    const res = await onFindMatch(usernameInput.trim(), matchPlayerCount, activeGameType);
+    setIsLoading(false);
+    if (!res.success) {
+      setErrorMsg(res.error || 'Gagal mencari lawan.');
     }
   };
 
@@ -468,6 +555,7 @@ export default function MultiplayerLobby({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       if (activeTab === 'join') handleJoin();
+                      else if (activeTab === 'match') handleFindMatchClick();
                       else handleCreate();
                     }
                   }}
@@ -487,6 +575,20 @@ export default function MultiplayerLobby({
               <button
                 type="button"
                 role="tab"
+                aria-selected={activeTab === 'match'}
+                className={`mp-tab-btn ${activeTab === 'match' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('match');
+                  setErrorMsg('');
+                }}
+              >
+                <Search size={16} />
+                <span>Cari Lawan</span>
+              </button>
+
+              <button
+                type="button"
+                role="tab"
                 aria-selected={activeTab === 'create'}
                 className={`mp-tab-btn ${activeTab === 'create' ? 'active' : ''}`}
                 onClick={() => {
@@ -495,7 +597,7 @@ export default function MultiplayerLobby({
                 }}
               >
                 <Crown size={16} />
-                <span>Buat Room Baru (Host)</span>
+                <span>Buat Room</span>
               </button>
 
               <button
@@ -509,13 +611,63 @@ export default function MultiplayerLobby({
                 }}
               >
                 <KeyRound size={16} />
-                <span>Gabung Kode Room</span>
+                <span>Gabung Kode</span>
                 {effectiveInviteCode && <span className="mp-tab-dot" />}
               </button>
             </div>
 
-            {/* TAB CONTENT 1: BUAT ROOM BARU */}
-            {activeTab === 'create' ? (
+            {/* TAB CONTENT 0: MATCHMAKING (CARI LAWAN) */}
+            {activeTab === 'match' ? (
+              <div className="mp-tab-content">
+                <div className="mp-capacity-section">
+                  <div className="mp-capacity-header">
+                    <span className="mp-capacity-label">
+                      <Users size={14} />
+                      <span>Pilih Ukuran Meja</span>
+                    </span>
+                    <span className="mp-capacity-badge">{matchPlayerCount} Pemain</span>
+                  </div>
+
+                  <div className="mp-count-grid mp-count-grid-3">
+                    {[4, 5, 6].map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        className={`mp-count-pill ${matchPlayerCount === num ? 'active' : ''}`}
+                        onClick={() => setMatchPlayerCount(num)}
+                      >
+                        <span className="mp-count-num">{num}</span>
+                        <span className="mp-count-unit">Pemain</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mp-deal-note">
+                    <Zap size={15} className="mp-note-icon" />
+                    <span>
+                      Pemain yang pertama masuk antrean otomatis jadi <strong>Host</strong>.
+                      Permainan dimulai otomatis saat meja penuh.
+                      {activeGameType === 'bigtwo' && matchPlayerCount > 4
+                        ? ' Big Two 5–6 pemain memakai Double Deck (104 kartu).'
+                        : ''}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className={`mp-cta-btn cta-${meta.theme}`}
+                  onClick={handleFindMatchClick}
+                  disabled={isLoading}
+                >
+                  <Search size={18} />
+                  <span>
+                    {isLoading ? 'Mencari Lawan...' : `Cari Lawan ${matchPlayerCount} Pemain`}
+                  </span>
+                  <ArrowRight size={18} />
+                </button>
+              </div>
+            ) : activeTab === 'create' ? (
               <div className="mp-tab-content">
                 <div className="mp-capacity-section">
                   <div className="mp-capacity-header">
@@ -736,8 +888,17 @@ export default function MultiplayerLobby({
                 Ruang Tunggu <span>{meta.title}</span>
               </h2>
               <p className="vip-room-sub">
-                Permainan dapat langsung dimulai saat minimal{' '}
-                <strong>2 pemain</strong> bergabung (tidak wajib menunggu penuh).
+                {isMatchmakingRoom ? (
+                  <>
+                    <strong>Matchmaking otomatis</strong> — permainan dimulai sendiri saat
+                    meja penuh.
+                  </>
+                ) : (
+                  <>
+                    Permainan dapat langsung dimulai saat minimal{' '}
+                    <strong>2 pemain</strong> bergabung (tidak wajib menunggu penuh).
+                  </>
+                )}
               </p>
             </div>
 
@@ -800,6 +961,55 @@ export default function MultiplayerLobby({
             </div>
           )}
 
+          {/* Matchmaking status banner */}
+          {isMatchmakingRoom && (
+            <div className={`mm-banner ${isRoomFull ? 'mm-banner-full' : ''}`}>
+              <div className="mm-banner-icon">
+                {isRoomFull ? <Zap size={20} /> : <Search size={20} className="mm-spin-icon" />}
+              </div>
+              <div className="mm-banner-text">
+                <strong>
+                  {isRoomFull
+                    ? `Meja penuh! Permainan dimulai dalam ${countdown ?? 0} detik...`
+                    : `Mencari pemain... (${players.length}/${targetPlayerCount})`}
+                </strong>
+                <span>
+                  {isHost
+                    ? 'Kamu masuk antrean paling awal, jadi Host meja ini.'
+                    : 'Host meja adalah pemain yang masuk antrean paling awal.'}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {showBotPrompt && (
+            <div className="mm-prompt">
+              <p>
+                ⏳ Belum ada pemain baru. Mau menunggu pemain lain atau isi{' '}
+                <strong>{Math.max(targetPlayerCount - players.length, 0)} kursi kosong</strong>{' '}
+                dengan bot?
+              </p>
+              <div className="mm-prompt-actions">
+                <button
+                  type="button"
+                  className="mm-btn mm-btn-wait"
+                  onClick={() => setSnoozeUntil(waitSeconds + 30)}
+                >
+                  <Hourglass size={15} />
+                  <span>Tunggu Pemain Lain</span>
+                </button>
+                <button
+                  type="button"
+                  className="mm-btn mm-btn-bot"
+                  onClick={onFillBotsAndStart}
+                >
+                  <Bot size={15} />
+                  <span>Tambah Bot &amp; Mulai</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Status Bar Kursi & Host Controls */}
           <div className="vip-seats-meta-bar">
             <span className="seats-counter-title">
@@ -809,7 +1019,7 @@ export default function MultiplayerLobby({
 
             <div className="vip-meta-actions-cluster">
               {/* Host Stepper: Tambah / Kurangi Kursi Meja */}
-              {isHost && (
+              {isHost && !isMatchmakingRoom && (
                 <div className="vip-seat-stepper" title="Atur kapasitas kursi meja permainan">
                   <span className="seat-stepper-label">Kapasitas Kursi:</span>
                   <button
@@ -1083,7 +1293,7 @@ export default function MultiplayerLobby({
             </div>
 
             <div className="vip-primary-actions">
-              {!isHost && (
+              {!isHost && !isMatchmakingRoom && (
                 <button
                   type="button"
                   className={`btn-ready-toggle ${isReady ? 'active' : ''}`}

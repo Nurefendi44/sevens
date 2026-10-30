@@ -938,52 +938,85 @@ export default function App() {
     }
   };
 
+  const enterJoinedRoom = (res, toastMessage) => {
+    setCurrentRoom(res.room);
+    setMyPlayerId(res.player.id);
+    const roomGame =
+      res.room.game_state?.gameType ||
+      getGameTypeFromRoomCode(res.room.code) ||
+      activeGameType;
+    setActiveGameType(roomGame);
+
+    if (res.room.game_state?.players) {
+      if (roomGame === 'bigtwo') {
+        setGameStateBigtwo(res.room.game_state);
+      } else if (roomGame === 'game41') {
+        setGameState41(res.room.game_state);
+      } else {
+        setGameState(res.room.game_state);
+      }
+    } else {
+      // Room still in lobby: initialize fresh engine state with clean roster
+      const capacity = res.room.game_state?.config?.playerCount || 4;
+      if (roomGame === 'bigtwo') {
+        setGameStateBigtwo(initBigTwo({ playerCount: capacity, deckMode: res.room.game_state?.config?.deckMode || 'single' }));
+      } else if (roomGame === 'game41') {
+        setGameState41(initGame41({ playerCount: capacity }));
+      } else {
+        setGameState(initGame({ ...gameConfig, playerCount: capacity }));
+      }
+    }
+    setBigTwoWheelPicker(null);
+    setPendingBigTwoWheel(null);
+    setRecentActionPopup(null);
+    setSelectedCard(null);
+    setActiveFault(null);
+    setPendingAceChoiceCard(null);
+    setIsDealingAnimationActive(false);
+
+    if (typeof window !== 'undefined' && window.history) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    setInviteRoomCode(null);
+    showToast(toastMessage);
+  };
+
   const handleJoinRoom = async (code, username) => {
     const cleanCode = extractCleanRoomCode(code);
     const res = await multiplayerAdapter.joinRoom(cleanCode, username);
     if (res.success) {
-      setCurrentRoom(res.room);
-      setMyPlayerId(res.player.id);
-      const roomGame =
-        res.room.game_state?.gameType ||
-        getGameTypeFromRoomCode(res.room.code) ||
-        activeGameType;
-      setActiveGameType(roomGame);
-
-      if (res.room.game_state?.players) {
-        if (roomGame === 'bigtwo') {
-          setGameStateBigtwo(res.room.game_state);
-        } else if (roomGame === 'game41') {
-          setGameState41(res.room.game_state);
-        } else {
-          setGameState(res.room.game_state);
-        }
-      } else {
-        // Room still in lobby: initialize fresh engine state with clean roster
-        const capacity = res.room.game_state?.config?.playerCount || 4;
-        if (roomGame === 'bigtwo') {
-          setGameStateBigtwo(initBigTwo({ playerCount: capacity, deckMode: res.room.game_state?.config?.deckMode || 'single' }));
-        } else if (roomGame === 'game41') {
-          setGameState41(initGame41({ playerCount: capacity }));
-        } else {
-          setGameState(initGame({ ...gameConfig, playerCount: capacity }));
-        }
-      }
-      setBigTwoWheelPicker(null);
-      setPendingBigTwoWheel(null);
-      setRecentActionPopup(null);
-      setSelectedCard(null);
-      setActiveFault(null);
-      setPendingAceChoiceCard(null);
-      setIsDealingAnimationActive(false);
-
-      if (typeof window !== 'undefined' && window.history) {
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-      setInviteRoomCode(null);
-      showToast(res.isReconnected ? `Bergabung kembali ke Room ${res.room.code}` : `Berhasil bergabung ke Room ${res.room.code}`);
+      enterJoinedRoom(
+        res,
+        res.isReconnected ? `Bergabung kembali ke Room ${res.room.code}` : `Berhasil bergabung ke Room ${res.room.code}`
+      );
     }
     return res;
+  };
+
+  // MATCHMAKING: earliest player in the queue becomes the host of a new room
+  const handleFindMatch = async (username, maxPlayers = 4, gameType = activeGameType) => {
+    const res = await multiplayerAdapter.findMatch(username, gameType, maxPlayers);
+    if (res.success) {
+      enterJoinedRoom(
+        res,
+        res.created
+          ? '🔎 Kamu antrean pertama — jadi Host! Menunggu pemain lain...'
+          : `🎯 Lawan ditemukan! Masuk Room ${res.room.code}`
+      );
+    }
+    return res;
+  };
+
+  // MATCHMAKING: host chooses to fill remaining seats with bots and start immediately
+  const handleFillBotsAndStart = async () => {
+    if (!currentRoom?.code || !isHost) return;
+    const res = await multiplayerAdapter.fillBots(currentRoom.code, myPlayerId);
+    if (res.success && res.room) {
+      setCurrentRoom(res.room);
+      await handleStartGame(res.room);
+    } else {
+      showToast(res.error || 'Gagal menambahkan bot.');
+    }
   };
 
   const handleToggleReady = async (isReady) => {
@@ -991,23 +1024,25 @@ export default function App() {
     await multiplayerAdapter.toggleReady(currentRoom.code, myPlayerId, isReady);
   };
 
-  const handleStartGame = async () => {
-    if (!currentRoom?.code) return;
-    const isBigTwo = activeGameType === 'bigtwo' || currentRoom.game_state?.gameType === 'bigtwo';
-    const isGame41 = activeGameType === 'game41' || currentRoom.game_state?.gameType === 'game41';
-    const actualPlayerCount = currentRoom.players?.length || 4;
-    const roomDeckMode = currentRoom.game_state?.config?.deckMode;
+  const handleStartGame = async (roomOverride = null) => {
+    // onClick passes a click event; only accept a real room object (has .code)
+    const room = roomOverride && roomOverride.code ? roomOverride : currentRoom;
+    if (!room?.code) return;
+    const isBigTwo = activeGameType === 'bigtwo' || room.game_state?.gameType === 'bigtwo';
+    const isGame41 = activeGameType === 'game41' || room.game_state?.gameType === 'game41';
+    const actualPlayerCount = room.players?.length || 4;
+    const roomDeckMode = room.game_state?.config?.deckMode;
     const effectiveDeckMode = isBigTwo && actualPlayerCount > 4
       ? (roomDeckMode || 'double')
       : 'single';
 
     const configToUse = isBigTwo
-      ? { gameType: 'bigtwo', ...currentRoom.game_state?.config, deckMode: effectiveDeckMode }
+      ? { gameType: 'bigtwo', ...room.game_state?.config, deckMode: effectiveDeckMode }
       : isGame41
       ? { gameType: 'game41' }
       : gameConfig;
     const determinedGame = isBigTwo ? 'bigtwo' : isGame41 ? 'game41' : 'sevens';
-    const res = await multiplayerAdapter.startGame(currentRoom.code, myPlayerId, configToUse, determinedGame);
+    const res = await multiplayerAdapter.startGame(room.code, myPlayerId, configToUse, determinedGame);
     if (res.success) {
       if (isBigTwo) {
         setActiveGameType('bigtwo');
@@ -2994,6 +3029,9 @@ export default function App() {
           onLeaveRoom={handleLeaveRoom}
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
+          onFindMatch={handleFindMatch}
+          onFillBotsAndStart={handleFillBotsAndStart}
+          onTouchRoom={() => currentRoom?.code && multiplayerAdapter.touchRoom(currentRoom.code)}
           onAddBot={handleAddBotMultiplayer}
           onRemoveBot={handleRemoveBotMultiplayer}
           onUpdateRoomConfig={handleUpdateRoomConfig}

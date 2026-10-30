@@ -355,7 +355,7 @@
 
 .mp-tabs-bar {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.4rem;
   padding: 0.35rem;
   border-radius: 16px;
@@ -1298,7 +1298,15 @@
   }
 
   .mp-tabs-bar {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.25rem;
+  }
+
+  .mp-tab-btn {
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.6rem 0.25rem;
+    font-size: 0.72rem;
   }
 
   .vip-ticket-box {
@@ -1584,3 +1592,124 @@
 }
 
 
+
+/* ==============================================================================
+   MATCHMAKING (CARI LAWAN)
+   ============================================================================== */
+.mp-count-grid.mp-count-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.mm-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.14), rgba(99, 102, 241, 0.12));
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #e0f2fe;
+}
+
+.mm-banner-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+}
+
+.mm-spin-icon {
+  animation: mm-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes mm-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.18); opacity: 1; }
+}
+
+.mm-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.mm-banner-text strong {
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.mm-banner-text span {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  line-height: 1.35;
+}
+
+.mm-banner.mm-banner-full {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(52, 211, 153, 0.12));
+  border-color: rgba(52, 211, 153, 0.5);
+  color: #d1fae5;
+}
+
+.mm-banner.mm-banner-full .mm-banner-icon {
+  background: rgba(52, 211, 153, 0.22);
+  color: #34d399;
+  animation: mm-pulse 0.8s ease-in-out infinite;
+}
+
+.mm-prompt {
+  margin-bottom: 1rem;
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  background: rgba(251, 191, 36, 0.09);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #fef3c7;
+}
+
+.mm-prompt p {
+  margin: 0 0 0.75rem;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.mm-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.mm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  flex: 1 1 150px;
+  padding: 0.65rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.mm-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
+.mm-btn-wait {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #e2e8f0;
+}
+
+.mm-btn-bot {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #1c1917;
+}

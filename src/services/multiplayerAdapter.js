@@ -458,6 +458,108 @@ export const multiplayerAdapter = {
   },
 
   /**
+   * MATCHMAKING: finds the oldest open matchmaking room for this game & table size,
+   * or creates a new one where the caller becomes HOST (earliest in queue = host).
+   * Backed by atomic Postgres RPC `matchmake` (see supabase/migrations/20261030_matchmaking.sql).
+   */
+  async findMatch(playerName, gameType = 'sevens', maxPlayers = 4) {
+    if (!supabase) {
+      return { success: false, error: 'Supabase belum terkonfigurasi pada .env file.' };
+    }
+
+    const targetMax = [4, 5, 6].includes(Number(maxPlayers)) ? Number(maxPlayers) : 4;
+    const name = (playerName || '').trim() || 'Pemain';
+    const playerId = getLocalPlayerId();
+
+    const { data, error } = await supabase.rpc('matchmake', {
+      p_game_type: gameType || 'sevens',
+      p_max_players: targetMax,
+      p_player: { id: playerId, name, avatar: AVATARS[0], joinedAt: Date.now() },
+    });
+
+    if (error) {
+      const msg = error.message || '';
+      if (error.code === 'PGRST202' || /could not find the function/i.test(msg)) {
+        return {
+          success: false,
+          error:
+            "Fungsi matchmaking belum dipasang di Supabase. Jalankan file supabase/migrations/20261030_matchmaking.sql di SQL Editor.",
+        };
+      }
+      return { success: false, error: msg || 'Gagal mencari lawan.' };
+    }
+
+    if (!data || !data.room || !data.player) {
+      return { success: false, error: 'Matchmaking tidak mengembalikan room.' };
+    }
+
+    setLocalSession(playerId, name, data.room.code);
+    return { success: true, room: data.room, player: data.player, created: Boolean(data.created) };
+  },
+
+  /**
+   * Keeps a matchmaking room "alive" so ghost rooms (host closed the tab) drop out of the queue.
+   */
+  async touchRoom(roomCode) {
+    if (!supabase || !roomCode) return;
+    await supabase
+      .from('rooms')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('code', roomCode)
+      .eq('status', 'lobby');
+  },
+
+  /**
+   * Host fills ALL empty seats with bots in one update (used by matchmaking prompt)
+   */
+  async fillBots(roomCode, hostId) {
+    if (!supabase) return { success: false, error: 'Supabase offline.' };
+    const { room, error } = await this.getRoom(roomCode);
+    if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+
+    if (room.host_id !== hostId) {
+      return { success: false, error: 'Hanya Host yang dapat menambahkan bot!' };
+    }
+    if (room.status !== 'lobby') {
+      return { success: false, error: 'Permainan sudah dimulai.' };
+    }
+
+    const currentPlayers = room.players || [];
+    const maxPlayers = room.game_state?.config?.roomPlayerCount || room.game_state?.config?.playerCount || 4;
+    const missing = maxPlayers - currentPlayers.length;
+    if (missing <= 0) return { success: true, room };
+
+    const botAvatars = ['🤖', '👾', '🦾', '🧠', '⚙️', '🛸'];
+    const existingBots = currentPlayers.filter((p) => p.isBot).length;
+    const newBots = Array.from({ length: missing }).map((_, i) => {
+      const botNumber = existingBots + i + 1;
+      return {
+        id: `bot_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`,
+        name: `Bot ${botNumber}`,
+        seatIndex: currentPlayers.length + i,
+        isHost: false,
+        isReady: true,
+        isBot: true,
+        avatar: botAvatars[(botNumber - 1) % botAvatars.length],
+        joinedAt: Date.now(),
+      };
+    });
+
+    const { data: updatedRoom, error: updateErr } = await supabase
+      .from('rooms')
+      .update({
+        players: [...currentPlayers, ...newBots],
+        updated_at: new Date().toISOString(),
+      })
+      .eq('code', room.code)
+      .select()
+      .single();
+
+    if (updateErr) return { success: false, error: updateErr.message };
+    return { success: true, room: updatedRoom };
+  },
+
+  /**
    * Toggles ready state for a player
    */
   async toggleReady(roomCode, playerId, isReady) {
