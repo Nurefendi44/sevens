@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import '../styles/multiplayer.css';
 import { getLocalPlayerName, MATCHMAKING_MIN_PLAYERS } from '../services/multiplayerAdapter.js';
+import MatchmakingScreen from './MatchmakingScreen.jsx';
 
 
 /**
@@ -840,18 +841,39 @@ export default function MultiplayerLobby({
   }
 
   // ---------------------------------------------------------------------------
-  // VIEW B: INSIDE ROOM WAITING LOBBY (MEJA KARTU VIP)
+  // VIEW B-1: MATCHMAKING SCREEN (MOBILE LEGENDS STYLE RADAR & PARTICLES)
+  // ---------------------------------------------------------------------------
+  const targetPlayerCount = room?.game_state?.config?.roomPlayerCount || room?.game_state?.config?.playerCount || 6;
+
+  if (isMatchmakingRoom) {
+    return (
+      <MatchmakingScreen
+        meta={meta}
+        players={players}
+        myPlayerId={myPlayerId}
+        seatTarget={targetPlayerCount}
+        minPlayers={MATCHMAKING_MIN_PLAYERS}
+        isHost={isHost}
+        isRoomFull={isRoomFull}
+        hasEnoughToStart={hasEnoughToStart}
+        countdown={countdown}
+        showBotPrompt={showBotPrompt}
+        onWaitMore={() => setSnoozeUntil(waitSeconds + 30)}
+        onFillBots={onFillBotsAndStart}
+        onLeave={onLeaveRoom}
+        roomCode={room?.code}
+      />
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // VIEW B-2: INSIDE ROOM WAITING LOBBY (MEJA KARTU VIP UNTUK ROOM KODE / PRIVATE)
   // ---------------------------------------------------------------------------
   const myPlayer = players.find((p) => p.id === myPlayerId) || {};
   const isReady = Boolean(myPlayer.isReady);
-  const targetPlayerCount = room?.game_state?.config?.roomPlayerCount || room?.game_state?.config?.playerCount || 4;
   const canStart = players.length >= 2;
 
-  // Matchmaking tables show at least the minimum seats, then grow as players join
-  const slotCount = isMatchmakingRoom
-    ? Math.min(targetPlayerCount, Math.max(MATCHMAKING_MIN_PLAYERS, players.length))
-    : targetPlayerCount;
-  const slots = Array.from({ length: slotCount }).map(
+  const slots = Array.from({ length: targetPlayerCount }).map(
     (_, idx) => players[idx] || null
   );
 
