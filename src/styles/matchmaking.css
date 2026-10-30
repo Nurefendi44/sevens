@@ -484,6 +484,16 @@
   color: #1c1917;
   box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
 }
+.mmx-btn-cyan {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.22), rgba(14, 165, 233, 0.45));
+  border-color: rgba(56, 189, 248, 0.7);
+  color: #e0f2fe;
+  box-shadow: 0 4px 16px rgba(56, 189, 248, 0.35);
+}
+.mmx-btn-cyan:hover {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.35), rgba(14, 165, 233, 0.6));
+  box-shadow: 0 6px 24px rgba(56, 189, 248, 0.55);
+}
 .mmx-btn-ghost { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.2); color: #e2e8f0; }
 .mmx-btn-cancel {
   flex: 0 0 auto;
@@ -491,6 +501,41 @@
   background: rgba(239, 68, 68, 0.14);
   border-color: rgba(239, 68, 68, 0.6);
   color: #fecaca;
+}
+
+/* Host Controls Bar */
+.mmx-host-controls {
+  width: 100%;
+  margin-top: 0.9rem;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Remove bot button on card */
+.mmx-bot-remove-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  background: rgba(15, 23, 42, 0.85);
+  color: #f87171;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  cursor: pointer;
+  z-index: 5;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.mmx-bot-remove-btn:hover {
+  background: #ef4444;
+  color: #fff;
+  transform: scale(1.15);
 }
 
 @media (max-width: 480px) {

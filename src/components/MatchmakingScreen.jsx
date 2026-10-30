@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Crown, LogOut, Bot, Hourglass, Swords, Radar } from 'lucide-react';
+import { Crown, LogOut, Bot, Hourglass, Swords, Radar, Play, Sparkles, X } from 'lucide-react';
 import '../styles/matchmaking.css';
 
 const SUIT_PARTICLES = ['♠', '♥', '♦', '♣', '♠', '♥', '♦', '♣', '♠', '♥'];
@@ -27,6 +27,9 @@ export default function MatchmakingScreen({
   showBotPrompt,
   onWaitMore,
   onFillBots,
+  onAddBot,
+  onRemoveBot,
+  onStartGame,
   onLeave,
   roomCode,
 }) {
@@ -162,6 +165,20 @@ export default function MatchmakingScreen({
                     <Crown size={13} />
                   </span>
                 )}
+                {p.isBot && isHost && onRemoveBot && (
+                  <button
+                    type="button"
+                    className="mmx-bot-remove-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveBot(p.id);
+                    }}
+                    title="Keluarkan Bot Ini"
+                    aria-label="Keluarkan Bot Ini"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
                 <div className="mmx-slot-avatar">
                   <span>{p.avatar || (p.isBot ? '🤖' : '🃏')}</span>
                 </div>
@@ -181,22 +198,58 @@ export default function MatchmakingScreen({
           </span>
         </div>
 
-        {/* Host decision: wait or add bots */}
+        {/* Host Controls: Add individual bot or Start immediately */}
+        {isHost && (
+          <div className="mmx-host-controls">
+            {players.length < seatTarget && onAddBot && (
+              <button
+                type="button"
+                className="mmx-btn mmx-btn-cyan"
+                onClick={onAddBot}
+                title="Tambahkan 1 Bot ke kursi kosong"
+              >
+                <Bot size={16} />
+                <span>+ Tambah 1 Bot ({players.length}/{seatTarget})</span>
+              </button>
+            )}
+
+            {players.length >= 2 && onStartGame && (
+              <button
+                type="button"
+                className="mmx-btn mmx-btn-gold"
+                onClick={onStartGame}
+                title="Mulai permainan sekarang dengan susunan pemain saat ini"
+              >
+                <Play size={16} fill="currentColor" />
+                <span>Mulai Sekarang ({players.length} Pemain)</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Host decision prompt when queue is quiet */}
         {showBotPrompt && (
           <div className="mmx-prompt" role="dialog" aria-label="Pilihan menunggu atau tambah bot">
             <p>
-              Belum ada pemain baru. Mau menunggu atau isi{' '}
-              <strong>{Math.max(minPlayers - players.length, 0)} kursi</strong> dengan bot?
+              Belum ada pemain baru bergabung. Anda dapat menambah bot satuan, isi hingga 4 kursi, atau menunggu pemain lain:
             </p>
             <div className="mmx-prompt-actions">
               <button type="button" className="mmx-btn mmx-btn-ghost" onClick={onWaitMore}>
-                <Hourglass size={16} />
+                <Hourglass size={15} />
                 <span>Tunggu</span>
               </button>
-              <button type="button" className="mmx-btn mmx-btn-gold" onClick={onFillBots}>
-                <Bot size={16} />
-                <span>Tambah Bot &amp; Mulai</span>
-              </button>
+              {players.length < seatTarget && onAddBot && (
+                <button type="button" className="mmx-btn mmx-btn-cyan" onClick={onAddBot}>
+                  <Bot size={15} />
+                  <span>+ Tambah 1 Bot</span>
+                </button>
+              )}
+              {players.length < minPlayers && onFillBots && (
+                <button type="button" className="mmx-btn mmx-btn-gold" onClick={onFillBots}>
+                  <Sparkles size={15} />
+                  <span>Isi Sampai 4 &amp; Mulai</span>
+                </button>
+              )}
             </div>
           </div>
         )}

@@ -860,6 +860,9 @@ export default function MultiplayerLobby({
         showBotPrompt={showBotPrompt}
         onWaitMore={() => setSnoozeUntil(waitSeconds + 30)}
         onFillBots={onFillBotsAndStart}
+        onAddBot={onAddBot}
+        onRemoveBot={onRemoveBot}
+        onStartGame={() => onStartGame(room)}
         onLeave={onLeaveRoom}
         roomCode={room?.code}
       />
