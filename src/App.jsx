@@ -106,7 +106,12 @@ export default function App() {
 
   // Live Voice Chat State
   const [isVoiceConnected, setIsVoiceConnected] = useState(false);
-  const [isVoiceMuted, setIsVoiceMuted] = useState(true);
+  const [isVoiceMuted, setIsVoiceMuted] = useState(() => {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem('poker_voice_onmic') !== 'true';
+    }
+    return true;
+  });
   const [speakingPlayers, setSpeakingPlayers] = useState(new Set());
 
   // Table View & Mobile Focus Settings (Persistent)
@@ -681,47 +686,85 @@ export default function App() {
   };
 
   // ---------------------------------------------------------------------------
-  // LIVE VOICE CHAT (WebRTC P2P) HANDLERS
+  // LIVE VOICE CHAT (WebRTC P2P) HANDLERS & PERSISTENCE
   // ---------------------------------------------------------------------------
+  const startVoiceChat = useCallback(async (roomCode = null, playerId = null, isAuto = false) => {
+    const targetRoomCode = roomCode || currentRoom?.code;
+    const targetPlayerId = playerId || myPlayerId;
+    if (!targetRoomCode || !targetPlayerId) return false;
+
+    const myName =
+      (currentRoom?.players || []).find((p) => p.id === targetPlayerId)?.name ||
+      getLocalPlayerName() ||
+      'Player';
+
+    const success = await voiceChat.joinRoom(targetRoomCode, targetPlayerId, myName, {
+      onSpeakingChange: (pId, speaking) => {
+        setSpeakingPlayers((prev) => {
+          const next = new Set(prev);
+          if (speaking) next.add(pId);
+          else next.delete(pId);
+          return next;
+        });
+      },
+      onStatusChange: (status) => {
+        setIsVoiceConnected(status.isConnected);
+        setIsVoiceMuted(status.isMuted);
+        if (status.isConnected && !status.isMuted) {
+          try {
+            localStorage.setItem('poker_voice_onmic', 'true');
+          } catch (e) {}
+        }
+        if (status.error && !isAuto) showToast(status.error);
+      },
+      onPeerConnect: () => {
+        showToast('Live Voice terhubung dengan pemain! 🎙️🔊');
+      },
+    });
+
+    if (success) {
+      try {
+        localStorage.setItem('poker_voice_onmic', 'true');
+      } catch (e) {}
+      if (!isAuto) {
+        showToast('Mikrofon aktif (Onmic) 🎙️');
+      }
+    }
+    return success;
+  }, [currentRoom?.code, currentRoom?.players, myPlayerId]);
+
   const handleToggleVoice = async () => {
     if (!isVoiceConnected) {
       if (!isMultiplayerMode || !currentRoom?.code) {
         showToast('Voice Chat aktif di Room Multiplayer Online');
         return;
       }
-      const myName =
-        (currentRoom?.players || []).find((p) => p.id === myPlayerId)?.name ||
-        getLocalPlayerName() ||
-        'Player';
-
-      const success = await voiceChat.joinRoom(currentRoom.code, myPlayerId, myName, {
-        onSpeakingChange: (pId, speaking) => {
-          setSpeakingPlayers((prev) => {
-            const next = new Set(prev);
-            if (speaking) next.add(pId);
-            else next.delete(pId);
-            return next;
-          });
-        },
-        onStatusChange: (status) => {
-          setIsVoiceConnected(status.isConnected);
-          setIsVoiceMuted(status.isMuted);
-          if (status.error) showToast(status.error);
-        },
-        onPeerConnect: () => {
-          showToast('Live Voice terhubung dengan pemain! 🎙️🔊');
-        },
-      });
-
-      if (success) {
-        showToast('Mikrofon aktif 🎙️');
-      }
+      await startVoiceChat();
     } else {
       const nextMute = voiceChat.toggleMute();
       setIsVoiceMuted(nextMute);
-      showToast(nextMute ? 'Mikrofon dimatikan (Muted)' : 'Mikrofon aktif (Unmuted) 🎙️');
+      try {
+        localStorage.setItem('poker_voice_onmic', nextMute ? 'false' : 'true');
+      } catch (e) {}
+      showToast(nextMute ? 'Mikrofon dimatikan (Muted)' : 'Mikrofon aktif (Onmic) 🎙️');
     }
   };
+
+  // Auto-reconnect voice upon refresh / mount if user was previously Onmic
+  useEffect(() => {
+    if (!isMultiplayerMode || !currentRoom?.code || !myPlayerId) return;
+    if (isVoiceConnected) return;
+
+    let wasOnMic = false;
+    try {
+      wasOnMic = localStorage.getItem('poker_voice_onmic') === 'true';
+    } catch (e) {}
+
+    if (wasOnMic) {
+      console.log('🎙️ Auto-reconnecting Live Voice because user was Onmic before refresh...');
+      startVoiceChat(currentRoom.code, myPlayerId, true);
+    }
+  }, [isMultiplayerMode, currentRoom?.code, myPlayerId, isVoiceConnected, startVoiceChat]);
 
   const handleIncomingVoiceSignal = (signal) => {
     if (!signal) return;
@@ -1085,6 +1128,9 @@ export default function App() {
   };
 
   const handleLeaveRoom = async () => {
+    try {
+      localStorage.setItem('poker_voice_onmic', 'false');
+    } catch (e) {}
     voiceChat.leaveRoom();
     setIsVoiceConnected(false);
     setIsVoiceMuted(true);
