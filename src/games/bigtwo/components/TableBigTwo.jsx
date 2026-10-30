@@ -48,13 +48,32 @@ export default function TableBigTwo({
     }
   }, [actionAlert]);
 
-  if (
-    !gameState ||
-    !gameState.players ||
-    !Array.isArray(gameState.players) ||
-    gameState.players.length === 0 ||
-    !gameState.hands
-  ) {
+  const currentTrick = gameState?.currentTrick || {};
+  const tableCombo = currentTrick.combo || null;
+  const isFreeTurn =
+    !tableCombo || !currentTrick.cards || currentTrick.cards.length === 0;
+
+  // Evaluate currently selected cards in real-time (Must be top-level hook before any early return)
+  const selectedEval = useMemo(() => {
+    if (selectedCards.length === 0) return null;
+    return evaluateCombo(selectedCards);
+  }, [selectedCards]);
+
+  // Check if selected combination can beat table (Must be top-level hook before any early return)
+  const beatCheck = useMemo(() => {
+    if (!selectedEval || !selectedEval.isValid) return { canBeat: false };
+    return canBeatCombo(selectedEval, tableCombo);
+  }, [selectedEval, tableCombo]);
+
+  const isGameReady = Boolean(
+    gameState &&
+    gameState.players &&
+    Array.isArray(gameState.players) &&
+    gameState.players.length > 0 &&
+    gameState.hands
+  );
+
+  if (!isGameReady) {
     return (
       <div className="bigtwo-table-felt" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '65vh', gap: '1.25rem' }}>
         <div className="pulsing-green-dot" style={{ width: 18, height: 18 }} />
@@ -81,23 +100,6 @@ export default function TableBigTwo({
   const opponentPlayers = (gameState.players || []).filter(
     (p) => p.id !== myPlayer?.id
   );
-
-  const currentTrick = gameState.currentTrick || {};
-  const tableCombo = currentTrick.combo || null;
-  const isFreeTurn =
-    !tableCombo || !currentTrick.cards || currentTrick.cards.length === 0;
-
-  // Evaluate currently selected cards in real-time
-  const selectedEval = useMemo(() => {
-    if (selectedCards.length === 0) return null;
-    return evaluateCombo(selectedCards);
-  }, [selectedCards]);
-
-  // Check if selected combination can beat table
-  const beatCheck = useMemo(() => {
-    if (!selectedEval || !selectedEval.isValid) return { canBeat: false };
-    return canBeatCombo(selectedEval, tableCombo);
-  }, [selectedEval, tableCombo]);
 
   const toggleSelectCard = (card) => {
     setSelectedCards((prev) => {

@@ -2144,7 +2144,7 @@ export default function App() {
   // Find active turn player's name
   const currentTurnPlayer = playersList.find((p) => p.id === (
     activeGameType === 'bigtwo'
-      ? gameStateBigtwo.currentPlayer
+      ? gameStateBigtwo?.currentPlayer
       : activeGameType === 'game41'
       ? gameState41?.currentPlayer
       : gameState?.currentPlayer
@@ -2153,10 +2153,10 @@ export default function App() {
 
   // Automatic Score Recording for Cumulative Scoreboard (Points model)
   useEffect(() => {
-    if (activeGameType === 'bigtwo' && gameStateBigtwo.gameStatus === 'GAME_OVER' && gameStateBigtwo.rankings) {
+    if (activeGameType === 'bigtwo' && gameStateBigtwo?.gameStatus === 'GAME_OVER' && gameStateBigtwo?.rankings) {
       recordGameEndScore('bigtwo', gameStateBigtwo.rankings, gameStateBigtwo.winner);
     }
-  }, [gameStateBigtwo.gameStatus]);
+  }, [gameStateBigtwo?.gameStatus]);
 
   useEffect(() => {
     if (activeGameType === 'game41' && (gameState41.gameStatus === 'game_over' || gameState41.gameStatus === 'GAME_OVER') && gameState41.rankings) {
@@ -2408,10 +2408,10 @@ export default function App() {
 
           <span className="brand-tag desktop-only">
             {activeGameType === 'bigtwo'
-              ? `Capsa Banting • ${gameStateBigtwo.players?.length || 4} Pemain${(gameStateBigtwo.deckMode === 'double' || gameStateBigtwo.config?.deckMode === 'double') ? ' (Double Deck • 104 Kartu)' : ((gameStateBigtwo.players?.length || 4) > 4 ? ' (Single Deck • 52 Kartu)' : '')}`
+              ? `Capsa Banting • ${gameStateBigtwo?.players?.length || 4} Pemain${(gameStateBigtwo?.deckMode === 'double' || gameStateBigtwo?.config?.deckMode === 'double') ? ' (Double Deck • 104 Kartu)' : ((gameStateBigtwo?.players?.length || 4) > 4 ? ' (Single Deck • 52 Kartu)' : '')}`
               : activeGameType === 'game41'
-              ? `Kartu 41 • ${gameState41.players?.length || 4} Pemain`
-              : `Tujuh Sekop • ${gameState.players?.length || 4} Pemain`}
+              ? `Kartu 41 • ${gameState41?.players?.length || 4} Pemain`
+              : `Tujuh Sekop • ${gameState?.players?.length || 4} Pemain`}
           </span>
 
           {/* Mode Indicator / Badge */}
