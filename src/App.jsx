@@ -438,18 +438,23 @@ export default function App() {
             'sevens';
           setActiveGameType(roomGameType);
 
-          // Check if viewer is ALREADY a participant in this room
-          const isPlayerInRoom = (room.players || []).some(
-            (p) => p.id === currentMyId || p.id === session.playerId || p.id === myPlayerId
+          const localName = (session.playerName || getLocalPlayerName() || '').trim().toLowerCase();
+
+          // Check if viewer is ALREADY a participant in this room (by ID OR by saved player Name)
+          const matchedPlayer = (room.players || []).find(
+            (p) =>
+              p.id === currentMyId ||
+              p.id === session.playerId ||
+              p.id === myPlayerId ||
+              (localName && !p.isBot && (p.name || '').trim().toLowerCase() === localName)
           );
 
-          if (isPlayerInRoom) {
+          if (matchedPlayer) {
             // Already registered in room: reconnect seamlessly
             setCurrentRoom(room);
             setGameMode('multiplayer');
-            if (session.playerId) {
-              setMyPlayerId(session.playerId);
-            }
+            setMyPlayerId(matchedPlayer.id);
+            setLocalSession(matchedPlayer.id, matchedPlayer.name, room.code);
             if (room.game_state) {
               if (room.game_state.gameType === 'bigtwo') {
                 if (room.game_state.players) setGameStateBigtwo(room.game_state);
@@ -459,7 +464,7 @@ export default function App() {
                 if (room.game_state.players) setGameState(room.game_state);
               }
             }
-            showToast(`Terhubung ke Room ${room.code}`);
+            showToast(`Terhubung kembali ke Room ${room.code}`);
           } else {
             // Visiting via invite link: user has not joined yet!
             // Keep currentRoom as null so MultiplayerLobby renders the Join/Name input screen!
@@ -913,8 +918,13 @@ export default function App() {
       setPendingAceChoiceCard(null);
       setIsDealingAnimationActive(false);
 
-      if (typeof window !== 'undefined' && window.history) {
-        window.history.replaceState({}, document.title, window.location.pathname);
+      if (typeof window !== 'undefined' && window.history && res?.room?.code) {
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.set('room', res.room.code);
+          if (gameType) url.searchParams.set('game', gameType);
+          window.history.replaceState(null, '', url.toString());
+        } catch {}
       }
       setInviteRoomCode(null);
       showToast(`Room ${res.room.code} (${res.room.game_state?.config?.playerCount || maxPlayers} Pemain) berhasil dibuat!`);
@@ -975,8 +985,13 @@ export default function App() {
     setPendingAceChoiceCard(null);
     setIsDealingAnimationActive(false);
 
-    if (typeof window !== 'undefined' && window.history) {
-      window.history.replaceState({}, document.title, window.location.pathname);
+    if (typeof window !== 'undefined' && window.history && res?.room?.code) {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('room', res.room.code);
+        if (roomGame) url.searchParams.set('game', roomGame);
+        window.history.replaceState(null, '', url.toString());
+      } catch {}
     }
     setInviteRoomCode(null);
     showToast(toastMessage);
@@ -1071,7 +1086,8 @@ export default function App() {
     setSpeakingPlayers(new Set());
 
     if (currentRoom?.code) {
-      await multiplayerAdapter.leaveRoom(currentRoom.code, myPlayerId);
+      const activeName = (typeof getLocalPlayerName === 'function' ? getLocalPlayerName() : '') || '';
+      await multiplayerAdapter.leaveRoom(currentRoom.code, myPlayerId, activeName);
     }
     setCurrentRoom(null);
     clearLocalSession();

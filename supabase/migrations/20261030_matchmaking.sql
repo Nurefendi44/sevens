@@ -1,17 +1,19 @@
 -- ==============================================================================
--- MATCHMAKING (QUICK MATCH) - MEJA DINAMIS 4-6 PEMAIN
+-- MATCHMAKING (QUICK MATCH) - MEJA DINAMIS 4-6 PEMAIN (DENGAN ANTI-DUPLIKASI)
 -- Semua pemain satu game masuk SATU antrean. Pemain paling awal menjadi HOST.
--- Meja menampung maksimal 6 pemain; game dimulai (otomatis oleh client host)
--- saat minimal 4 pemain terkumpul dan tidak ada yang bergabung lagi sesaat,
--- atau langsung saat meja penuh (6).
+-- Meja menampung maksimal 6 pemain; game dimulai otomatis saat minimal 4 pemain.
 --
--- Jalankan sekali di Supabase Dashboard -> SQL Editor.
--- Tidak mengubah struktur tabel; penanda room matchmaking disimpan di
--- rooms.game_state->'matchmaking' = true.
+-- DILENGKAPI DETEKSI RECONNECT:
+-- 1. Membersihkan room matchmaking kadaluarsa (>2 menit tanpa detak jantung).
+-- 2. Jika pemain refresh browser di HP atau berpindah aplikasi lalu klik Cari Lawan lagi,
+--    sistem akan otomatis mengenali ID atau Nama yang sama dan memasukkannya kembali
+--    ke kursi semula tanpa membuat user duplikat!
+--
+-- Jalankan di Supabase Dashboard -> SQL Editor.
 -- ==============================================================================
 
--- Hapus versi lama (ukuran meja tetap) jika pernah terpasang
 DROP FUNCTION IF EXISTS public.matchmake(text, int, jsonb);
+DROP FUNCTION IF EXISTS public.matchmake(text, jsonb);
 
 CREATE OR REPLACE FUNCTION public.matchmake(
   p_game_type text,
@@ -35,22 +37,92 @@ DECLARE
   v_deck      text;
   v_avatars   text[] := ARRAY['👤','🦊','🐼','🦁','🐯','🐨'];
   v_game      text := COALESCE(NULLIF(p_game_type, ''), 'sevens');
+  v_name      text := TRIM(COALESCE(p_player->>'name', ''));
+  v_id        text := p_player->>'id';
 BEGIN
-  IF p_player->>'id' IS NULL THEN
+  IF v_id IS NULL THEN
     RAISE EXCEPTION 'Player id wajib diisi';
   END IF;
 
-  -- Serialize antrean per game agar tidak ada dua host sekaligus
+  -- 0. Bersihkan room matchmaking mati / ditinggal (>2 menit tanpa update)
+  DELETE FROM public.rooms
+  WHERE status = 'lobby'
+    AND game_state->>'matchmaking' = 'true'
+    AND updated_at < now() - interval '2 minutes';
+
+  -- Serialize antrean per game agar tidak ada dua transaksi bertabrakan
   PERFORM pg_advisory_xact_lock(hashtext('matchmake:' || v_game));
 
-  -- Cari room matchmaking terlama yang masih hidup, belum penuh, dan ada manusianya
+  -- ---------------------------------------------------------------------------
+  -- 1. DETEKSI RECONNECT: Apakah pemain ini (berdasarkan ID atau NAMA) sudah
+  --    berada di dalam salah satu room matchmaking yang masih aktif?
+  -- ---------------------------------------------------------------------------
+  SELECT * INTO v_room
+  FROM public.rooms r
+  WHERE r.status = 'lobby'
+    AND r.game_state->>'matchmaking' = 'true'
+    AND COALESCE(r.game_state->>'gameType', 'sevens') = v_game
+    AND r.updated_at > now() - interval '2 minutes'
+    AND EXISTS (
+      SELECT 1 FROM jsonb_array_elements(r.players) e
+      WHERE (
+        e->>'id' = v_id 
+        OR (v_name <> '' AND LOWER(TRIM(e->>'name')) = LOWER(v_name))
+      )
+      AND COALESCE((e->>'isBot')::boolean, false) = false
+    )
+  ORDER BY r.created_at ASC
+  LIMIT 1
+  FOR UPDATE;
+
+  IF FOUND THEN
+    -- Temukan kursi pemain tersebut
+    SELECT e INTO v_player
+    FROM jsonb_array_elements(v_room.players) e
+    WHERE e->>'id' = v_id 
+       OR (v_name <> '' AND LOWER(TRIM(e->>'name')) = LOWER(v_name))
+    LIMIT 1;
+
+    -- Perbarui ID di daftar players dan host_id jika berubah (misal ganti session / tab)
+    UPDATE public.rooms
+       SET players = (
+         SELECT jsonb_agg(
+           CASE 
+             WHEN (elem->>'id' = v_player->>'id' OR (v_name <> '' AND LOWER(TRIM(elem->>'name')) = LOWER(v_name)))
+             THEN jsonb_set(jsonb_set(elem, '{id}', to_jsonb(v_id)), '{name}', to_jsonb(COALESCE(NULLIF(v_name, ''), elem->>'name')))
+             ELSE elem 
+           END
+         )
+         FROM jsonb_array_elements(v_room.players) elem
+       ),
+       host_id = CASE WHEN v_room.host_id = v_player->>'id' THEN v_id ELSE v_room.host_id END,
+       updated_at = now()
+     WHERE id = v_room.id
+    RETURNING * INTO v_room;
+
+    v_player := jsonb_set(v_player, '{id}', to_jsonb(v_id));
+    IF v_name <> '' THEN
+      v_player := jsonb_set(v_player, '{name}', to_jsonb(v_name));
+    END IF;
+
+    RETURN jsonb_build_object(
+      'room', to_jsonb(v_room),
+      'player', v_player,
+      'created', (v_room.host_id = v_id),
+      'isReconnected', true
+    );
+  END IF;
+
+  -- ---------------------------------------------------------------------------
+  -- 2. CARI ROOM YANG SEDANG MENUNGGU LAWAN (BELUM PENUH)
+  -- ---------------------------------------------------------------------------
   SELECT * INTO v_room
   FROM public.rooms r
   WHERE r.status = 'lobby'
     AND r.game_state->>'matchmaking' = 'true'
     AND COALESCE(r.game_state->>'gameType', 'sevens') = v_game
     AND jsonb_array_length(r.players) BETWEEN 1 AND v_max - 1
-    AND r.updated_at > now() - interval '75 seconds'
+    AND r.updated_at > now() - interval '90 seconds'
     AND EXISTS (
       SELECT 1 FROM jsonb_array_elements(r.players) e
       WHERE COALESCE((e->>'isBot')::boolean, false) = false
@@ -60,20 +132,45 @@ BEGIN
   FOR UPDATE;
 
   IF FOUND THEN
-    -- Sudah ada di room ini? kembalikan apa adanya (reconnect)
-    SELECT e INTO v_player
-    FROM jsonb_array_elements(v_room.players) e
-    WHERE e->>'id' = p_player->>'id'
-    LIMIT 1;
+    -- Pengaman tambahan: periksa apakah nama / ID ini sudah ada di room tersebut
+    IF EXISTS (
+      SELECT 1 FROM jsonb_array_elements(v_room.players) e
+      WHERE e->>'id' = v_id OR (v_name <> '' AND LOWER(TRIM(e->>'name')) = LOWER(v_name))
+    ) THEN
+      SELECT e INTO v_player
+      FROM jsonb_array_elements(v_room.players) e
+      WHERE e->>'id' = v_id OR (v_name <> '' AND LOWER(TRIM(e->>'name')) = LOWER(v_name))
+      LIMIT 1;
 
-    IF v_player IS NOT NULL THEN
-      RETURN jsonb_build_object('room', to_jsonb(v_room), 'player', v_player, 'created', false);
+      UPDATE public.rooms
+         SET players = (
+           SELECT jsonb_agg(
+             CASE 
+               WHEN (elem->>'id' = v_player->>'id' OR (v_name <> '' AND LOWER(TRIM(elem->>'name')) = LOWER(v_name)))
+               THEN jsonb_set(jsonb_set(elem, '{id}', to_jsonb(v_id)), '{name}', to_jsonb(COALESCE(NULLIF(v_name, ''), elem->>'name')))
+               ELSE elem 
+             END
+           )
+           FROM jsonb_array_elements(v_room.players) elem
+         ),
+         host_id = CASE WHEN v_room.host_id = v_player->>'id' THEN v_id ELSE v_room.host_id END,
+         updated_at = now()
+       WHERE id = v_room.id
+      RETURNING * INTO v_room;
+
+      v_player := jsonb_set(v_player, '{id}', to_jsonb(v_id));
+      IF v_name <> '' THEN
+        v_player := jsonb_set(v_player, '{name}', to_jsonb(v_name));
+      END IF;
+
+      RETURN jsonb_build_object('room', to_jsonb(v_room), 'player', v_player, 'created', (v_room.host_id = v_id), 'isReconnected', true);
     END IF;
 
+    -- Pemain baru di room ini
     v_seat := jsonb_array_length(v_room.players);
     v_player := jsonb_build_object(
-      'id', p_player->>'id',
-      'name', COALESCE(NULLIF(p_player->>'name', ''), 'Pemain'),
+      'id', v_id,
+      'name', COALESCE(NULLIF(v_name, ''), 'Pemain'),
       'seatIndex', v_seat,
       'isHost', false,
       'isReady', true,
@@ -90,14 +187,15 @@ BEGIN
     RETURN jsonb_build_object('room', to_jsonb(v_room), 'player', v_player, 'created', false);
   END IF;
 
-  -- Tidak ada room: buat baru, pemain ini menjadi HOST (paling awal di antrean)
+  -- ---------------------------------------------------------------------------
+  -- 3. TIDAK ADA ROOM: Buat room baru dan pemain ini menjadi HOST
+  -- ---------------------------------------------------------------------------
   v_prefix := CASE v_game WHEN 'bigtwo' THEN 'B2-' WHEN 'game41' THEN 'R41-' ELSE 'SV-' END;
-  -- Big Two > 4 pemain memakai double deck; client otomatis memakai single saat tepat 4 pemain
   v_deck := CASE WHEN v_game = 'bigtwo' THEN 'double' ELSE 'single' END;
 
   v_player := jsonb_build_object(
-    'id', p_player->>'id',
-    'name', COALESCE(NULLIF(p_player->>'name', ''), 'Host'),
+    'id', v_id,
+    'name', COALESCE(NULLIF(v_name, ''), 'Host'),
     'seatIndex', 0,
     'isHost', true,
     'isReady', true,
@@ -121,7 +219,7 @@ BEGIN
   INSERT INTO public.rooms (code, host_id, status, players, game_state)
   VALUES (
     v_code,
-    p_player->>'id',
+    v_id,
     'lobby',
     jsonb_build_array(v_player),
     jsonb_build_object(

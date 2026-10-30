@@ -915,7 +915,7 @@ export const multiplayerAdapter = {
   /**
    * Leaves room and handles host migration / deletion
    */
-  async leaveRoom(roomCode, playerId) {
+  async leaveRoom(roomCode, playerId, playerName = '') {
     clearLocalSession();
     if (!supabase) return;
 
@@ -923,7 +923,10 @@ export const multiplayerAdapter = {
     if (!room) return;
     const code = room.code;
 
-    const remainingPlayers = (room.players || []).filter((p) => p.id !== playerId);
+    const cleanName = (playerName || '').trim().toLowerCase();
+    const remainingPlayers = (room.players || []).filter(
+      (p) => p.id !== playerId && (!cleanName || (p.name || '').trim().toLowerCase() !== cleanName)
+    );
     const remainingHumans = remainingPlayers.filter((p) => !p.isBot);
     const prevConfig = room.game_state?.config || {};
     const prevSeats = prevConfig.roomPlayerCount || prevConfig.playerCount || 4;
@@ -931,6 +934,11 @@ export const multiplayerAdapter = {
     const prevType = room.game_state?.gameType || getGameTypeFromRoomCode(code) || 'sevens';
 
     if (remainingPlayers.length === 0 || remainingHumans.length === 0) {
+      if (room.game_state?.matchmaking) {
+        // If it's a matchmaking queue room and all humans left, DELETE immediately so it doesn't linger
+        await supabase.from('rooms').delete().eq('code', code);
+        return;
+      }
       // Room empty or no humans left: preserve room in database for reuse!
       // Keep existing non-null host_id, clean players, reset status to lobby, preserve configured seats!
       await supabase

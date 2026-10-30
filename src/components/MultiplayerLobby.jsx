@@ -203,14 +203,14 @@ export default function MultiplayerLobby({
     return () => clearInterval(id);
   }, [isParticipant, isMatchmakingRoom, hasEnoughToStart, isRoomFull, isHost, playerCountNow, roomCodeNow]);
 
-  // Host heartbeat keeps the room visible in the matchmaking queue (drops ghost rooms)
+  // Heartbeat keeps the room visible in the matchmaking queue (drops ghost rooms)
   useEffect(() => {
-    if (!(isParticipant && isMatchmakingRoom && isHost && !isRoomFull)) return undefined;
+    if (!(isParticipant && isMatchmakingRoom && !isRoomFull)) return undefined;
     const id = setInterval(() => {
       if (onTouchRoomRef.current) onTouchRoomRef.current();
     }, 20000);
     return () => clearInterval(id);
-  }, [isParticipant, isMatchmakingRoom, isHost, isRoomFull, roomCodeNow]);
+  }, [isParticipant, isMatchmakingRoom, isRoomFull, roomCodeNow]);
 
   const showBotPrompt =
     isHost && isMatchmakingRoom && !hasEnoughToStart && waitSeconds >= Math.max(20, snoozeUntil);
