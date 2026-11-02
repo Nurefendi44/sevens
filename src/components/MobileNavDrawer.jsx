@@ -25,6 +25,7 @@ import {
   Smile,
   Mic,
   MicOff,
+  Radio,
 } from 'lucide-react';
 
 export default function MobileNavDrawer({
@@ -46,6 +47,7 @@ export default function MobileNavDrawer({
   onOpenScoreboard,
   onOpenChat,
   onOpenReactions,
+  onOpenSoundboard = null,
   isVoiceConnected = false,
   isVoiceMuted = true,
   onToggleVoice = null,
@@ -383,6 +385,25 @@ export default function MobileNavDrawer({
               <small>Klik untuk mengubah status suara</small>
             </div>
           </button>
+
+          {/* Soundboard Meme & SFX */}
+          {onOpenSoundboard && (
+            <button
+              className="mobile-menu-item"
+              onClick={() => {
+                onOpenSoundboard();
+                onClose();
+              }}
+            >
+              <div className="menu-item-icon" style={{ color: '#c084fc' }}>
+                <Radio size={18} />
+              </div>
+              <div className="menu-item-text">
+                <span>Soundboard Meme</span>
+                <small>Putar audio meme lucu langsung ke meja</small>
+              </div>
+            </button>
+          )}
 
           {/* Restart / Game Baru (Hanya muncul jika permainan telah selesai / Game Over) */}
           {(!isMultiplayerMode || isHost) && isGameOver && (

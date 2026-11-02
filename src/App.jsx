@@ -54,6 +54,8 @@ import ActionAnnouncementPopup from './components/ActionAnnouncementPopup.jsx';
 import LiveChatOverlay from './components/LiveChatOverlay.jsx';
 import FloatingReactionsOverlay from './components/FloatingReactionsOverlay.jsx';
 import UnifiedSocialDock from './components/UnifiedSocialDock.jsx';
+import SoundboardModal from './components/SoundboardModal.jsx';
+import SoundboardNotification from './components/SoundboardNotification.jsx';
 import { voiceChat } from './services/voiceChatService.js';
 
 import {
@@ -94,6 +96,7 @@ import {
   Smile,
   Mic,
   MicOff,
+  Radio,
 } from 'lucide-react';
 
 export default function App() {
@@ -103,6 +106,9 @@ export default function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [activeReactions, setActiveReactions] = useState([]);
   const [isReactionOpen, setIsReactionOpen] = useState(false);
+  const [isSoundboardOpen, setIsSoundboardOpen] = useState(false);
+  const [isSoundboardPlaying, setIsSoundboardPlaying] = useState(false);
+  const [activeSoundboardToasts, setActiveSoundboardToasts] = useState([]);
 
   // Live Voice Chat State
   const [isVoiceConnected, setIsVoiceConnected] = useState(false);
@@ -686,6 +692,61 @@ export default function App() {
   };
 
   // ---------------------------------------------------------------------------
+  // SOUNDBOARD SFX & REALTIME BROADCAST
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const unsubscribe = audio.subscribeSoundboard(({ isPlaying }) => {
+      setIsSoundboardPlaying(isPlaying);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleIncomingSoundboard = useCallback((soundData) => {
+    if (!soundData || !soundData.soundFile) return;
+
+    // Play sound effect through audioService (respects isMuted toggle)
+    audio.playSoundboard(soundData.soundFile);
+
+    // Show floating toast badge
+    const newToast = {
+      ...soundData,
+      id: soundData.id || `toast_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    };
+    setActiveSoundboardToasts((prev) => [...prev.slice(-3), newToast]);
+    setTimeout(() => {
+      setActiveSoundboardToasts((prev) => prev.filter((t) => t.id !== newToast.id));
+    }, 3500);
+  }, []);
+
+  const handlePlaySoundboard = useCallback(async (track) => {
+    if (!track) return;
+    let senderName = getLocalPlayerName() || 'Anda';
+    let senderAvatar = '👤';
+    let senderId = myPlayerId || 'local_human';
+    if (isMultiplayerMode && currentRoom?.players) {
+      const myPlayer = (currentRoom.players || []).find((p) => p.id === myPlayerId);
+      if (myPlayer) {
+        senderName = myPlayer.name || senderName;
+        senderAvatar = myPlayer.avatar || senderAvatar;
+      }
+    }
+    const payload = {
+      senderId,
+      senderName,
+      senderAvatar,
+      soundId: track.id,
+      soundTitle: track.title,
+      soundFile: track.file,
+      soundIcon: track.icon,
+      timestamp: Date.now(),
+    };
+    handleIncomingSoundboard(payload);
+    if (isMultiplayerMode && currentRoom?.code) {
+      await multiplayerAdapter.sendRoomSoundboard(currentRoom.code, payload);
+    }
+  }, [isMultiplayerMode, currentRoom, myPlayerId, handleIncomingSoundboard]);
+
+  // ---------------------------------------------------------------------------
   // LIVE VOICE CHAT (WebRTC P2P) HANDLERS & PERSISTENCE
   // ---------------------------------------------------------------------------
   const startVoiceChat = useCallback(async (roomCode = null, playerId = null, isAuto = false) => {
@@ -866,7 +927,8 @@ export default function App() {
       null,
       handleIncomingChatMessage,
       handleIncomingReaction,
-      handleIncomingVoiceSignal
+      handleIncomingVoiceSignal,
+      handleIncomingSoundboard
     );
 
     return () => {
@@ -2746,6 +2808,15 @@ export default function App() {
             {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
           </button>
 
+          <button
+            className={`btn-icon ${isSoundboardOpen ? 'active' : ''} ${isSoundboardPlaying ? 'pulse-speaking' : ''}`}
+            onClick={() => setIsSoundboardOpen((prev) => !prev)}
+            title="Soundboard Meme & SFX"
+            style={{ color: '#c084fc' }}
+          >
+            <Radio size={18} />
+          </button>
+
           {(!isMultiplayerMode || isHost) && isGameOver && (
             <button
               className="btn-header btn-gold"
@@ -2825,6 +2896,15 @@ export default function App() {
             title={isMuted ? 'Nyalakan Suara' : 'Matikan Suara'}
           >
             {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+          </button>
+
+          <button
+            className={`btn-icon ${isSoundboardOpen ? 'active' : ''} ${isSoundboardPlaying ? 'pulse-speaking' : ''}`}
+            onClick={() => setIsSoundboardOpen((prev) => !prev)}
+            title="Soundboard Meme & SFX"
+            style={{ color: '#c084fc' }}
+          >
+            <Radio size={16} />
           </button>
 
           <button
@@ -3145,6 +3225,7 @@ export default function App() {
         onOpenScoreboard={() => setShowScoreboardModal(true)}
         onOpenChat={() => setIsChatOpen(true)}
         onOpenReactions={() => setIsReactionOpen(true)}
+        onOpenSoundboard={() => setIsSoundboardOpen(true)}
         isVoiceConnected={isVoiceConnected}
         isVoiceMuted={isVoiceMuted}
         onToggleVoice={handleToggleVoice}
@@ -3317,7 +3398,7 @@ export default function App() {
         />
       )}
 
-      {/* UNIFIED SOCIAL DOCK PILL (Voice + Reaksi + Chat in 1 sleek compact bar) */}
+      {/* UNIFIED SOCIAL DOCK PILL (Voice + Reaksi + Soundboard + Chat in 1 sleek compact bar) */}
       {gameMode && (
         <UnifiedSocialDock
           isVisible={!isAnyModalOpen}
@@ -3327,11 +3408,27 @@ export default function App() {
           onToggleVoice={handleToggleVoice}
           isReactionOpen={isReactionOpen}
           onToggleReaction={() => setIsReactionOpen((prev) => !prev)}
+          isSoundboardOpen={isSoundboardOpen}
+          onToggleSoundboard={() => setIsSoundboardOpen((prev) => !prev)}
+          isSoundboardPlaying={isSoundboardPlaying}
           isChatOpen={isChatOpen}
           onToggleChat={() => setIsChatOpen((prev) => !prev)}
           hasUnreadChat={activeChatMessages.length > 0}
         />
       )}
+
+      {/* SOUNDBOARD MEME MODAL */}
+      <SoundboardModal
+        isOpen={isSoundboardOpen}
+        onClose={() => setIsSoundboardOpen(false)}
+        onPlaySound={handlePlaySoundboard}
+        isMuted={isMuted}
+        onToggleSound={handleToggleSound}
+        isMultiplayer={isMultiplayerMode && !!currentRoom?.code}
+      />
+
+      {/* FLOATING SOUNDBOARD TOAST NOTIFICATIONS */}
+      <SoundboardNotification activeSounds={activeSoundboardToasts} />
     </div>
   );
 }

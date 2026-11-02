@@ -1,0 +1,405 @@
+/* ==========================================================================
+   SOUNDBOARD STYLES (Glassmorphism & Rich Micro-animations)
+   ========================================================================== */
+
+/* 1. Backdrop */
+.soundboard-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 7, 18, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: sbFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes sbFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 2. Modal Container */
+.soundboard-modal {
+  position: relative;
+  width: 100%;
+  max-width: 540px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.92) 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 24px;
+  box-shadow:
+    0 25px 60px -15px rgba(0, 0, 0, 0.8),
+    0 0 35px rgba(168, 85, 247, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+  animation: sbScaleUp 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes sbScaleUp {
+  from {
+    transform: scale(0.92) translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 3. Header */
+.soundboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.4rem 1rem 1.4rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.soundboard-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.soundboard-icon-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(168, 85, 247, 0.45);
+}
+
+.soundboard-title-text h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #f8fafc;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.soundboard-live-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(236, 72, 153, 0.2);
+  border: 1px solid rgba(236, 72, 153, 0.45);
+  color: #f472b6;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.soundboard-title-text p {
+  margin: 2px 0 0 0;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.soundboard-close-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.soundboard-close-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+  transform: rotate(90deg);
+}
+
+/* 4. Controls & Filters */
+.soundboard-toolbar {
+  padding: 0.85rem 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: wrap;
+}
+
+.soundboard-categories {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.category-pill {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.category-pill:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+}
+
+.category-pill.active {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(236, 72, 153, 0.3));
+  border-color: rgba(216, 180, 254, 0.6);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.3);
+}
+
+.soundboard-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-stop-sound {
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+  border-radius: 8px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-stop-sound:hover {
+  background: rgba(239, 68, 68, 0.32);
+  color: #ffffff;
+}
+
+/* 5. Sound Grid List */
+.soundboard-body {
+  padding: 1.25rem 1.4rem;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.85rem;
+  max-height: 52vh;
+}
+
+@media (max-width: 480px) {
+  .soundboard-body {
+    grid-template-columns: 1fr;
+    gap: 0.7rem;
+    max-height: 58vh;
+  }
+}
+
+/* 6. Sound Card Item */
+.sound-card-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  background: rgba(30, 41, 59, 0.65);
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.sound-card-item:hover {
+  background: rgba(51, 65, 85, 0.8);
+  border-color: rgba(255, 255, 255, 0.24);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.sound-card-item:active {
+  transform: scale(0.97);
+}
+
+.sound-card-item.is-playing {
+  background: rgba(30, 41, 59, 0.95);
+  border-color: var(--accent-color, #a855f7);
+  box-shadow: 0 0 20px var(--accent-glow, rgba(168, 85, 247, 0.4));
+}
+
+.sound-icon-box {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.45rem;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.sound-card-item:hover .sound-icon-box {
+  transform: scale(1.12) rotate(4deg);
+}
+
+.sound-meta-box {
+  flex: 1;
+  min-width: 0;
+}
+
+.sound-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.sound-subtitle {
+  font-size: 0.74rem;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Sound wave animated equalizer */
+.sound-playing-wave {
+  display: flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 18px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.sound-playing-wave span {
+  width: 3px;
+  background: var(--accent-color, #a855f7);
+  border-radius: 2px;
+  animation: waveBar 0.8s ease-in-out infinite alternate;
+}
+
+.sound-playing-wave span:nth-child(1) { height: 40%; animation-delay: 0.1s; }
+.sound-playing-wave span:nth-child(2) { height: 95%; animation-delay: 0.3s; }
+.sound-playing-wave span:nth-child(3) { height: 60%; animation-delay: 0.15s; }
+.sound-playing-wave span:nth-child(4) { height: 80%; animation-delay: 0.4s; }
+
+@keyframes waveBar {
+  0% {
+    height: 20%;
+  }
+  100% {
+    height: 100%;
+  }
+}
+
+/* 7. Footer */
+.soundboard-footer {
+  padding: 0.9rem 1.4rem;
+  background: rgba(15, 23, 42, 0.7);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.soundboard-mode-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.soundboard-mode-hint .pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+}
+
+/* 8. FLOATING SOUNDBOARD NOTIFICATION (Toast for incoming sound effect) */
+.soundboard-toast-container {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10050;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.soundboard-toast-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 1.1rem;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1.5px solid rgba(168, 85, 247, 0.5);
+  border-radius: 999px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65), 0 0 20px rgba(168, 85, 247, 0.35);
+  color: #f8fafc;
+  font-size: 0.85rem;
+  font-weight: 600;
+  animation: toastDrop 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes toastDrop {
+  from {
+    transform: translateY(-16px) scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.soundboard-toast-icon {
+  font-size: 1.15rem;
+}
+
+.soundboard-toast-title {
+  color: #f1f5f9;
+}
+
+.soundboard-toast-name {
+  color: #c084fc;
+  font-weight: 700;
+}

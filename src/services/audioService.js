@@ -7,6 +7,9 @@ class AudioService {
   constructor() {
     this.ctx = null;
     this.isMuted = false;
+    this.activeSoundboardAudio = null;
+    this.currentPlayingSoundId = null;
+    this.soundboardListeners = new Set();
   }
 
   init() {
@@ -23,6 +26,9 @@ class AudioService {
 
   toggleMute() {
     this.isMuted = !this.isMuted;
+    if (this.isMuted) {
+      this.stopSoundboard();
+    }
     return this.isMuted;
   }
 
@@ -412,6 +418,107 @@ class AudioService {
     } catch (e) {
       // Ignore
     }
+  }
+
+  /**
+   * Play an audio file from the soundboard.
+   * Accepts sound id, file path, or sound object.
+   */
+  playSoundboard(soundFileOrTrack, volume = 0.85) {
+    if (this.isMuted) return null;
+
+    const file = typeof soundFileOrTrack === 'object' && soundFileOrTrack
+      ? soundFileOrTrack.file
+      : soundFileOrTrack;
+    const soundId = typeof soundFileOrTrack === 'object' && soundFileOrTrack
+      ? soundFileOrTrack.id
+      : (typeof soundFileOrTrack === 'string' ? soundFileOrTrack : 'custom');
+
+    if (!file) return null;
+
+    // Stop currently playing soundboard clip if any
+    this.stopSoundboard();
+
+    try {
+      const audioEl = new Audio(file);
+      audioEl.volume = Math.max(0, Math.min(1, volume));
+      this.activeSoundboardAudio = audioEl;
+      this.currentPlayingSoundId = soundId;
+
+      this._notifySoundboardListeners({ isPlaying: true, soundId, file });
+
+      audioEl.onended = () => {
+        if (this.activeSoundboardAudio === audioEl) {
+          this.activeSoundboardAudio = null;
+          this.currentPlayingSoundId = null;
+          this._notifySoundboardListeners({ isPlaying: false, soundId: null, file: null });
+        }
+      };
+
+      audioEl.onerror = (err) => {
+        console.warn('Gagal memutar audio soundboard:', err);
+        if (this.activeSoundboardAudio === audioEl) {
+          this.activeSoundboardAudio = null;
+          this.currentPlayingSoundId = null;
+          this._notifySoundboardListeners({ isPlaying: false, soundId: null, file: null });
+        }
+      };
+
+      const promise = audioEl.play();
+      if (promise !== undefined) {
+        promise.catch((err) => {
+          console.warn('Autoplay soundboard dicegah:', err);
+          if (this.activeSoundboardAudio === audioEl) {
+            this.activeSoundboardAudio = null;
+            this.currentPlayingSoundId = null;
+            this._notifySoundboardListeners({ isPlaying: false, soundId: null, file: null });
+          }
+        });
+      }
+
+      return audioEl;
+    } catch (e) {
+      console.warn('Soundboard error:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Stop any currently playing soundboard audio
+   */
+  stopSoundboard() {
+    if (this.activeSoundboardAudio) {
+      try {
+        this.activeSoundboardAudio.pause();
+        this.activeSoundboardAudio.currentTime = 0;
+      } catch (e) {
+        // Ignore
+      }
+      this.activeSoundboardAudio = null;
+    }
+    this.currentPlayingSoundId = null;
+    this._notifySoundboardListeners({ isPlaying: false, soundId: null, file: null });
+  }
+
+  /**
+   * Listen to soundboard playback state changes
+   */
+  subscribeSoundboard(listener) {
+    if (typeof listener !== 'function') return () => {};
+    this.soundboardListeners.add(listener);
+    return () => {
+      this.soundboardListeners.delete(listener);
+    };
+  }
+
+  _notifySoundboardListeners(state) {
+    this.soundboardListeners.forEach((listener) => {
+      try {
+        listener(state);
+      } catch (e) {
+        console.error('Error in soundboard listener:', e);
+      }
+    });
   }
 }
 

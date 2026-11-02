@@ -1236,6 +1236,37 @@ export const multiplayerAdapter = {
   },
 
   /**
+   * Sends a Soundboard audio trigger to all players in the room via Realtime Broadcast
+   */
+  async sendRoomSoundboard(roomCode, soundboardPayload) {
+    if (!supabase) return { success: false, error: 'Supabase offline' };
+    const code = roomCode.trim().toUpperCase();
+    const channelName = `room_channel_${code}`;
+    let channel = this.activeChannels[code];
+    if (!channel) {
+      channel = supabase.channel(channelName);
+      this.activeChannels[code] = channel;
+      channel.subscribe();
+    }
+
+    try {
+      await channel.send({
+        type: 'broadcast',
+        event: 'room_soundboard',
+        payload: {
+          ...soundboardPayload,
+          id: `sb_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          timestamp: Date.now(),
+        },
+      });
+      return { success: true };
+    } catch (err) {
+      console.warn('Gagal mengirim broadcast soundboard:', err);
+      return { success: false, error: err.message };
+    }
+  },
+
+  /**
    * Broadcasts WebRTC Voice Chat signaling message (offer, answer, ICE, speaking)
    */
   async sendVoiceSignal(roomCode, signalPayload) {
@@ -1264,9 +1295,17 @@ export const multiplayerAdapter = {
   },
 
   /**
-   * Subscribes to Realtime updates, live chat, reactions, and voice signaling for a specific room
+   * Subscribes to Realtime updates, live chat, reactions, voice signaling, and soundboard for a specific room
    */
-  subscribeToRoom(roomCode, onRoomUpdate, onStatusChange = null, onChatMessage = null, onReaction = null, onVoiceSignal = null) {
+  subscribeToRoom(
+    roomCode,
+    onRoomUpdate,
+    onStatusChange = null,
+    onChatMessage = null,
+    onReaction = null,
+    onVoiceSignal = null,
+    onSoundboard = null
+  ) {
     if (!supabase) return () => {};
     const code = roomCode.trim().toUpperCase();
     const channelName = `room_channel_${code}`;
@@ -1295,6 +1334,11 @@ export const multiplayerAdapter = {
       .on('broadcast', { event: 'room_reaction' }, ({ payload }) => {
         if (onReaction && payload) {
           onReaction(payload);
+        }
+      })
+      .on('broadcast', { event: 'room_soundboard' }, ({ payload }) => {
+        if (onSoundboard && payload) {
+          onSoundboard(payload);
         }
       })
       .on('broadcast', { event: 'voice_signal' }, ({ payload }) => {

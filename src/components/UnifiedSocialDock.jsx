@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mic, MicOff, Smile, MessageSquare } from 'lucide-react';
+import { Mic, MicOff, Smile, MessageSquare, Radio } from 'lucide-react';
 import '../styles/socialDock.css';
 
 export default function UnifiedSocialDock({
@@ -13,6 +13,9 @@ export default function UnifiedSocialDock({
   isChatOpen = false,
   onToggleChat,
   hasUnreadChat = false,
+  isSoundboardOpen = false,
+  onToggleSoundboard,
+  isSoundboardPlaying = false,
 }) {
   if (!isVisible) return null;
 
@@ -20,7 +23,7 @@ export default function UnifiedSocialDock({
     <div
       className="unified-social-dock"
       role="toolbar"
-      aria-label="Toolbar Interaksi Meja (Voice, Reaksi, Chat)"
+      aria-label="Toolbar Interaksi Meja (Voice, Reaksi, Chat, Soundboard)"
     >
       {/* 1. Live Voice Chat Button (Mic) */}
       <button
@@ -60,7 +63,22 @@ export default function UnifiedSocialDock({
 
       <div className="social-dock-divider" />
 
-      {/* 3. Live Chat Button */}
+      {/* 3. Soundboard Meme Button */}
+      <button
+        type="button"
+        className={`btn-social-dock btn-social-soundboard ${
+          isSoundboardOpen ? 'active' : ''
+        } ${isSoundboardPlaying ? 'is-playing' : ''}`}
+        onClick={onToggleSoundboard}
+        title="Buka Soundboard Meme & SFX"
+        aria-label="Buka Soundboard Meme"
+      >
+        <Radio size={17} />
+      </button>
+
+      <div className="social-dock-divider" />
+
+      {/* 4. Live Chat Button */}
       <button
         type="button"
         className={`btn-social-dock btn-social-chat ${isChatOpen ? 'active' : ''}`}
