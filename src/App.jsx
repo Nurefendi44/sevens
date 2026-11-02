@@ -119,6 +119,7 @@ export default function App() {
     return true;
   });
   const [speakingPlayers, setSpeakingPlayers] = useState(new Set());
+  const [voiceVolume, setVoiceVolume] = useState(() => voiceChat.getVoiceVolume());
 
   // Table View & Mobile Focus Settings (Persistent)
   const [showOpponents, setShowOpponents] = useState(() => {
@@ -2845,43 +2846,6 @@ export default function App() {
             </button>
           )}
 
-          {/* Mobile Live Voice Button */}
-          <button
-            className="btn-icon"
-            onClick={handleToggleVoice}
-            title={isVoiceConnected && !isVoiceMuted ? 'Matikan Mic' : 'Nyalakan Mic'}
-            style={{
-              color: isVoiceConnected && !isVoiceMuted ? '#10b981' : '#94a3b8',
-              borderColor: isVoiceConnected && !isVoiceMuted ? '#10b981' : undefined,
-            }}
-          >
-            {isVoiceConnected && !isVoiceMuted ? (
-              <Mic size={16} className={speakingPlayers.has(myPlayerId) ? 'pulse-speaking' : ''} />
-            ) : (
-              <MicOff size={16} />
-            )}
-          </button>
-
-          {/* Mobile Chat Button */}
-          <button
-            className="btn-icon"
-            onClick={() => setIsChatOpen(true)}
-            title="Chat & Emote Meja"
-            style={{ color: '#38bdf8' }}
-          >
-            <MessageSquare size={16} />
-          </button>
-
-          {/* Mobile Reaction Button */}
-          <button
-            className="btn-icon"
-            onClick={() => setIsReactionOpen((prev) => !prev)}
-            title="Reaksi Emote Terbang (Google Meet)"
-            style={{ color: '#fbbf24' }}
-          >
-            <Smile size={16} />
-          </button>
-
           <button
             className="btn-icon"
             onClick={() => setShowScoreboardModal(true)}
@@ -2896,15 +2860,6 @@ export default function App() {
             title={isMuted ? 'Nyalakan Suara' : 'Matikan Suara'}
           >
             {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-          </button>
-
-          <button
-            className={`btn-icon ${isSoundboardOpen ? 'active' : ''} ${isSoundboardPlaying ? 'pulse-speaking' : ''}`}
-            onClick={() => setIsSoundboardOpen((prev) => !prev)}
-            title="Soundboard Meme & SFX"
-            style={{ color: '#c084fc' }}
-          >
-            <Radio size={16} />
           </button>
 
           <button
@@ -3229,6 +3184,11 @@ export default function App() {
         isVoiceConnected={isVoiceConnected}
         isVoiceMuted={isVoiceMuted}
         onToggleVoice={handleToggleVoice}
+        voiceVolume={voiceVolume}
+        onVoiceVolumeChange={(vol) => {
+          const clamped = voiceChat.setVoiceVolume(vol);
+          setVoiceVolume(clamped);
+        }}
         isMuted={isMuted}
         onToggleSound={handleToggleSound}
         onRestart={() => {

@@ -101,8 +101,41 @@ class VoiceChatService {
     this.onSpeakingChange = null; // (playerId, isSpeaking) => void
     this.onStatusChange = null;   // ({ isConnected, isMuted, error }) => void
     this.onPeerConnect = null;    // (playerId) => void
-    this.iceConfig = { iceServers: ICE_SERVERS.iceServers, hasTurn: false };
-    this.speakingPeers = new Set();
+    this.voiceVolume =
+      typeof localStorage !== 'undefined'
+        ? Math.max(0, Math.min(1, parseFloat(localStorage.getItem('poker_voice_volume') || '1.0')))
+        : 1.0;
+    this.onVolumeChange = null;
+  }
+
+  /**
+   * Set master playback volume for all incoming voice streams (0.0 to 1.0)
+   */
+  setVoiceVolume(vol) {
+    const clamped = Math.max(0, Math.min(1, parseFloat(vol) || 0));
+    this.voiceVolume = clamped;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('poker_voice_volume', clamped.toString());
+    }
+    this.remoteAudios.forEach((audioEl) => {
+      try {
+        audioEl.volume = clamped;
+        audioEl.muted = clamped === 0;
+      } catch (e) {
+        // Ignore
+      }
+    });
+    if (this.onVolumeChange) {
+      this.onVolumeChange(clamped);
+    }
+    return clamped;
+  }
+
+  /**
+   * Get current master voice volume
+   */
+  getVoiceVolume() {
+    return this.voiceVolume;
   }
 
   isSupported() {
@@ -580,8 +613,8 @@ class VoiceChatService {
         audioEl.playsInline = true;
         audioEl.setAttribute('playsinline', 'true');
         audioEl.setAttribute('autoplay', 'true');
-        audioEl.volume = 1.0;
-        audioEl.muted = false;
+        audioEl.volume = this.voiceVolume;
+        audioEl.muted = this.voiceVolume === 0;
         // Position offscreen so mobile WebKit keeps decoding active
         audioEl.style.position = 'fixed';
         audioEl.style.top = '-9999px';

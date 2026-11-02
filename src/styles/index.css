@@ -528,8 +528,18 @@ button {
 
 @media (max-width: 768px) {
   .top-nav {
-    height: 54px;
-    padding: 0 0.75rem;
+    height: 52px;
+    padding: 0 0.65rem;
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  .brand-section {
+    min-width: 0;
+    flex-shrink: 1;
+    overflow: hidden;
   }
 
   .nav-actions-desktop,
@@ -540,17 +550,20 @@ button {
   .nav-actions-mobile {
     display: flex !important;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.35rem;
+    flex-shrink: 0;
   }
 
   .brand-title {
-    font-size: 1.15rem;
-    gap: 0.25rem;
+    font-size: 1.05rem;
+    gap: 0.2rem;
+    white-space: nowrap;
   }
 
   .brand-room-pill {
-    padding: 0.15rem 0.5rem;
-    font-size: 0.7rem;
+    padding: 0.15rem 0.45rem;
+    font-size: 0.68rem;
+    white-space: nowrap;
   }
 }
 

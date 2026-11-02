@@ -5,7 +5,7 @@ export default function ActionAnnouncementPopup({ action, onDismiss }) {
     if (!action) return;
     const timer = setTimeout(() => {
       if (onDismiss) onDismiss();
-    }, 2000);
+    }, 1100);
     return () => clearTimeout(timer);
   }, [action, onDismiss]);
 
@@ -14,71 +14,71 @@ export default function ActionAnnouncementPopup({ action, onDismiss }) {
   const isPass = action.type === 'PASS';
 
   const getShortActionLabel = () => {
-    if (isPass) return 'LEWAT (PASS)';
+    if (isPass) return 'LEWAT';
     if (action.type === 'PLAY_COMBO') {
-      return action.combo?.label || action.combo?.type?.replace(/_/g, ' ') || 'MAIN COMBO';
+      return action.combo?.label || action.combo?.type?.replace(/_/g, ' ') || 'MAIN';
     }
-    if (action.type === 'CLOSE') return 'TUTUP KARTU';
-    if (action.type === 'DISCARD') return 'BUANG KARTU';
-    return 'MAIN KARTU';
+    if (action.type === 'CLOSE') return 'TUTUP';
+    if (action.type === 'DISCARD') return 'BUANG';
+    return 'MAIN';
   };
 
   return (
     <div
       style={{
         position: 'fixed',
-        top: '64px',
+        top: '56px',
         left: '50%',
         transform: 'translateX(-50%)',
-        zIndex: 9998,
+        zIndex: 9980,
         pointerEvents: 'none',
         display: 'inline-flex',
         alignItems: 'center',
-        gap: '8px',
-        background: 'rgba(15, 23, 42, 0.82)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
+        gap: '6px',
+        background: 'rgba(15, 23, 42, 0.78)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         border: `1px solid ${
-          isPass ? 'rgba(248, 113, 113, 0.45)' : 'rgba(56, 189, 248, 0.45)'
+          isPass ? 'rgba(248, 113, 113, 0.35)' : 'rgba(56, 189, 248, 0.35)'
         }`,
         borderRadius: '999px',
-        padding: '0.38rem 0.9rem',
-        boxShadow: '0 8px 20px rgba(0, 0, 0, 0.45)',
-        animation: 'slideDownFade 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
-        maxWidth: '92vw',
+        padding: '0.2rem 0.65rem',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
+        animation: 'slideDownFade 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
+        maxWidth: '85vw',
         whiteSpace: 'nowrap',
       }}
     >
-      <span style={{ fontSize: '1rem', lineHeight: 1 }}>
+      <span style={{ fontSize: '0.82rem', lineHeight: 1 }}>
         {action.avatar || (isPass ? '⏭️' : '⚡')}
       </span>
 
       <strong
         style={{
           color: '#f8fafc',
-          fontSize: '0.8rem',
+          fontSize: '0.72rem',
           fontWeight: 700,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
-          maxWidth: '130px',
+          maxWidth: '100px',
         }}
       >
         {action.playerName}
       </strong>
 
-      <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem' }}>•</span>
+      <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.65rem' }}>•</span>
 
       <span
         style={{
-          fontSize: '0.72rem',
+          fontSize: '0.65rem',
           fontWeight: 800,
-          padding: '0.14rem 0.55rem',
+          padding: '0.1rem 0.45rem',
           borderRadius: '999px',
           background: isPass
-            ? 'rgba(239, 68, 68, 0.22)'
-            : 'rgba(56, 189, 248, 0.22)',
+            ? 'rgba(239, 68, 68, 0.18)'
+            : 'rgba(56, 189, 248, 0.18)',
           color: isPass ? '#fca5a5' : '#7dd3fc',
-          letterSpacing: '0.03em',
+          letterSpacing: '0.02em',
           textTransform: 'uppercase',
         }}
       >

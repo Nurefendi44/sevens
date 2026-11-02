@@ -51,6 +51,8 @@ export default function MobileNavDrawer({
   isVoiceConnected = false,
   isVoiceMuted = true,
   onToggleVoice = null,
+  voiceVolume = 1.0,
+  onVoiceVolumeChange = null,
   isMuted,
   onToggleSound,
   onRestart,
@@ -280,6 +282,53 @@ export default function MobileNavDrawer({
                 <small>Bicara langsung secara realtime dengan teman di meja</small>
               </div>
             </button>
+          )}
+
+          {/* Voice Output Volume Slider */}
+          {isVoiceConnected && onVoiceVolumeChange && (
+            <div
+              style={{
+                margin: '-0.3rem 0 0.6rem 0',
+                padding: '0.65rem 0.9rem',
+                background: 'rgba(16, 185, 129, 0.08)',
+                border: '1px solid rgba(16, 185, 129, 0.25)',
+                borderRadius: '12px',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '0.4rem',
+                  fontSize: '0.78rem',
+                  color: '#94a3b8',
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#e2e8f0', fontWeight: 600 }}>
+                  <Volume2 size={14} color="#10b981" /> Volume Suara Teman
+                </span>
+                <span style={{ fontWeight: 700, color: '#10b981', fontSize: '0.8rem' }}>
+                  {Math.round(voiceVolume * 100)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={voiceVolume}
+                onChange={(e) => onVoiceVolumeChange(parseFloat(e.target.value))}
+                style={{
+                  width: '100%',
+                  accentColor: '#10b981',
+                  cursor: 'pointer',
+                  height: '5px',
+                  borderRadius: '3px',
+                }}
+                aria-label="Volume Suara Teman"
+              />
+            </div>
           )}
 
           {/* Live Chat & Quick Emotes */}
