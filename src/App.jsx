@@ -2474,11 +2474,13 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Real-time Action Announcement Pop-up (Who played / discarded / passed what) */}
-      <ActionAnnouncementPopup
-        action={recentActionPopup}
-        onDismiss={() => setRecentActionPopup(null)}
-      />
+      {/* Real-time Action Announcement Pop-up (Only for games without table trick board) */}
+      {activeGameType !== 'bigtwo' && (
+        <ActionAnnouncementPopup
+          action={recentActionPopup}
+          onDismiss={() => setRecentActionPopup(null)}
+        />
+      )}
 
       {/* Toast Alert */}
       {toastMessage && (

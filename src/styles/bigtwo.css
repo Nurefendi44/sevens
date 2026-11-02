@@ -209,69 +209,95 @@
 }
 
 /* ------------------------------------------------------------------------------
-   ALERT TOAST (Popup when user selects invalid combo / action error)
+   SLEEK ALERT BANNER (Floating error alert when user selects invalid combo)
    ------------------------------------------------------------------------------ */
-.bigtwo-alert-toast {
+.bigtwo-alert-banner {
   position: fixed;
-  bottom: 110px;
+  top: 64px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(185, 28, 28, 0.96);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1.5px solid rgba(254, 202, 202, 0.85);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.75), 0 0 20px rgba(239, 68, 68, 0.45);
-  color: #ffffff;
-  padding: 0.5rem 1.1rem;
-  border-radius: 999px;
-  display: inline-flex;
+  width: calc(100% - 1.5rem);
+  max-width: 440px;
+  background: linear-gradient(135deg, rgba(28, 12, 16, 0.96) 0%, rgba(45, 15, 22, 0.96) 100%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.75), 0 0 20px rgba(239, 68, 68, 0.25);
+  border-radius: 12px;
+  padding: 0.6rem 0.85rem;
+  display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.75rem;
   z-index: 10050;
-  max-width: 90vw;
-  animation: alertBounceIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: alertBannerSlideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-@keyframes alertBounceIn {
-  0% {
+@keyframes alertBannerSlideDown {
+  from {
     opacity: 0;
-    transform: translate(-50%, 12px) scale(0.92);
+    transform: translate(-50%, -10px) scale(0.97);
   }
-  100% {
+  to {
     opacity: 1;
     transform: translate(-50%, 0) scale(1);
   }
 }
 
-.alert-toast-body {
+.bigtwo-alert-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #f87171;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.alert-icon {
-  color: #fef08a;
+  justify-content: center;
   flex-shrink: 0;
 }
 
-.alert-text {
-  color: #fff1f2;
+.bigtwo-alert-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.btn-alert-dismiss {
-  background: rgba(255, 255, 255, 0.15);
+.bigtwo-alert-title {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #fca5a5;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.bigtwo-alert-desc {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #f1f5f9;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.bigtwo-alert-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
   border: none;
-  color: #ffffff;
-  border-radius: 999px;
-  width: 22px;
-  height: 22px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.bigtwo-alert-close:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #ef4444;
 }
 
 /* ------------------------------------------------------------------------------

@@ -180,20 +180,23 @@ export default function TableBigTwo({
       <div className="bigtwo-felt-overlay" />
       <div className="bigtwo-watermark">BIG TWO</div>
 
-      {/* FLOATING ACTION ALERT POPUP */}
+      {/* SLEEK FLOATING ACTION ALERT BANNER */}
       {actionAlert && (
-        <div className="bigtwo-alert-toast" role="alert">
-          <div className="alert-toast-body">
-            <AlertTriangle size={16} className="alert-icon" />
-            <span className="alert-text">{actionAlert}</span>
+        <div className="bigtwo-alert-banner" role="alert">
+          <div className="bigtwo-alert-icon-box">
+            <AlertTriangle size={18} />
+          </div>
+          <div className="bigtwo-alert-content">
+            <span className="bigtwo-alert-title">Kombinasi Kartu Tidak Valid</span>
+            <span className="bigtwo-alert-desc">{actionAlert}</span>
           </div>
           <button
             type="button"
-            className="btn-alert-dismiss"
+            className="bigtwo-alert-close"
             onClick={() => setActionAlert(null)}
             aria-label="Tutup Peringatan"
           >
-            <X size={14} />
+            <X size={15} />
           </button>
         </div>
       )}
