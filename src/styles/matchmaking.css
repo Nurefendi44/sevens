@@ -278,6 +278,13 @@
   animation: mmx-pop 0.9s ease-out;
 }
 
+.mmx-count-num.mmx-count-time {
+  font-size: clamp(1.4rem, 6.5vw, 2.1rem);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  font-family: monospace, var(--font-display, sans-serif);
+}
+
 @keyframes mmx-pop {
   0% { transform: scale(1.6); opacity: 0; }
   40% { transform: scale(1); opacity: 1; }
@@ -543,6 +550,22 @@
   gap: 0.6rem;
   justify-content: center;
   flex-wrap: wrap;
+}
+
+.mmx-btn.pulse-cta {
+  animation: pulseGoldCta 1.8s infinite ease-in-out;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.45);
+}
+
+@keyframes pulseGoldCta {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.35);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 0 28px rgba(245, 158, 11, 0.7);
+  }
 }
 
 /* Remove bot button on card */

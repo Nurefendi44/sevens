@@ -50,7 +50,7 @@ export default function MatchmakingScreen({
   const slotCount = Math.min(seatTarget, Math.max(minPlayers, players.length + extraSlot));
   const slots = Array.from({ length: slotCount }).map((_, i) => players[i] || null);
 
-  const totalCountdown = isRoomFull ? 5 : 10;
+  const totalCountdown = isRoomFull ? 5 : 120;
   const ringRadius = 54;
   const ringCirc = 2 * Math.PI * ringRadius;
   const progress = countdown == null ? 1 : Math.max(0, Math.min(1, countdown / totalCountdown));
@@ -59,14 +59,16 @@ export default function MatchmakingScreen({
     phase === 'full'
       ? 'MEJA PENUH!'
       : phase === 'found'
-      ? 'LAWAN DITEMUKAN!'
+      ? 'PEMAIN CUKUP!'
       : 'MENCARI LAWAN';
 
   const subtitle =
     phase === 'full'
-      ? 'Bersiap, pertandingan segera dimulai'
+      ? 'Meja penuh! Bersiap, pertandingan segera dimulai...'
       : phase === 'found'
-      ? 'Menunggu pemain lain bergabung...'
+      ? (isHost
+          ? `Menunggu pemain lain (${players.length}/${seatTarget}) atau klik Mulai Sekarang`
+          : `Menunggu pemain lain (${players.length}/${seatTarget}) atau Host memulai permainan...`)
       : `Menunggu minimal ${minPlayers} pemain`;
 
   return (
@@ -145,8 +147,11 @@ export default function MatchmakingScreen({
                     strokeDashoffset={ringCirc * (1 - progress)}
                   />
                 </svg>
-                <strong key={countdown} className="mmx-count-num">
-                  {countdown ?? 0}
+                <strong
+                  key={countdown}
+                  className={`mmx-count-num ${countdown > 10 ? 'mmx-count-time' : ''}`}
+                >
+                  {countdown > 10 ? formatElapsed(countdown) : (countdown ?? 0)}
                 </strong>
               </div>
             )}
@@ -244,12 +249,16 @@ export default function MatchmakingScreen({
             {players.length >= 2 && onStartGame && (
               <button
                 type="button"
-                className="mmx-btn mmx-btn-gold"
+                className={`mmx-btn mmx-btn-gold ${hasEnoughToStart ? 'pulse-cta' : ''}`}
                 onClick={onStartGame}
-                title="Mulai permainan sekarang dengan susunan pemain saat ini"
+                title="Mulai permainan sekarang tanpa menunggu pemain lain"
               >
                 <Play size={16} fill="currentColor" />
-                <span>Mulai Sekarang ({players.length} Pemain)</span>
+                <span>
+                  {hasEnoughToStart
+                    ? `Mulai Permainan Sekarang (${players.length} Pemain)`
+                    : `Mulai Sekarang (${players.length} Pemain)`}
+                </span>
               </button>
             )}
           </div>

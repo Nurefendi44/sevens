@@ -161,7 +161,7 @@ export default function MultiplayerLobby({
   // ---------------------------------------------------------------------------
   const isMatchmakingRoom = Boolean(room?.game_state?.matchmaking);
   const seatTarget =
-    room?.game_state?.config?.roomPlayerCount || room?.game_state?.config?.playerCount || 4;
+    room?.game_state?.config?.roomPlayerCount || room?.game_state?.config?.playerCount || 6;
   const isRoomFull = players.length >= seatTarget;
   const hasEnoughToStart = players.length >= MATCHMAKING_MIN_PLAYERS;
   const playerCountNow = players.length;
@@ -187,14 +187,14 @@ export default function MultiplayerLobby({
     return () => clearInterval(id);
   }, [isParticipant, isMatchmakingRoom, hasEnoughToStart, playerCountNow, roomCodeNow]);
 
-  // Auto-start: with >= 4 players count down (5s if full, otherwise a 10s quiet period that
-  // restarts whenever someone joins/leaves), then the HOST starts the game
+  // Auto-start: with >= 4 players count down (5s if full, otherwise 120s (2 minutes) to wait for more players
+  // or until Host starts manually), then the HOST auto-starts the game
   useEffect(() => {
     if (!(isParticipant && isMatchmakingRoom && hasEnoughToStart)) {
       setCountdown(null);
       return undefined;
     }
-    let remaining = isRoomFull ? 5 : 10;
+    let remaining = isRoomFull ? 5 : 120;
     setCountdown(remaining);
     const id = setInterval(() => {
       remaining -= 1;
@@ -997,7 +997,7 @@ export default function MultiplayerLobby({
                   {isRoomFull
                     ? `Meja penuh! Permainan dimulai dalam ${countdown ?? 0} detik...`
                     : hasEnoughToStart
-                    ? `Pemain cukup (${players.length})! Mulai dalam ${countdown ?? 0} detik jika tidak ada yang bergabung...`
+                    ? `Pemain cukup (${players.length})! Menunggu pemain lain (${Math.floor((countdown ?? 0) / 60)}m ${String((countdown ?? 0) % 60).padStart(2, '0')}s) atau klik Mulai Sekarang...`
                     : `Mencari pemain... (${players.length}/${MATCHMAKING_MIN_PLAYERS} minimal)`}
                 </strong>
                 <span>
