@@ -121,6 +121,79 @@
   font-weight: 700;
 }
 
+.portal-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1.35rem;
+}
+
+.btn-portal-leaderboard {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 1.45rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.16) 0%, rgba(217, 119, 6, 0.28) 100%);
+  border: 1.5px solid rgba(251, 191, 36, 0.55);
+  color: #fef08a;
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-portal-leaderboard:hover {
+  transform: translateY(-2px) scale(1.02);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.3) 0%, rgba(217, 119, 6, 0.45) 100%);
+  border-color: #fbbf24;
+  box-shadow: 0 8px 30px rgba(245, 158, 11, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+}
+
+.trophy-gold {
+  color: #fbbf24;
+  filter: drop-shadow(0 2px 6px rgba(245, 158, 11, 0.6));
+}
+
+.portal-badge-live {
+  font-size: 0.65rem;
+  font-weight: 900;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #10b981;
+  color: #ffffff;
+  letter-spacing: 0.06em;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
+}
+
+.catalog-header-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.btn-card-rank-mini {
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fde68a;
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.btn-card-rank-mini:hover {
+  background: rgba(251, 191, 36, 0.2);
+  border-color: #fbbf24;
+  color: #ffffff;
+}
+
+.card-mini-trophy {
+  color: #fbbf24;
+}
+
 /* ==========================================================================
    3-CARD GAME CATALOG GRID
    ========================================================================== */

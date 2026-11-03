@@ -15,6 +15,7 @@ import {
   Bot,
   Plus,
   Minus,
+  Trophy,
 } from 'lucide-react';
 import '../styles/modeSelection.css';
 
@@ -85,6 +86,7 @@ export default function ModeSelectionScreen({
   onSelectGame,
   onSelectMode,
   onOpenRules,
+  onOpenScoreboard,
 }) {
   const [activeGame, setActiveGame] = useState(selectedGame || 'sevens');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -328,6 +330,21 @@ export default function ModeSelectionScreen({
             Pilih permainan kartu favorit Anda. Mainkan secara <strong>Realtime Online</strong>{' '}
             bersama teman atau <strong>Pass & Play Offline</strong> dalam satu perangkat.
           </p>
+
+          {onOpenScoreboard && (
+            <div className="portal-header-actions">
+              <button
+                type="button"
+                className="btn-portal-leaderboard"
+                onClick={() => onOpenScoreboard()}
+                title="Buka Papan Peringkat & Top Global"
+              >
+                <Trophy size={18} className="trophy-gold" />
+                <span>Top Global Leaderboard</span>
+                <span className="portal-badge-live">ONLINE</span>
+              </button>
+            </div>
+          )}
         </header>
 
         {/* ===================================================================
@@ -360,18 +377,34 @@ export default function ModeSelectionScreen({
                   <span>{game.playersLabel}</span>
                 </span>
 
-                <button
-                  type="button"
-                  className="btn-card-rules-mini"
-                  title={`Aturan Main ${game.title}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onOpenRules) onOpenRules(game.id);
-                  }}
-                >
-                  <BookOpen size={13} />
-                  <span>Aturan</span>
-                </button>
+                <div className="catalog-header-actions-right">
+                  {onOpenScoreboard && (
+                    <button
+                      type="button"
+                      className="btn-card-rules-mini btn-card-rank-mini"
+                      title={`Top Global ${game.title}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenScoreboard(game.id);
+                      }}
+                    >
+                      <Trophy size={12} className="card-mini-trophy" />
+                      <span>Rank</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn-card-rules-mini"
+                    title={`Aturan Main ${game.title}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onOpenRules) onOpenRules(game.id);
+                    }}
+                  >
+                    <BookOpen size={13} />
+                    <span>Aturan</span>
+                  </button>
+                </div>
               </div>
 
               {/* Ilustrasi Tumpukan Kartu Remi 3D (Fanned Cards) */}

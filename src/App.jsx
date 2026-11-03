@@ -2446,6 +2446,21 @@ export default function App() {
             else if (game === 'game41') setShowRules41Modal(true);
             else setShowRulesModal(true);
           }}
+          onOpenScoreboard={(game) => {
+            if (game) setActiveGameType(game);
+            setShowScoreboardModal(true);
+          }}
+        />
+
+        {/* Scoreboard & Top Global Modal */}
+        <ScoreboardModal
+          isOpen={showScoreboardModal}
+          onClose={() => setShowScoreboardModal(false)}
+          scoreboardData={getCurrentScoreboardList()}
+          onResetScoreboard={() => handleResetScoreboard(activeGameType)}
+          activeGameTitle={getCurrentScoreboardTitle()}
+          activeGameType={activeGameType}
+          currentMyId={myPlayerId}
         />
 
         {/* Rules Guide Modals */}
