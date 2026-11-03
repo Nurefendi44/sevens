@@ -22,6 +22,7 @@ import {
   MATCHMAKING_MIN_PLAYERS,
 } from './services/multiplayerAdapter.js';
 import { isSupabaseConfigured } from './services/supabaseClient.js';
+import { recordMultiplayerGameStats } from './services/leaderboardService.js';
 
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import Board from './components/Board.jsx';
@@ -1915,6 +1916,16 @@ export default function App() {
       }
       return nextScores;
     });
+
+    // Automatically record to Top Global Leaderboard if in multiplayer mode
+    if (isMultiplayerMode) {
+      recordMultiplayerGameStats({
+        gameType: gameKey,
+        rankings,
+        winnerId,
+        isMultiplayer: isMultiplayerMode,
+      });
+    }
   };
 
   const handleResetScoreboard = (gameKey = activeGameType) => {
@@ -3278,13 +3289,15 @@ export default function App() {
         />
       )}
 
-      {/* Cumulative Scoreboard Modal (Points Model) */}
+      {/* Cumulative Scoreboard Modal (Points Model & Top Global) */}
       <ScoreboardModal
         isOpen={showScoreboardModal}
         onClose={() => setShowScoreboardModal(false)}
         scoreboardData={getCurrentScoreboardList()}
         onResetScoreboard={() => handleResetScoreboard(activeGameType)}
         activeGameTitle={getCurrentScoreboardTitle()}
+        activeGameType={activeGameType}
+        currentMyId={myPlayerId}
       />
 
       {/* Rules Guide Modals */}
