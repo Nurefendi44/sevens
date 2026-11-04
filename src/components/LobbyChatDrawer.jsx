@@ -42,6 +42,23 @@ export default function LobbyChatDrawer({
 
   const messagesEndRef = useRef(null);
 
+  // Temporary guest nickname if player hasn't set one yet
+  const guestName = useMemo(() => {
+    if (typeof localStorage === 'undefined') return 'Pemain #1001';
+    try {
+      let g = localStorage.getItem('royal_cards_guest_name');
+      if (!g) {
+        g = `Pemain #${Math.floor(1000 + Math.random() * 9000)}`;
+        localStorage.setItem('royal_cards_guest_name', g);
+      }
+      return g;
+    } catch {
+      return 'Pemain #1001';
+    }
+  }, []);
+
+  const currentDisplayName = String(myProfile.name || '').trim() || guestName;
+
   // Subscribe to realtime global lobby chat
   useEffect(() => {
     const unsubscribe = subscribeToLobbyChat((newMsg) => {
@@ -93,17 +110,10 @@ export default function LobbyChatDrawer({
     const textToSend = typeof customText === 'string' ? customText : inputText;
     if (!textToSend.trim()) return;
 
-    if (!myProfile.name) {
-      if (onOpenProfileModal) {
-        onOpenProfileModal();
-      }
-      return;
-    }
-
     setIsSending(true);
     await sendLobbyChatMessage({
-      senderName: myProfile.name,
-      avatar: myProfile.avatar || '👑',
+      senderName: currentDisplayName,
+      avatar: myProfile.avatar || '👤',
       tier: myRankTier,
       message: textToSend.trim(),
     });
@@ -230,8 +240,8 @@ export default function LobbyChatDrawer({
               ) : (
                 filteredMessages.map((msg) => {
                   const isMe =
-                    myProfile.name &&
-                    msg.senderName.toLowerCase() === myProfile.name.toLowerCase();
+                    Boolean(currentDisplayName) &&
+                    msg.senderName?.toLowerCase() === currentDisplayName.toLowerCase();
                   const isSystem = msg.type === 'system';
                   const detectedCode = msg.roomCode || extractRoomCodeFromMessage(msg.message);
                   const timeString = new Date(msg.timestamp || Date.now()).toLocaleTimeString(
@@ -326,7 +336,7 @@ export default function LobbyChatDrawer({
                 placeholder={
                   myProfile.name
                     ? 'Kirim pesan atau ajak mabar...'
-                    : 'Atur Nickname profil terlebih dahulu...'
+                    : `Ketik pesan (mengirim sebagai ${currentDisplayName})...`
                 }
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
@@ -343,6 +353,39 @@ export default function LobbyChatDrawer({
                 <span>Kirim</span>
               </button>
             </form>
+
+            {!myProfile.name && onOpenProfileModal && (
+              <div
+                style={{
+                  padding: '0.35rem 0.85rem',
+                  fontSize: '0.68rem',
+                  color: '#94a3b8',
+                  background: 'rgba(15, 23, 42, 0.95)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                }}
+              >
+                <span>
+                  Mengirim sebagai: <strong style={{ color: '#fde047' }}>{currentDisplayName}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={onOpenProfileModal}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#38bdf8',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  Pasang Nickname & PIN
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -1967,7 +1967,8 @@
 
 @media (max-width: 720px) {
   .mode-selection-overlay {
-    padding: 0.85rem 0.85rem 2rem;
+    padding: 0.85rem 0.85rem 5.5rem;
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
   }
 
   .mlbb-top-hud {

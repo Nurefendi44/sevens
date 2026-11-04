@@ -50,8 +50,21 @@
   }
 }
 
+html,
 body {
   margin: 0;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Enforce minimum 16px font-size on mobile inputs to completely prevent iOS & Android auto-zoom */
+@media (max-width: 820px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
 }
 
 #root {
