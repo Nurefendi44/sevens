@@ -30,7 +30,9 @@ import {
   getPlayerRankTier,
   getSupremeTitle,
   getLocalPlayerProfile,
-  saveLocalPlayerProfile,
+  verifyAndSaveProfileWithPin,
+  extractPinHashFromItem,
+  hashProfilePin,
   PROFILE_AVATARS,
 } from '../services/leaderboardService';
 import '../styles/modeSelection.css';
@@ -123,11 +125,14 @@ export default function ModeSelectionScreen({
   const [botCount, setBotCount] = useState(1);
   const [deckMode, setDeckMode] = useState('double');
 
-  // Player Profile State (MLBB Top-Left Profile Bar)
+  // Player Profile State (MLBB Top-Left Profile Bar + 4-Digit PIN)
   const [profile, setProfile] = useState(() => getLocalPlayerProfile());
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [editNameInput, setEditNameInput] = useState(() => getLocalPlayerProfile().name || '');
   const [editAvatarInput, setEditAvatarInput] = useState(() => getLocalPlayerProfile().avatar || '👑');
+  const [editPinInput, setEditPinInput] = useState(() => getLocalPlayerProfile().pin || '');
+  const [profileError, setProfileError] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Live Top Global Preview State on Homepage
   const [previewCategory, setPreviewCategory] = useState('all');
@@ -170,7 +175,9 @@ export default function ModeSelectionScreen({
       const latest = getLocalPlayerProfile();
       if (latest.name) {
         setProfile((prev) =>
-          prev.name !== latest.name || prev.avatar !== latest.avatar ? latest : prev
+          prev.name !== latest.name || prev.avatar !== latest.avatar || prev.pin !== latest.pin
+            ? latest
+            : prev
         );
       }
     };
@@ -187,20 +194,27 @@ export default function ModeSelectionScreen({
     if (!sourceList || sourceList.length === 0) return null;
 
     const idx = sourceList.findIndex((item) => {
-      if (
-        currentMyId &&
-        (item.player_id === currentMyId || (item.player_ids || []).includes(currentMyId))
-      ) {
-        return true;
-      }
-      if (
-        canonicalId &&
-        (item.player_id === canonicalId || (item.player_ids || []).includes(canonicalId))
-      ) {
-        return true;
-      }
       const itemNorm = normalizeUsernameKey(item.player_name);
-      return Boolean(normName && itemNorm && itemNorm === normName);
+      const isNameMatch =
+        Boolean(normName && itemNorm && itemNorm === normName) ||
+        Boolean(
+          canonicalId &&
+            (item.player_id === canonicalId || (item.player_ids || []).includes(canonicalId))
+        ) ||
+        Boolean(
+          currentMyId &&
+            (item.player_id === currentMyId || (item.player_ids || []).includes(currentMyId))
+        );
+
+      if (!isNameMatch) return false;
+
+      // If this account is protected by a PIN in Top Global, require local PIN to match!
+      const lockedHash = extractPinHashFromItem(item);
+      if (lockedHash) {
+        const myHash = hashProfilePin(item.player_name, profile.pin || '');
+        return myHash === lockedHash;
+      }
+      return true;
     });
 
     if (idx === -1) return null;
@@ -208,14 +222,14 @@ export default function ModeSelectionScreen({
       rank: idx + 1,
       ...sourceList[idx],
     };
-  }, [allGlobalLeaderboard, previewLeaderboard, profile.name, currentMyId]);
+  }, [allGlobalLeaderboard, previewLeaderboard, profile.name, profile.pin, currentMyId]);
 
   const myRankTier = useMemo(
     () => getPlayerRankTier(myGlobalStats?.score || 0, myGlobalStats?.wins || 0),
     [myGlobalStats]
   );
 
-  // Live preview of rank inside Profile Modal as user types or clicks a Top Global name
+  // Live preview of rank inside Profile Modal as user types
   const previewModalStats = useMemo(() => {
     const normEdit = normalizeUsernameKey(editNameInput);
     if (!normEdit) return null;
@@ -235,24 +249,43 @@ export default function ModeSelectionScreen({
     [previewModalStats]
   );
 
-  const handleQuickClaimProfile = (playerObj, e) => {
-    if (e) e.stopPropagation();
-    if (!playerObj?.player_name) return;
-    const claimedName = String(playerObj.player_name).trim();
-    const claimedAvatar = playerObj.avatar || profile.avatar || '👑';
-    saveLocalPlayerProfile({ name: claimedName, avatar: claimedAvatar });
-    setProfile({ name: claimedName, avatar: claimedAvatar });
-    setEditNameInput(claimedName);
-    setEditAvatarInput(claimedAvatar);
-  };
+  const previewModalPinHash = useMemo(
+    () => extractPinHashFromItem(previewModalStats),
+    [previewModalStats]
+  );
 
-  const handleSaveProfile = (e) => {
+  const handleSaveProfile = async (e) => {
     if (e) e.preventDefault();
-    const cleanedName = editNameInput.trim() || 'Player';
+    setProfileError('');
+    const cleanedName = editNameInput.trim();
+    const cleanedPin = editPinInput.trim();
     const chosenAvatar = editAvatarInput || '👑';
-    saveLocalPlayerProfile({ name: cleanedName, avatar: chosenAvatar });
-    setProfile({ name: cleanedName, avatar: chosenAvatar });
+
+    if (!cleanedName) {
+      setProfileError('Silakan masukkan Nickname terlebih dahulu!');
+      return;
+    }
+    if (!/^\d{4}$/.test(cleanedPin)) {
+      setProfileError('Masukkan 4 digit angka PIN Keamanan (contoh: 1234)!');
+      return;
+    }
+
+    setIsSavingProfile(true);
+    const res = await verifyAndSaveProfileWithPin({
+      name: cleanedName,
+      avatar: chosenAvatar,
+      pin: cleanedPin,
+    });
+    setIsSavingProfile(false);
+
+    if (!res.success) {
+      setProfileError(res.error || 'PIN tidak cocok dengan pemilik Nickname ini.');
+      return;
+    }
+
+    setProfile({ name: cleanedName, avatar: chosenAvatar, pin: cleanedPin });
     setIsProfileModalOpen(false);
+    loadHomepageLeaderboard(previewCategory);
   };
 
   // Mobile bottom sheet drag-down-to-close gesture handling
@@ -479,6 +512,8 @@ export default function ModeSelectionScreen({
             onClick={() => {
               setEditNameInput(profile.name || '');
               setEditAvatarInput(profile.avatar || '👑');
+              setEditPinInput(profile.pin || '');
+              setProfileError('');
               setIsProfileModalOpen(true);
             }}
             title="Klik untuk mengganti Nickname & Avatar Profil Top Global"
@@ -604,6 +639,8 @@ export default function ModeSelectionScreen({
                 onClick={() => {
                   setEditNameInput(profile.name || '');
                   setEditAvatarInput(profile.avatar || '👑');
+                  setEditPinInput(profile.pin || '');
+                  setProfileError('');
                   setIsProfileModalOpen(true);
                 }}
               >
@@ -954,10 +991,91 @@ export default function ModeSelectionScreen({
                   placeholder="Masukkan Nickname andalanmu..."
                   maxLength={20}
                   value={editNameInput}
-                  onChange={(e) => setEditNameInput(e.target.value)}
+                  onChange={(e) => {
+                    setEditNameInput(e.target.value);
+                    if (profileError) setProfileError('');
+                  }}
                   autoFocus
                 />
               </label>
+
+              <label className="mlbb-form-label">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                  <span>PIN Keamanan Akun (4 Digit Angka)</span>
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 800,
+                      padding: '0.14rem 0.5rem',
+                      borderRadius: '999px',
+                      background: previewModalPinHash
+                        ? 'rgba(239, 68, 68, 0.16)'
+                        : previewModalStats
+                        ? 'rgba(245, 158, 11, 0.18)'
+                        : 'rgba(16, 185, 129, 0.16)',
+                      border: previewModalPinHash
+                        ? '1px solid rgba(239, 68, 68, 0.45)'
+                        : previewModalStats
+                        ? '1px solid rgba(245, 158, 11, 0.45)'
+                        : '1px solid rgba(16, 185, 129, 0.45)',
+                      color: previewModalPinHash
+                        ? '#fca5a5'
+                        : previewModalStats
+                        ? '#fde68a'
+                        : '#6ee7b7',
+                    }}
+                  >
+                    {previewModalPinHash
+                      ? '🔒 Dilindungi PIN'
+                      : previewModalStats
+                      ? '🛡️ Belum Dikunci (Klaim PIN)'
+                      : '✨ Akun Baru'}
+                  </span>
+                </div>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="\d{4}"
+                  className="mlbb-form-input"
+                  placeholder="Contoh: 1234 (Wajib 4 angka)"
+                  maxLength={4}
+                  value={editPinInput}
+                  onChange={(e) => {
+                    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 4);
+                    setEditPinInput(digitsOnly);
+                    if (profileError) setProfileError('');
+                  }}
+                  style={{
+                    letterSpacing: '0.35em',
+                    fontWeight: 900,
+                    fontSize: '1.05rem',
+                  }}
+                />
+                <small style={{ fontSize: '0.73rem', color: '#94a3b8', lineHeight: 1.4 }}>
+                  {previewModalPinHash
+                    ? `Nickname "${editNameInput.trim()}" sudah dikunci pemiliknya. Masukkan 4 digit PIN yang benar untuk memakai profil ini.`
+                    : previewModalStats
+                    ? `Nickname "${editNameInput.trim()}" ada di Top Global tapi belum dikunci PIN. Buat 4 angka PIN sekarang untuk mengunci akunmu agar tidak bisa dipakai orang lain!`
+                    : 'Buat 4 angka PIN rahasia agar Nickname & Rank Top Global kamu tidak bisa diambil alih pemain lain.'}
+                </small>
+              </label>
+
+              {profileError && (
+                <div
+                  style={{
+                    padding: '0.6rem 0.8rem',
+                    borderRadius: '10px',
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.45)',
+                    color: '#fecaca',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  ⚠️ {profileError}
+                </div>
+              )}
 
               <div className="mlbb-form-label">
                 <span>Pilih Avatar Commander</span>
@@ -976,8 +1094,7 @@ export default function ModeSelectionScreen({
               </div>
 
               <div className="mlbb-profile-tip">
-                💡 <strong>Tips Supreme:</strong> Selalu gunakan Nickname yang sama agar setiap kemenangan{' '}
-                <strong>Juara 1</strong> dan <strong>★ Skor</strong> kamu terus terakumulasi di Top Global!
+                🔐 <strong>Proteksi Anti-Bajak:</strong> Dengan <strong>PIN 4 Digit</strong>, kamu tetap bisa login ke profil Top Global milikmu dari HP/browser mana saja tanpa takut dipakai orang lain!
               </div>
 
               <div className="mlbb-profile-modal-actions">
@@ -988,9 +1105,9 @@ export default function ModeSelectionScreen({
                 >
                   Batal
                 </button>
-                <button type="submit" className="btn-profile-save">
+                <button type="submit" className="btn-profile-save" disabled={isSavingProfile}>
                   <Check size={16} />
-                  <span>Simpan Profil</span>
+                  <span>{isSavingProfile ? 'Memverifikasi PIN...' : 'Simpan & Kunci Profil'}</span>
                 </button>
               </div>
             </form>

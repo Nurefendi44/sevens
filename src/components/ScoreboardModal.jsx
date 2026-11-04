@@ -19,6 +19,8 @@ import {
   getPlayerRankTier,
   getSupremeTitle,
   getLocalPlayerProfile,
+  extractPinHashFromItem,
+  hashProfilePin,
 } from '../services/leaderboardService';
 import '../styles/scoreboardModal.css';
 
@@ -99,7 +101,14 @@ export default function ScoreboardModal({
       return true;
     }
     const itemNameKey = normalizeUsernameKey(item.player_name || item.name);
-    if (myNormalizedName && itemNameKey && itemNameKey === myNormalizedName) return true;
+    if (myNormalizedName && itemNameKey && itemNameKey === myNormalizedName) {
+      const lockedHash = extractPinHashFromItem(item);
+      if (lockedHash) {
+        const myPinHash = hashProfilePin(effectiveMyName, localProfile.pin);
+        return Boolean(myPinHash && myPinHash === lockedHash);
+      }
+      return true;
+    }
     return false;
   };
 

@@ -11,21 +11,60 @@ import { supabase, isSupabaseConfigured } from './supabaseClient';
 const LOCAL_STORAGE_KEY_FALLBACK = 'poker_global_leaderboard_cache';
 const STORAGE_PLAYER_NAME = 'sevens_player_name';
 const STORAGE_PLAYER_AVATAR = 'sevens_player_avatar';
+const STORAGE_PLAYER_PIN = 'sevens_player_pin';
 
 export const PROFILE_AVATARS = [
   '👑', '🐉', '🦁', '🦊', '🐼', '🐯', '🥷', '🧙‍♂️', '🧛', '⚡', '🔥', '💎', '👤', '🐨'
 ];
 
 /**
- * Get saved local player profile (username & avatar).
+ * Deterministic fast hash for (username + 4-digit PIN) so raw PIN is never exposed in plain text
+ */
+export function hashProfilePin(username, pin) {
+  const normUser = String(username || '').trim().toLowerCase();
+  const cleanPin = String(pin || '').trim();
+  if (!normUser || !/^\d{4}$/.test(cleanPin)) return '';
+  const payload = `royal_pin_v1::${normUser}::${cleanPin}`;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < payload.length; i++) {
+    h ^= payload.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+/**
+ * Extracts PIN hash from a `player_id` string or array of `player_ids` (format: `user_<name>__pin_<hash>`)
+ */
+export function extractPinHashFromItem(itemOrId) {
+  if (!itemOrId) return null;
+  const candidates = [];
+  if (typeof itemOrId === 'string') {
+    candidates.push(itemOrId);
+  } else if (typeof itemOrId === 'object') {
+    if (itemOrId.player_id) candidates.push(itemOrId.player_id);
+    if (Array.isArray(itemOrId.player_ids)) candidates.push(...itemOrId.player_ids);
+  }
+  for (const idStr of candidates) {
+    const match = String(idStr || '').match(/__pin_([a-f0-9]{6,16})/i);
+    if (match && match[1]) {
+      return match[1].toLowerCase();
+    }
+  }
+  return null;
+}
+
+/**
+ * Get saved local player profile (username, avatar, pin).
  * Also auto-recovers username from cached room or local scoreboard if `sevens_player_name` was cleared.
  */
 export function getLocalPlayerProfile() {
   if (typeof localStorage === 'undefined') {
-    return { name: '', avatar: '👑' };
+    return { name: '', avatar: '👑', pin: '' };
   }
   let name = (localStorage.getItem(STORAGE_PLAYER_NAME) || '').trim();
   let avatar = localStorage.getItem(STORAGE_PLAYER_AVATAR) || '';
+  const pin = (localStorage.getItem(STORAGE_PLAYER_PIN) || '').trim();
   const localId = localStorage.getItem('sevens_player_id') || '';
 
   if (!name && localId) {
@@ -76,13 +115,14 @@ export function getLocalPlayerProfile() {
   return {
     name,
     avatar: avatar || '👑',
+    pin,
   };
 }
 
 /**
- * Save local player profile (username & avatar) to localStorage
+ * Save local player profile (username, avatar, pin) to localStorage
  */
-export function saveLocalPlayerProfile({ name, avatar }) {
+export function saveLocalPlayerProfile({ name, avatar, pin }) {
   if (typeof localStorage === 'undefined') return;
   if (typeof name === 'string') {
     const clean = name.trim();
@@ -93,6 +133,77 @@ export function saveLocalPlayerProfile({ name, avatar }) {
   if (avatar) {
     localStorage.setItem(STORAGE_PLAYER_AVATAR, avatar);
   }
+  if (typeof pin === 'string' && /^\d{4}$/.test(pin.trim())) {
+    localStorage.setItem(STORAGE_PLAYER_PIN, pin.trim());
+  }
+}
+
+/**
+ * Verifies or binds a 4-digit PIN for a Nickname against the Global Leaderboard in Supabase.
+ * - If the Nickname already has a PIN in Supabase, verifies that `pin` matches before allowing save.
+ * - If the Nickname exists in Supabase WITHOUT a PIN yet (legacy account like `pardi`), binds the new PIN to all its rows!
+ * - If the Nickname is brand new, saves the profile + PIN locally so future matches lock it with this PIN.
+ */
+export async function verifyAndSaveProfileWithPin({ name, avatar, pin }) {
+  const cleanName = String(name || '').trim();
+  const cleanPin = String(pin || '').trim();
+  const chosenAvatar = avatar || '👑';
+
+  if (!cleanName) {
+    return { success: false, error: 'Masukkan Nickname terlebih dahulu!' };
+  }
+  if (!/^\d{4}$/.test(cleanPin)) {
+    return { success: false, error: 'PIN Keamanan harus berupa 4 digit angka (contoh: 1234)!' };
+  }
+
+  const expectedHash = hashProfilePin(cleanName, cleanPin);
+  const normName = cleanName.toLowerCase();
+  const lockedPlayerId = `user_${normName}__pin_${expectedHash}`;
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data: rows, error } = await supabase
+        .from('leaderboard')
+        .select('id, player_id, player_name, game_type')
+        .ilike('player_name', cleanName.replace(/[\\%_]/g, (c) => '\\' + c));
+
+      if (!error && Array.isArray(rows) && rows.length > 0) {
+        const existingHash = extractPinHashFromItem({
+          player_ids: rows.map((r) => r.player_id),
+        });
+
+        if (existingHash && existingHash !== expectedHash) {
+          return {
+            success: false,
+            error: `🔒 Nickname "${cleanName}" sudah dilindungi PIN pemiliknya! Masukkan 4 digit PIN yang benar jika ini akun Anda, atau gunakan Nickname lain.`,
+          };
+        }
+
+        // Either PIN matched OR legacy account didn't have a PIN yet -> lock all rows with `lockedPlayerId` & update avatar
+        for (const r of rows) {
+          await supabase
+            .from('leaderboard')
+            .update({
+              player_id: lockedPlayerId,
+              player_name: cleanName,
+              avatar: chosenAvatar,
+            })
+            .eq('id', r.id);
+        }
+
+        saveLocalPlayerProfile({ name: cleanName, avatar: chosenAvatar, pin: cleanPin });
+        return {
+          success: true,
+          status: existingHash ? 'verified' : 'locked_existing',
+        };
+      }
+    } catch (e) {
+      console.warn('[Leaderboard] PIN verification check warning:', e);
+    }
+  }
+
+  saveLocalPlayerProfile({ name: cleanName, avatar: chosenAvatar, pin: cleanPin });
+  return { success: true, status: 'saved_new' };
 }
 
 /**
@@ -495,20 +606,42 @@ export async function recordMultiplayerGameStats({
 
   if (targetPlayers.length === 0) return;
 
+  const localProfile = getLocalPlayerProfile();
+
   for (const player of targetPlayers) {
     const cleanName = player.name.trim() || 'Pemain';
+    const normName = normalizeUsernameKey(cleanName);
     const isWinner = Boolean(player.isWinner);
     const safeScore = Math.max(0, Math.round(Number(player.pointsEarned || 0)));
+    const isMe = !myPlayerId || player.id === myPlayerId;
+    const myPinHash = isMe && localProfile.pin ? hashProfilePin(cleanName, localProfile.pin) : '';
 
     try {
-      // 1. Check if there is already a row in `leaderboard` for this username (case-insensitive) & gameType
-      const { data: existingRows, error: selectErr } = await supabase
+      // Check across all game_types if this username already has a PIN lock in `leaderboard`
+      const { data: allNameRows } = await supabase
         .from('leaderboard')
-        .select('id, player_id, player_name, avatar, wins, games_played, score')
-        .eq('game_type', gameType)
+        .select('id, player_id, player_name, avatar, wins, games_played, score, game_type')
         .ilike('player_name', cleanName.replace(/[\\%_]/g, (c) => '\\' + c));
 
-      if (!selectErr && Array.isArray(existingRows) && existingRows.length > 0) {
+      const existingPinHash = extractPinHashFromItem({
+        player_ids: (allNameRows || []).map((r) => r.player_id),
+      });
+
+      // If this username is PIN-locked by its owner and this client is the player (not a bot takeover),
+      // block recording if the local PIN does not match the owner's PIN!
+      if (existingPinHash && isMe && !player.isBotTakeover && existingPinHash !== myPinHash) {
+        console.warn(`[Leaderboard] Blocked unauthorized score update for PIN-protected user "${cleanName}"`);
+        continue;
+      }
+
+      const effectivePinHash = existingPinHash || myPinHash;
+      const canonicalPlayerId = effectivePinHash
+        ? `user_${normName}__pin_${effectivePinHash}`
+        : `user_${normName}`;
+
+      const existingRows = (allNameRows || []).filter((r) => r.game_type === gameType);
+
+      if (Array.isArray(existingRows) && existingRows.length > 0) {
         // Sum across any existing rows for this username and update the primary row
         const primaryRow = existingRows[0];
         const totalExistingWins = existingRows.reduce((acc, r) => acc + Number(r.wins || 0), 0);
@@ -518,6 +651,7 @@ export async function recordMultiplayerGameStats({
         await supabase
           .from('leaderboard')
           .update({
+            player_id: canonicalPlayerId,
             player_name: cleanName,
             avatar: player.avatar || primaryRow.avatar || '👤',
             wins: totalExistingWins + (isWinner ? 1 : 0),
@@ -525,8 +659,7 @@ export async function recordMultiplayerGameStats({
             score: totalExistingScore + safeScore,
             last_played_at: new Date().toISOString(),
           })
-          .eq('player_id', primaryRow.player_id)
-          .eq('game_type', gameType);
+          .eq('id', primaryRow.id);
 
         // If there were duplicate rows for the same username & game_type, remove extras
         if (existingRows.length > 1) {
@@ -534,16 +667,13 @@ export async function recordMultiplayerGameStats({
             await supabase
               .from('leaderboard')
               .delete()
-              .eq('player_id', existingRows[i].player_id)
-              .eq('game_type', gameType);
+              .eq('id', existingRows[i].id);
           }
         }
         continue;
       }
 
-      // 2. Otherwise, use deterministic username-based player_id so future sessions with same username merge cleanly
-      const canonicalPlayerId = `user_${normalizeUsernameKey(cleanName)}`;
-
+      // 2. Otherwise, insert/upsert with canonicalPlayerId (including PIN hash if set)
       const { error: upsertErr } = await supabase.from('leaderboard').upsert(
         {
           player_id: canonicalPlayerId,

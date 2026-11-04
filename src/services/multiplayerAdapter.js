@@ -726,6 +726,61 @@ export const multiplayerAdapter = {
   },
 
   /**
+   * Merges two sessionScores maps so neither server nor client ever overwrites a more complete session history.
+   */
+  mergeSessionScoreMaps(mapA = {}, mapB = {}) {
+    const merged = {};
+    const addEntries = (src) => {
+      if (!src || typeof src !== 'object') return;
+      Object.entries(src).forEach(([rawKey, val]) => {
+        if (!val || typeof val !== 'object') return;
+        const key = val.id || rawKey || val.name;
+        if (!key) return;
+        const existing = merged[key];
+        const gamesNew = Number(val.games || 0);
+        const winsNew = Number(val.wins || 0);
+        const scoreNew = Number(val.score || 0);
+        if (!existing) {
+          merged[key] = {
+            ...val,
+            id: val.id || key,
+            games: gamesNew,
+            wins: winsNew,
+            score: scoreNew,
+          };
+        } else {
+          const gamesOld = Number(existing.games || 0);
+          const winsOld = Number(existing.wins || 0);
+          const scoreOld = Number(existing.score || 0);
+          if (gamesNew > gamesOld) {
+            merged[key] = {
+              ...existing,
+              ...val,
+              name: val.name || existing.name,
+              avatar: val.avatar || existing.avatar,
+              games: gamesNew,
+              wins: Math.max(winsNew, winsOld),
+              score: Math.max(scoreNew, scoreOld),
+            };
+          } else if (gamesNew === gamesOld) {
+            merged[key] = {
+              ...existing,
+              name: val.name || existing.name,
+              avatar: val.avatar || existing.avatar,
+              games: gamesOld,
+              wins: Math.max(winsOld, winsNew),
+              score: Math.max(scoreOld, scoreNew),
+            };
+          }
+        }
+      });
+    };
+    addEntries(mapA);
+    addEntries(mapB);
+    return merged;
+  },
+
+  /**
    * Host starts the game for all players
    */
   async startGame(roomCode, hostId, configOverrides = {}, forceGameType = null) {
@@ -759,29 +814,56 @@ export const multiplayerAdapter = {
       isHost: Boolean(p.isHost),
     }));
 
+    const safeOverrides =
+      configOverrides && typeof configOverrides === 'object' && !configOverrides.nativeEvent
+        ? configOverrides
+        : {};
+
     // Initialize state from decoupled Game Engine with correct player count & gameType
     const determinedGameType =
       forceGameType ||
-      configOverrides?.gameType ||
+      safeOverrides?.gameType ||
       room.game_state?.gameType ||
       getGameTypeFromRoomCode(code) ||
       'sevens';
 
+    // Preserve any accumulated sessionScores for this room across rounds
+    const carriedSessionScores = this.mergeSessionScoreMaps(
+      room.game_state?.sessionScores,
+      safeOverrides?.sessionScores
+    );
+
     let gameState;
     if (determinedGameType === 'bigtwo') {
       const effectiveDeckMode = actualPlayerCount > 4
-        ? (configOverrides.deckMode || room.game_state?.config?.deckMode || 'double')
+        ? (safeOverrides.deckMode || room.game_state?.config?.deckMode || 'double')
         : 'single';
-      gameState = initBigTwo({ ...configOverrides, playerCount: actualPlayerCount, deckMode: effectiveDeckMode }, formattedPlayers);
+      gameState = initBigTwo(
+        {
+          ...safeOverrides,
+          playerCount: actualPlayerCount,
+          deckMode: effectiveDeckMode,
+          sessionScores: carriedSessionScores,
+        },
+        formattedPlayers
+      );
     } else if (determinedGameType === 'game41') {
-      gameState = initGame41({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
+      gameState = initGame41(
+        { ...safeOverrides, playerCount: actualPlayerCount, sessionScores: carriedSessionScores },
+        formattedPlayers
+      );
+      gameState.sessionScores = carriedSessionScores;
     } else {
-      gameState = initGame({ ...configOverrides, playerCount: actualPlayerCount }, formattedPlayers);
+      gameState = initGame(
+        { ...safeOverrides, playerCount: actualPlayerCount, sessionScores: carriedSessionScores },
+        formattedPlayers
+      );
+      gameState.sessionScores = carriedSessionScores;
     }
 
     // Preserve original room capacity seats so room capacity is never lost after starting a match
-    const targetRoomSeats = configOverrides.roomPlayerCount ||
-      configOverrides.playerCount ||
+    const targetRoomSeats = safeOverrides.roomPlayerCount ||
+      safeOverrides.playerCount ||
       room.game_state?.config?.roomPlayerCount ||
       room.game_state?.config?.playerCount ||
       actualPlayerCount;
@@ -789,6 +871,7 @@ export const multiplayerAdapter = {
     if (gameState && gameState.config) {
       gameState.config.roomPlayerCount = targetRoomSeats;
       gameState.config.desiredPlayerCount = targetRoomSeats;
+      delete gameState.config.sessionScores;
     }
 
     const { data: updatedRoom, error: updateErr } = await supabase
@@ -861,22 +944,39 @@ export const multiplayerAdapter = {
       return { success: false, error: 'Minimal 2 pemain untuk memulai ulang permainan.' };
     }
 
+    const safeOverrides =
+      configOverrides && typeof configOverrides === 'object' && !configOverrides.nativeEvent
+        ? configOverrides
+        : {};
+
     const actualPlayerCount = formattedPlayers.length;
     const determinedGameType =
-      configOverrides?.gameType ||
+      safeOverrides?.gameType ||
       room.game_state?.gameType ||
       getGameTypeFromRoomCode(code) ||
       'sevens';
-    const prevWinnerId = configOverrides?.firstPlayerId || room.game_state?.winner?.id || null;
+    const prevWinnerId =
+      safeOverrides?.startingPlayerId ||
+      safeOverrides?.firstPlayerId ||
+      room.game_state?.winner?.id ||
+      (typeof room.game_state?.winner === 'string' ? room.game_state.winner : null) ||
+      null;
+
+    // Merge server room.game_state.sessionScores and client safeOverrides.sessionScores so neither loses games
+    const carriedSessionScores = this.mergeSessionScoreMaps(
+      room.game_state?.sessionScores,
+      safeOverrides?.sessionScores
+    );
+
     let nextGameState;
-    const carriedSessionScores = room.game_state?.sessionScores || {};
     if (determinedGameType === 'bigtwo') {
       const effectiveDeckMode = actualPlayerCount > 4
-        ? (configOverrides.deckMode || room.game_state?.config?.deckMode || 'double')
+        ? (safeOverrides.deckMode || room.game_state?.config?.deckMode || 'double')
         : 'single';
       nextGameState = initBigTwo(
         {
-          ...configOverrides,
+          ...safeOverrides,
+          startingPlayerId: prevWinnerId,
           firstPlayerId: prevWinnerId,
           playerCount: actualPlayerCount,
           deckMode: effectiveDeckMode,
@@ -887,22 +987,28 @@ export const multiplayerAdapter = {
     } else if (determinedGameType === 'game41') {
       nextGameState = initGame41(
         {
-          ...configOverrides,
+          ...safeOverrides,
           firstPlayerId: prevWinnerId,
           playerCount: actualPlayerCount,
           sessionScores: carriedSessionScores,
         },
         formattedPlayers
       );
+      nextGameState.sessionScores = carriedSessionScores;
     } else {
       nextGameState = initGame(
         {
-          ...configOverrides,
+          ...safeOverrides,
           playerCount: actualPlayerCount,
           sessionScores: carriedSessionScores,
         },
         formattedPlayers
       );
+      nextGameState.sessionScores = carriedSessionScores;
+    }
+
+    if (nextGameState?.config) {
+      delete nextGameState.config.sessionScores;
     }
 
     await supabase
@@ -1080,9 +1186,9 @@ export const multiplayerAdapter = {
   },
 
   /**
-   * Resets room to lobby: clears game_state, resets scores, sets status to lobby
+   * Resets room to lobby: clears active cards/hands, sets status to lobby, preserves sessionScores unless clearScores is true
    */
-  async resetRoomState(roomCode, requesterId) {
+  async resetRoomState(roomCode, requesterId, clearScores = false) {
     if (!supabase) return { success: false, error: 'Supabase offline' };
     const { room, error } = await this.getRoom(roomCode);
     if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
@@ -1092,6 +1198,7 @@ export const multiplayerAdapter = {
     const prevSeats = prevConfig.roomPlayerCount || prevConfig.playerCount || 4;
     const prevDeck = prevConfig.deckMode || (prevSeats > 4 ? 'double' : 'single');
     const prevType = room.game_state?.gameType || getGameTypeFromRoomCode(code) || 'sevens';
+    const prevSessionScores = clearScores ? {} : (room.game_state?.sessionScores || {});
 
     // Reset players ready status, reset any bot takeover
     const cleanPlayers = (room.players || []).map((p) => ({
@@ -1111,6 +1218,7 @@ export const multiplayerAdapter = {
             deckMode: prevDeck,
           },
           gameType: prevType,
+          sessionScores: prevSessionScores,
         },
         players: cleanPlayers,
         updated_at: new Date().toISOString(),

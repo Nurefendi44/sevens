@@ -28,18 +28,29 @@ export const DEFAULT_CONFIG_BIGTWO = {
  * Creates and initializes a new Big Two match
  */
 export function initBigTwo(configOverrides = {}, customPlayers = null) {
-  const desiredCount = customPlayers ? customPlayers.length : (configOverrides.playerCount || 4);
+  const safeOverrides =
+    configOverrides && typeof configOverrides === 'object' && !configOverrides.nativeEvent
+      ? configOverrides
+      : {};
+  const {
+    sessionScores: incomingSessionScores,
+    startingPlayerId: overrideStartingId,
+    firstPlayerId: overrideFirstId,
+    ...cleanConfigOverrides
+  } = safeOverrides;
+
+  const desiredCount = customPlayers ? customPlayers.length : (cleanConfigOverrides.playerCount || 4);
   const playerCount = Math.max(2, Math.min(6, desiredCount));
 
   // Determine deck mode:
   // For 4 players or fewer, ALWAYS use Single Deck (52 cards).
   // Double Deck (104 cards) is strictly and only allowed for > 4 players (5 or 6 players) if explicitly chosen.
   const isEligibleForDouble = playerCount > 4;
-  const deckMode = isEligibleForDouble && configOverrides.deckMode === 'double' ? 'double' : 'single';
+  const deckMode = isEligibleForDouble && cleanConfigOverrides.deckMode === 'double' ? 'double' : 'single';
 
   const config = {
     ...DEFAULT_CONFIG_BIGTWO,
-    ...configOverrides,
+    ...cleanConfigOverrides,
     playerCount,
     deckMode,
   };
@@ -122,7 +133,8 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
 
   // Determine starting player:
   // Random pick or explicit override (no longer forced to lowest card 3♦)
-  let startingPlayerId = configOverrides.startingPlayerId;
+  const explicitStarterId = overrideStartingId || overrideFirstId;
+  let startingPlayerId = explicitStarterId;
   if (!startingPlayerId || !players.some((p) => p.id === startingPlayerId)) {
     const randomIdx = Math.floor(Math.random() * players.length);
     startingPlayerId = players[randomIdx].id;
@@ -131,7 +143,7 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
   const startingPlayer = players.find((p) => p.id === startingPlayerId) || players[0];
 
   const isFromPreviousWinner = Boolean(
-    configOverrides.startingPlayerId && players.some((p) => p.id === configOverrides.startingPlayerId)
+    explicitStarterId && players.some((p) => p.id === explicitStarterId)
   );
 
   const startMessage = isFromPreviousWinner
@@ -144,7 +156,7 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
     config,
     players,
     hands,
-    sessionScores: configOverrides.sessionScores || {},
+    sessionScores: incomingSessionScores || {},
     currentTrick: {
       cards: [],
       combo: null,

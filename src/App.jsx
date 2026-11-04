@@ -1213,13 +1213,20 @@ export default function App() {
       ? (roomDeckMode || 'double')
       : 'single';
 
+    const determinedGame = isBigTwo ? 'bigtwo' : isGame41 ? 'game41' : 'sevens';
+    const carriedSessionScores = getMergedSessionScoresMap(determinedGame);
     const mmOverride = room.game_state?.matchmaking ? { roomPlayerCount: actualPlayerCount } : {};
     const configToUse = isBigTwo
-      ? { gameType: 'bigtwo', ...room.game_state?.config, deckMode: effectiveDeckMode, ...mmOverride }
+      ? {
+          gameType: 'bigtwo',
+          ...room.game_state?.config,
+          deckMode: effectiveDeckMode,
+          sessionScores: carriedSessionScores,
+          ...mmOverride,
+        }
       : isGame41
-      ? { gameType: 'game41', ...mmOverride }
-      : { ...gameConfig, ...mmOverride };
-    const determinedGame = isBigTwo ? 'bigtwo' : isGame41 ? 'game41' : 'sevens';
+      ? { gameType: 'game41', sessionScores: carriedSessionScores, ...mmOverride }
+      : { ...gameConfig, sessionScores: carriedSessionScores, ...mmOverride };
     const res = await multiplayerAdapter.startGame(room.code, myPlayerId, configToUse, determinedGame);
     if (res.success) {
       if (isBigTwo) {
@@ -1349,7 +1356,12 @@ export default function App() {
 
   // Restart / Reset Game
   const handleRestart = async (configOverrides) => {
-    const nextCfg = configOverrides || gameConfig;
+    const safeOverrides =
+      configOverrides && typeof configOverrides === 'object' && !configOverrides.nativeEvent
+        ? configOverrides
+        : null;
+    const nextCfg = safeOverrides || gameConfig;
+    const carriedSessionScores = getMergedSessionScoresMap('sevens');
 
     if (gameMode === 'multiplayer' && currentRoom?.code) {
       const isHost = currentRoom.host_id === myPlayerId;
@@ -1357,7 +1369,10 @@ export default function App() {
         showToast('Hanya Host yang dapat mengocok ulang dan memulai game baru.');
         return;
       }
-      const res = await multiplayerAdapter.restartGame(currentRoom.code, myPlayerId, nextCfg);
+      const res = await multiplayerAdapter.restartGame(currentRoom.code, myPlayerId, {
+        ...nextCfg,
+        sessionScores: carriedSessionScores,
+      });
       if (res.success) {
         setGameState(res.gameState);
         setSelectedCard(null);
@@ -1370,6 +1385,7 @@ export default function App() {
       const count = nextCfg.playerCount || gameState.players?.length || 2;
       const roster = createSinglePlayerRoster(count);
       const nextState = initGame({ ...nextCfg, playerCount: count }, roster);
+      nextState.sessionScores = carriedSessionScores;
       setGameState(nextState);
       setSelectedCard(null);
       setActiveFault(null);
@@ -1380,6 +1396,7 @@ export default function App() {
       // Local Mode: apply configured player count
       const count = nextCfg.playerCount || gameState.players?.length || 4;
       const nextState = resetGame({ ...nextCfg, playerCount: count });
+      nextState.sessionScores = carriedSessionScores;
       setGameState(nextState);
       setSelectedCard(null);
       setActiveFault(null);
@@ -1680,7 +1697,12 @@ export default function App() {
   };
 
   const handleRestart41 = async (configOverrides) => {
+    const safeOverrides =
+      configOverrides && typeof configOverrides === 'object' && !configOverrides.nativeEvent
+        ? configOverrides
+        : {};
     const prevWinnerId = gameState41.winner?.id || (gameState41.rankings?.[0]?.player?.id) || null;
+    const carriedSessionScores = getMergedSessionScoresMap('game41');
     if (gameMode === 'multiplayer' && currentRoom?.code) {
       const isHost = currentRoom.host_id === myPlayerId;
       if (!isHost) {
@@ -1690,7 +1712,8 @@ export default function App() {
       const res = await multiplayerAdapter.restartGame(currentRoom.code, myPlayerId, {
         gameType: 'game41',
         firstPlayerId: prevWinnerId,
-        ...configOverrides,
+        sessionScores: carriedSessionScores,
+        ...safeOverrides,
       });
       if (res.success) {
         setGameState41(res.gameState);
@@ -1704,6 +1727,7 @@ export default function App() {
       const count = gameState41.players?.length || 2;
       const roster = createSinglePlayerRoster(count);
       const nextState = initGame41({ playerCount: count, firstPlayerId: prevWinnerId }, roster);
+      nextState.sessionScores = carriedSessionScores;
       setGameState41(nextState);
       setIsDealingAnimationActive(true);
       const starterName = nextState.players.find((p) => p.id === nextState.currentPlayer)?.name || 'Pemain';
@@ -1711,6 +1735,7 @@ export default function App() {
     } else {
       const count = gameState41.players?.length || 4;
       const nextState = initGame41({ playerCount: count, firstPlayerId: prevWinnerId });
+      nextState.sessionScores = carriedSessionScores;
       setGameState41(nextState);
       setIsDealingAnimationActive(true);
       const starterName = nextState.players.find((p) => p.id === nextState.currentPlayer)?.name || 'Pemain';
@@ -1745,9 +1770,15 @@ export default function App() {
 
   const handlePlayBigTwoCombo = async (selectedCards) => {
     if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
-    const isCurrentBot = isBotPlayer(gameStateBigtwo, gameStateBigtwo?.currentPlayer);
-    const actingPlayerId = isCurrentBot ? gameStateBigtwo?.currentPlayer : (isMultiplayerMode ? myPlayerId : gameStateBigtwo?.currentPlayer);
-    const res = playComboBigTwo(gameStateBigtwo, actingPlayerId, selectedCards);
+    const currentState = gameStateBigtwoRef.current || gameStateBigtwo;
+    // Ensure currentState carries the merged sessionScores before computing end-of-game scores
+    const baseState = {
+      ...currentState,
+      sessionScores: getMergedSessionScoresMap('bigtwo'),
+    };
+    const isCurrentBot = isBotPlayer(baseState, baseState?.currentPlayer);
+    const actingPlayerId = isCurrentBot ? baseState?.currentPlayer : (isMultiplayerMode ? myPlayerId : baseState?.currentPlayer);
+    const res = playComboBigTwo(baseState, actingPlayerId, selectedCards);
     if (res.success) {
       setGameStateBigtwo(res.gameState);
       if (res.gameState.lastAction) {
@@ -1767,9 +1798,10 @@ export default function App() {
 
   const handlePassBigTwo = async () => {
     if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
-    const isCurrentBot = isBotPlayer(gameStateBigtwo, gameStateBigtwo?.currentPlayer);
-    const actingPlayerId = isCurrentBot ? gameStateBigtwo?.currentPlayer : (isMultiplayerMode ? myPlayerId : gameStateBigtwo?.currentPlayer);
-    const res = passTurnBigTwo(gameStateBigtwo, actingPlayerId);
+    const currentState = gameStateBigtwoRef.current || gameStateBigtwo;
+    const isCurrentBot = isBotPlayer(currentState, currentState?.currentPlayer);
+    const actingPlayerId = isCurrentBot ? currentState?.currentPlayer : (isMultiplayerMode ? myPlayerId : currentState?.currentPlayer);
+    const res = passTurnBigTwo(currentState, actingPlayerId);
     if (res.success) {
       setGameStateBigtwo(res.gameState);
       if (res.gameState.lastAction) {
@@ -1933,6 +1965,27 @@ export default function App() {
     return gameKey;
   };
 
+  /**
+   * Merges session scores from localStorage (`scoreboardData`), room `game_state.sessionScores`,
+   * and active engine `sessionScores` so rounds played in the same room/session never reset unless explicitly cleared.
+   */
+  const getMergedSessionScoresMap = (gameKey = activeGameType) => {
+    const sessionKey = getScoreSessionKey(gameKey);
+    const localMap = scoreboardData[sessionKey] || {};
+    const roomMap = currentRoom?.game_state?.sessionScores || {};
+    const engineMap =
+      gameKey === 'bigtwo'
+        ? gameStateBigtwo?.sessionScores || {}
+        : gameKey === 'game41'
+        ? gameState41?.sessionScores || {}
+        : gameState?.sessionScores || {};
+
+    return multiplayerAdapter.mergeSessionScoreMaps(
+      multiplayerAdapter.mergeSessionScoreMaps(localMap, roomMap),
+      engineMap
+    );
+  };
+
   const lastRecordedMatchRef = useRef({});
 
   const recordGameEndScore = (gameKey, rankings = [], winnerId = null, matchSignature = '') => {
@@ -1963,6 +2016,11 @@ export default function App() {
 
     setScoreboardData((prev) => {
       const gameScores = { ...(prev[sessionKey] || {}) };
+      const engineScores =
+        gameKey === 'bigtwo'
+          ? gameStateBigtwo?.sessionScores || currentRoom?.game_state?.sessionScores || {}
+          : currentRoom?.game_state?.sessionScores || {};
+
       rankings.forEach((r, idx) => {
         const pObj = r.player || r;
         const pId = r.id || pObj?.id;
@@ -2003,13 +2061,24 @@ export default function App() {
           pointsEarned = Math.max(0, totalPlayers - rank);
         }
 
+        const nextGames = (current.games || 0) + 1;
+        const nextWins = (current.wins || 0) + (isFirstPlace ? 1 : 0);
+        const nextScore = (current.score || 0) + pointsEarned;
+
+        // If engineScores (already incremented at GAME_OVER) has even higher totals from server history, keep max
+        const engEntry = engineScores[key];
+        const engGames = Number(engEntry?.games || 0);
+        const engWins = Number(engEntry?.wins || 0);
+        const engScore = Number(engEntry?.score || 0);
+
         gameScores[key] = {
           ...current,
+          id: pId || current.id,
           name: pName || current.name,
           avatar: pAvatar || current.avatar,
-          games: (current.games || 0) + 1,
-          wins: (current.wins || 0) + (isFirstPlace ? 1 : 0),
-          score: (current.score || 0) + pointsEarned,
+          games: Math.max(nextGames, engGames),
+          wins: engGames > nextGames ? Math.max(nextWins, engWins) : nextWins,
+          score: engGames > nextGames ? Math.max(nextScore, engScore) : nextScore,
         };
       });
       const nextScores = { ...prev, [sessionKey]: gameScores };
@@ -2052,36 +2121,49 @@ export default function App() {
         }
         return resetState;
       });
+    } else if (activeGameType === 'game41') {
+      setGameState41((prev) => {
+        const resetState = { ...prev, sessionScores: {} };
+        if (isMultiplayerMode && currentRoom?.code) {
+          multiplayerAdapter.syncGameState(currentRoom.code, resetState);
+        }
+        return resetState;
+      });
+    } else {
+      setGameState((prev) => {
+        const resetState = { ...prev, sessionScores: {} };
+        if (isMultiplayerMode && currentRoom?.code) {
+          multiplayerAdapter.syncGameState(currentRoom.code, resetState);
+        }
+        return resetState;
+      });
     }
 
     showToast('Scoreboard sesi ini berhasil di-reset!');
   };
 
   const getCurrentScoreboardList = () => {
-    const sessionKey = getScoreSessionKey(activeGameType);
-
-    if (activeGameType === 'bigtwo') {
-      const engineSessionScores = gameStateBigtwo.sessionScores || currentRoom?.game_state?.sessionScores;
-      if (engineSessionScores && Object.keys(engineSessionScores).length > 0) {
-        return Object.values(engineSessionScores);
-      }
-      if (scoreboardData[sessionKey] && Object.keys(scoreboardData[sessionKey]).length > 0) {
-        return Object.values(scoreboardData[sessionKey]);
-      }
-      const players = (isMultiplayerMode && currentRoom?.players)
-        ? currentRoom.players
-        : (gameStateBigtwo.players || []);
-      return players.map((p) => ({
-        id: p.id,
-        name: p.name,
-        avatar: p.avatar,
-        games: 0,
-        score: 0,
-      }));
+    const mergedScores = getMergedSessionScoresMap(activeGameType);
+    if (mergedScores && Object.keys(mergedScores).length > 0) {
+      return Object.values(mergedScores);
     }
 
-    const scores = scoreboardData[sessionKey] || scoreboardData[activeGameType] || {};
-    return Object.values(scores);
+    const players = (isMultiplayerMode && currentRoom?.players)
+      ? currentRoom.players
+      : activeGameType === 'bigtwo'
+      ? (gameStateBigtwo.players || [])
+      : activeGameType === 'game41'
+      ? (gameState41.players || [])
+      : (gameState.players || []);
+
+    return players.map((p) => ({
+      id: p.id,
+      name: p.name,
+      avatar: p.avatar,
+      games: 0,
+      wins: 0,
+      score: 0,
+    }));
   };
 
   const getCurrentScoreboardTitle = () => {
@@ -2135,9 +2217,14 @@ export default function App() {
   };
 
   const handleRestartBigTwo = async (configOverrides = {}) => {
+    const safeOverrides =
+      configOverrides && typeof configOverrides === 'object' && !configOverrides.nativeEvent
+        ? configOverrides
+        : {};
     // When playing again, no need to spin wheel; previous winner starts the next game
     const previousWinnerId = gameStateBigtwo.winner;
     const previousWinnerObj = gameStateBigtwo.players?.find((p) => p.id === previousWinnerId);
+    const carriedSessionScores = getMergedSessionScoresMap('bigtwo');
 
     if (gameMode === 'multiplayer' && currentRoom?.code) {
       const isHost = currentRoom.host_id === myPlayerId;
@@ -2148,7 +2235,8 @@ export default function App() {
       const res = await multiplayerAdapter.restartGame(currentRoom.code, myPlayerId, {
         gameType: 'bigtwo',
         startingPlayerId: previousWinnerId,
-        ...configOverrides,
+        sessionScores: carriedSessionScores,
+        ...safeOverrides,
       });
       if (res.success) {
         setGameStateBigtwo(res.gameState);
@@ -2166,14 +2254,13 @@ export default function App() {
       const count = gameStateBigtwo.players?.length || 2;
       const roster = createSinglePlayerRoster(count);
       const effectiveDeckMode = count > 4 ? gameStateBigtwo.config.deckMode : 'single';
-      const carriedSessionScores = gameStateBigtwo.sessionScores || {};
       const nextState = initBigTwo(
         {
           playerCount: count,
           deckMode: effectiveDeckMode,
           startingPlayerId: previousWinnerId,
           sessionScores: carriedSessionScores,
-          ...configOverrides,
+          ...safeOverrides,
         },
         roster
       );
@@ -2188,13 +2275,12 @@ export default function App() {
       }
     } else {
       const count = gameStateBigtwo.players?.length || 4;
-      const carriedSessionScores = gameStateBigtwo.sessionScores || {};
       const nextState = initBigTwo({
         playerCount: count,
         deckMode: gameStateBigtwo.config.deckMode,
         startingPlayerId: previousWinnerId,
         sessionScores: carriedSessionScores,
-        ...configOverrides,
+        ...safeOverrides,
       });
       setGameStateBigtwo(nextState);
       setPendingBigTwoWheel(null); // Tidak perlu spin lagi saat main lagi
@@ -2384,19 +2470,34 @@ export default function App() {
 
   // Automatic Score Recording for Cumulative Scoreboard & Top Global (Points model)
   useEffect(() => {
-    if (activeGameType === 'bigtwo' && gameStateBigtwo?.gameStatus === 'GAME_OVER' && gameStateBigtwo?.rankings) {
-      const sig = `bigtwo_${currentRoom?.code || gameMode}_${gameStateBigtwo.history?.length || 0}_${gameStateBigtwo.winner || ''}`;
+    if (
+      activeGameType === 'bigtwo' &&
+      (gameStateBigtwo?.gameStatus === 'GAME_OVER' || gameStateBigtwo?.gameStatus === 'game_over') &&
+      gameStateBigtwo?.rankings
+    ) {
+      const rankSummary = (gameStateBigtwo.rankings || [])
+        .map((r) => `${r.id || r.name}:${r.rank}:${r.remainingCards ?? ''}`)
+        .join('|');
+      const endTs = gameStateBigtwo.lastAction?.timestamp || '';
+      const sig = `bigtwo_${currentRoom?.code || gameMode}_${gameStateBigtwo.history?.length || 0}_${gameStateBigtwo.winner || ''}_${endTs}_${rankSummary}`;
       recordGameEndScore('bigtwo', gameStateBigtwo.rankings, gameStateBigtwo.winner, sig);
     }
-  }, [gameStateBigtwo?.gameStatus]);
+  }, [activeGameType, gameStateBigtwo?.gameStatus, gameStateBigtwo?.rankings]);
 
   useEffect(() => {
-    if (activeGameType === 'game41' && (gameState41.gameStatus === 'game_over' || gameState41.gameStatus === 'GAME_OVER') && gameState41.rankings) {
+    if (
+      activeGameType === 'game41' &&
+      (gameState41.gameStatus === 'game_over' || gameState41.gameStatus === 'GAME_OVER') &&
+      gameState41.rankings
+    ) {
       const winnerId = gameState41.winner?.id || gameState41.winner || '';
-      const sig = `game41_${currentRoom?.code || gameMode}_${gameState41.turnNumber || gameState41.history?.length || 0}_${winnerId}`;
+      const rankSummary = (gameState41.rankings || [])
+        .map((r) => `${r.player?.id || r.id || ''}:${r.score ?? ''}`)
+        .join('|');
+      const sig = `game41_${currentRoom?.code || gameMode}_${gameState41.turnNumber || gameState41.history?.length || 0}_${winnerId}_${rankSummary}`;
       recordGameEndScore('game41', gameState41.rankings, gameState41.winner, sig);
     }
-  }, [gameState41.gameStatus]);
+  }, [activeGameType, gameState41.gameStatus, gameState41.rankings]);
 
   useEffect(() => {
     if (activeGameType === 'sevens' && gameState?.gameStatus === GAME_STATUS.GAME_OVER && gameState?.scores) {
@@ -2422,10 +2523,11 @@ export default function App() {
           isWinner: isFirstPlace,
         };
       });
-      const sig = `sevens_${currentRoom?.code || gameMode}_${gameState.turnNumber || 0}_${(gameState.winners || []).join(',')}`;
+      const rankSummary = rankings.map((r) => `${r.id}:${r.score}`).join('|');
+      const sig = `sevens_${currentRoom?.code || gameMode}_${gameState.turnNumber || 0}_${(gameState.winners || []).join(',')}_${rankSummary}`;
       recordGameEndScore('sevens', rankings, gameState.winners, sig);
     }
-  }, [gameState.gameStatus]);
+  }, [activeGameType, gameState.gameStatus, gameState.scores]);
 
 
   // Return to Mode Selection Screen (Home)

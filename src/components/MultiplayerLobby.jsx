@@ -30,6 +30,10 @@ import {
 } from 'lucide-react';
 import '../styles/multiplayer.css';
 import { getLocalPlayerName, MATCHMAKING_MIN_PLAYERS } from '../services/multiplayerAdapter.js';
+import {
+  getLocalPlayerProfile,
+  verifyAndSaveProfileWithPin,
+} from '../services/leaderboardService.js';
 import MatchmakingScreen from './MatchmakingScreen.jsx';
 
 
@@ -147,6 +151,7 @@ export default function MultiplayerLobby({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [usernameInput, setUsernameInput] = useState(() => getLocalPlayerName() || '');
+  const [pinInput, setPinInput] = useState(() => getLocalPlayerProfile().pin || '');
   const [roomCodeInput, setRoomCodeInput] = useState(() =>
     extractCleanRoomCode(effectiveInviteCode || '')
   );
@@ -289,6 +294,31 @@ export default function MultiplayerLobby({
     }
   };
 
+  // Verify Nickname + 4-Digit PIN before entering any online room
+  const verifyPlayerPinBeforeOnline = async () => {
+    const cleanName = usernameInput.trim();
+    if (!cleanName) {
+      setErrorMsg('Silakan masukkan nama panggilan Anda terlebih dahulu!');
+      return false;
+    }
+    const cleanPin = String(pinInput || '').replace(/\D/g, '').slice(0, 4);
+    if (cleanPin.length !== 4) {
+      setErrorMsg('Masukkan 4 digit PIN keamanan akun Anda (contoh: 1234) agar Nickname Top Global tidak bisa dibajak pemain lain.');
+      return false;
+    }
+    const currentAvatar = getLocalPlayerProfile().avatar || '👑';
+    const check = await verifyAndSaveProfileWithPin({
+      name: cleanName,
+      avatar: currentAvatar,
+      pin: cleanPin,
+    });
+    if (!check.success) {
+      setErrorMsg(check.error || 'PIN tidak cocok dengan pemilik Nickname ini.');
+      return false;
+    }
+    return true;
+  };
+
   // Handle Create Room
   const handleCreate = async (e) => {
     e?.preventDefault();
@@ -298,6 +328,12 @@ export default function MultiplayerLobby({
     }
     setErrorMsg('');
     setIsLoading(true);
+
+    const pinOk = await verifyPlayerPinBeforeOnline();
+    if (!pinOk) {
+      setIsLoading(false);
+      return;
+    }
 
     const effectiveDeckMode =
       activeGameType === 'bigtwo' && selectedPlayerCount > 4
@@ -341,6 +377,13 @@ export default function MultiplayerLobby({
     }
     setErrorMsg('');
     setIsLoading(true);
+
+    const pinOk = await verifyPlayerPinBeforeOnline();
+    if (!pinOk) {
+      setIsLoading(false);
+      return;
+    }
+
     const res = await onJoinRoom(cleanCode, usernameInput.trim());
     setIsLoading(false);
     if (!res.success) {
@@ -369,6 +412,13 @@ export default function MultiplayerLobby({
     if (!onFindMatch) return;
     setErrorMsg('');
     setIsLoading(true);
+
+    const pinOk = await verifyPlayerPinBeforeOnline();
+    if (!pinOk) {
+      setIsLoading(false);
+      return;
+    }
+
     const res = await onFindMatch(usernameInput.trim(), activeGameType);
     setIsLoading(false);
     if (!res.success) {
@@ -542,43 +592,77 @@ export default function MultiplayerLobby({
               </div>
             )}
 
-            {/* Step 1: Input Nama Pemain */}
+            {/* Step 1: Input Nama Pemain & PIN Keamanan 4 Digit */}
             <div className="mp-field-group">
-              <label htmlFor="username-input" className="mp-label">
-                <User size={14} />
-                <span>Nama Panggilan Anda di Meja</span>
-              </label>
-              <div className="mp-input-wrapper">
-                <input
-                  id="username-input"
-                  type="text"
-                  placeholder="Ketik nama Anda (contoh: Farid, Budi, Andi)..."
-                  maxLength={15}
-                  value={usernameInput}
-                  onChange={(e) => {
-                    setUsernameInput(e.target.value);
-                    if (errorMsg) setErrorMsg('');
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      if (activeTab === 'join') handleJoin();
-                      else if (activeTab === 'match') handleFindMatchClick();
-                      else handleCreate();
-                    }
-                  }}
-                  className="mp-text-input"
-                  autoFocus
-                />
-                {usernameInput.trim() && (
-                  <span className="mp-input-counter">
-                    {usernameInput.length}/15
-                  </span>
-                )}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px', gap: '0.65rem' }}>
+                <div>
+                  <label htmlFor="username-input" className="mp-label">
+                    <User size={14} />
+                    <span>Nama Panggilan Anda</span>
+                  </label>
+                  <div className="mp-input-wrapper">
+                    <input
+                      id="username-input"
+                      type="text"
+                      placeholder="Ketik Nickname (cth: pardi)..."
+                      maxLength={15}
+                      value={usernameInput}
+                      onChange={(e) => {
+                        setUsernameInput(e.target.value);
+                        if (errorMsg) setErrorMsg('');
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          if (activeTab === 'join') handleJoin();
+                          else if (activeTab === 'match') handleFindMatchClick();
+                          else handleCreate();
+                        }
+                      }}
+                      className="mp-text-input"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="pin-input" className="mp-label">
+                    <ShieldCheck size={14} />
+                    <span>PIN (4 Angka)</span>
+                  </label>
+                  <div className="mp-input-wrapper">
+                    <input
+                      id="pin-input"
+                      type="password"
+                      inputMode="numeric"
+                      placeholder="1234"
+                      maxLength={4}
+                      value={pinInput}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
+                        setPinInput(digits);
+                        if (errorMsg) setErrorMsg('');
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          if (activeTab === 'join') handleJoin();
+                          else if (activeTab === 'match') handleFindMatchClick();
+                          else handleCreate();
+                        }
+                      }}
+                      className="mp-text-input"
+                      style={{
+                        textAlign: 'center',
+                        letterSpacing: '0.28em',
+                        fontWeight: 900,
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
               <p
                 style={{
                   margin: '0.45rem 0 0',
-                  fontSize: '0.75rem',
+                  fontSize: '0.74rem',
                   lineHeight: 1.45,
                   color: '#fde68a',
                   background: 'rgba(251, 191, 36, 0.08)',
@@ -587,9 +671,7 @@ export default function MultiplayerLobby({
                   padding: '0.45rem 0.65rem',
                 }}
               >
-                🏆 <strong>Himbauan Top Global:</strong> Gunakan <strong>username yang sama</strong> setiap
-                kali bermain agar total kemenangan Juara 1 &amp; skor poin Anda selalu terangkum di papan{' '}
-                <strong>Top Global</strong>.
+                🔐 <strong>Proteksi PIN 4 Digit:</strong> Masukkan 4 angka PIN untuk mengunci Nickname Anda agar tidak bisa dipakai pemain lain di <strong>Top Global</strong>.
               </p>
             </div>
 
