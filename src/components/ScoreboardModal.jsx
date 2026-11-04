@@ -353,13 +353,13 @@ export default function ScoreboardModal({
 
                 <button
                   type="button"
-                  className={`mlbb-btn-refresh ${isLoadingGlobal ? 'is-spinning' : ''}`}
+                  className={`mlbb-btn-refresh ${isLoadingGlobal ? 'is-loading' : ''}`}
                   onClick={() => loadGlobalData()}
                   title="Segarkan Data Top Global"
                   disabled={isLoadingGlobal}
                 >
-                  <RotateCw size={14} />
-                  <span>Refresh</span>
+                  <RotateCw size={14} className={isLoadingGlobal ? 'is-spinning' : ''} />
+                  <span>{isLoadingGlobal ? 'Memuat...' : 'Refresh'}</span>
                 </button>
               </div>
 
@@ -551,7 +551,7 @@ export default function ScoreboardModal({
                         </div>
                       ) : (
                         <span className="standing-progress-text text-gold">
-                          ✨ Tier Tertinggi Tercapai (Mythical Immortal)
+                          ✨ Tier Tertinggi Tercapai (Royal King)
                         </span>
                       )}
                     </div>
@@ -585,7 +585,7 @@ export default function ScoreboardModal({
                     <div className="standing-identity">
                       <div className="standing-name-row">
                         <strong>{effectiveMyName || 'Player Baru'}</strong>
-                        <span className="standing-tier-tag">🛡️ Warrior</span>
+                        <span className="standing-tier-tag">🥉 Bronze</span>
                       </div>
                       <span className="standing-progress-text">
                         Mainkan mode <strong>Online Multiplayer</strong> untuk masuk ke Peringkat Top Global!

@@ -258,12 +258,18 @@
 
 /* Scrollable Container */
 .mlbb-global-scroll-area {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 1rem 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
+}
+
+.mlbb-global-scroll-area > * {
+  flex-shrink: 0;
 }
 
 /* ==========================================================================
@@ -602,11 +608,22 @@
   color: #ffffff;
 }
 
+.mlbb-btn-refresh.is-loading {
+  opacity: 0.8;
+  cursor: wait;
+}
+
+.mlbb-btn-refresh svg {
+  flex-shrink: 0;
+}
+
 .is-spinning {
-  animation: mlbbSpin 0.9s linear infinite;
+  animation: mlbbSpin 0.85s linear infinite;
+  transform-origin: center center;
 }
 
 @keyframes mlbbSpin {
+  from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
 
@@ -615,10 +632,12 @@
    ========================================================================== */
 
 .mlbb-table-wrap {
+  flex-shrink: 0;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(8, 13, 25, 0.75);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 .mlbb-ranking-table {
@@ -1084,46 +1103,143 @@
    ========================================================================== */
 
 @media (max-width: 720px) {
+  .mlbb-scoreboard-backdrop {
+    padding: 0.45rem;
+  }
+
+  .mlbb-scoreboard-modal {
+    max-height: 95vh;
+    max-height: 95dvh;
+    border-radius: 16px;
+  }
+
+  .mlbb-scoreboard-header {
+    padding: 0.7rem 0.9rem;
+    gap: 0.6rem;
+  }
+
+  .mlbb-header-emblem {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+
+  .mlbb-scoreboard-title {
+    font-size: 1rem;
+  }
+
   .mlbb-category-tabs {
     grid-template-columns: repeat(2, 1fr);
-    padding: 0.6rem 0.85rem;
+    gap: 0.38rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .mlbb-cat-tab {
+    padding: 0.42rem 0.6rem;
+    gap: 0.45rem;
+  }
+
+  .mlbb-cat-icon {
+    font-size: 1.05rem;
+  }
+
+  .mlbb-cat-name {
+    font-size: 0.76rem;
+  }
+
+  .mlbb-cat-sub {
+    display: none;
+  }
+
+  .mlbb-global-scroll-area {
+    padding: 0.65rem 0.7rem;
+    gap: 0.65rem;
   }
 
   .mlbb-podium-stage {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.4rem;
+    gap: 0.38rem;
+    padding-top: 0.1rem;
   }
 
-  .mlbb-podium-card {
-    padding: 0.6rem 0.35rem;
+  .mlbb-podium-card,
+  .mlbb-podium-card.podium-rank-1 {
+    padding: 0.5rem 0.3rem 0.45rem;
+    border-radius: 12px;
+  }
+
+  .mlbb-podium-card.is-empty {
+    min-height: 128px;
+  }
+
+  .podium-rank-crest {
+    margin-bottom: 0.3rem;
+  }
+
+  .crest-supreme-1,
+  .crest-supreme-2,
+  .crest-supreme-3 {
+    font-size: 0.54rem;
+    padding: 0.12rem 0.38rem;
+    letter-spacing: 0.04em;
   }
 
   .podium-avatar-frame {
-    width: 42px;
-    height: 42px;
+    width: 38px;
+    height: 38px;
+    margin-bottom: 0.3rem;
   }
   .podium-rank-1 .podium-avatar-frame {
-    width: 50px;
-    height: 50px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .podium-avatar-emoji {
+    font-size: 1.25rem;
+  }
+  .podium-rank-1 .podium-avatar-emoji {
+    font-size: 1.45rem;
+  }
+
+  .podium-tier-corner {
+    width: 18px;
+    height: 18px;
+    font-size: 0.6rem;
   }
 
   .podium-player-name {
-    font-size: 0.74rem;
+    font-size: 0.72rem;
+    margin-bottom: 0.18rem;
   }
   .podium-rank-1 .podium-player-name {
-    font-size: 0.8rem;
+    font-size: 0.78rem;
   }
 
   .podium-title-ribbon {
     display: none;
   }
 
-  .podium-stats-strip {
-    flex-direction: column;
-    gap: 0.15rem;
+  .podium-tier-pill {
+    font-size: 0.58rem;
+    padding: 0.06rem 0.36rem;
+    margin-bottom: 0.35rem;
   }
+
+  .podium-stats-strip {
+    padding: 0.25rem 0.18rem;
+    border-radius: 8px;
+  }
+
+  .podium-stat-val {
+    font-size: 0.64rem;
+  }
+
+  .podium-stat-lbl {
+    font-size: 0.48rem;
+  }
+
   .podium-stat-divider {
-    display: none;
+    height: 14px;
   }
 
   .col-tier,
@@ -1131,26 +1247,61 @@
     display: none;
   }
 
+  .col-rank { width: 16%; }
+  .col-player { width: 48%; }
+  .col-wins { width: 18%; }
+  .col-score { width: 18%; padding-right: 0.65rem !important; }
+
+  .mlbb-ranking-table th,
+  .mlbb-ranking-table td {
+    padding: 0.52rem 0.45rem;
+  }
+
   .mlbb-info-pill {
     display: none;
   }
 
-  .mlbb-global-scroll-area {
-    padding: 0.75rem;
+  .mlbb-my-standing-bar {
+    padding: 0.55rem 0.75rem;
   }
 
-  .mlbb-my-standing-bar {
-    padding: 0.65rem 0.85rem;
+  .mlbb-standing-inner {
+    gap: 0.5rem;
+  }
+
+  .standing-rank-box {
+    min-width: 54px;
+    padding: 0.22rem 0.4rem;
+  }
+
+  .standing-rank-num {
+    font-size: 0.82rem;
+  }
+
+  .standing-avatar {
+    width: 34px;
+    height: 34px;
+    font-size: 1.1rem;
+  }
+
+  .standing-progress-bar {
+    width: 76px;
   }
 
   .standing-right-stats {
     width: 100%;
     justify-content: space-between;
-    padding-top: 0.45rem;
+    padding-top: 0.35rem;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .standing-mini-stat {
     align-items: center;
+    flex-direction: row;
+    gap: 0.35rem;
+  }
+
+  .stat-v {
+    font-size: 0.8rem;
   }
 }
