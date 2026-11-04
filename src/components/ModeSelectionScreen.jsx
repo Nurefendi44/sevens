@@ -7,7 +7,6 @@ import {
   Wifi,
   WifiOff,
   Crown,
-  Users,
   Sparkles,
   Layers,
   X,
@@ -24,6 +23,8 @@ import {
   RotateCw,
   Check,
   MessageSquare,
+  Lock,
+  Users,
 } from 'lucide-react';
 import {
   fetchGlobalLeaderboard,
@@ -36,7 +37,13 @@ import {
   hashProfilePin,
   PROFILE_AVATARS,
 } from '../services/leaderboardService';
+import {
+  getFriendsList,
+  getIncomingFriendRequests,
+  subscribeToFriendEvents,
+} from '../services/friendService';
 import LobbyChatDrawer from './LobbyChatDrawer';
+import FriendsModal from './FriendsModal';
 import '../styles/modeSelection.css';
 
 const BOT_PREVIEWS = [
@@ -120,6 +127,8 @@ export default function ModeSelectionScreen({
   isMuted = false,
   onToggleSound,
   currentMyId = '',
+  initialDmPartner = null,
+  onClearDmPartner = null,
 }) {
   const [activeGame, setActiveGame] = useState(selectedGame || 'sevens');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -127,6 +136,15 @@ export default function ModeSelectionScreen({
   const [botCount, setBotCount] = useState(1);
   const [deckMode, setDeckMode] = useState('double');
   const [isLobbyChatOpen, setIsLobbyChatOpen] = useState(false);
+  const [directChatPartner, setDirectChatPartner] = useState(initialDmPartner);
+
+  // If a direct chat was launched from Top Global or Profile, open the chat drawer
+  useEffect(() => {
+    if (initialDmPartner) {
+      setDirectChatPartner(initialDmPartner);
+      setIsLobbyChatOpen(true);
+    }
+  }, [initialDmPartner]);
 
   // Player Profile State (MLBB Top-Left Profile Bar + 4-Digit PIN)
   const [profile, setProfile] = useState(() => getLocalPlayerProfile());
@@ -142,6 +160,25 @@ export default function ModeSelectionScreen({
   const [previewLeaderboard, setPreviewLeaderboard] = useState([]);
   const [allGlobalLeaderboard, setAllGlobalLeaderboard] = useState([]);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+
+  // Dedicated Friends Modal & Realtime Badge State
+  const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
+  const [friendsCount, setFriendsCount] = useState(0);
+  const [incomingReqCount, setIncomingReqCount] = useState(0);
+
+  // Sync Friends List & Incoming Requests Count
+  useEffect(() => {
+    if (profile?.name) {
+      setFriendsCount(getFriendsList(profile.name).length);
+      setIncomingReqCount(getIncomingFriendRequests(profile.name).length);
+
+      const unsubscribe = subscribeToFriendEvents(profile.name, () => {
+        setFriendsCount(getFriendsList(profile.name).length);
+        setIncomingReqCount(getIncomingFriendRequests(profile.name).length);
+      });
+      return () => unsubscribe();
+    }
+  }, [profile?.name, isFriendsModalOpen]);
 
   useEffect(() => {
     if (selectedGame) {
@@ -581,6 +618,20 @@ export default function ModeSelectionScreen({
 
             <button
               type="button"
+              className={`mlbb-hud-icon-btn ${isFriendsModalOpen ? 'is-active' : ''}`}
+              onClick={() => setIsFriendsModalOpen(true)}
+              title="Buka Daftar Teman & Permintaan Mabar"
+              style={{ position: 'relative' }}
+            >
+              <Users size={17} />
+              <span className="hud-btn-label">Teman</span>
+              {incomingReqCount > 0 && (
+                <span className="hud-notification-dot">{incomingReqCount}</span>
+              )}
+            </button>
+
+            <button
+              type="button"
               className={`mlbb-hud-icon-btn ${isLobbyChatOpen ? 'is-active' : ''}`}
               onClick={() => setIsLobbyChatOpen((prev) => !prev)}
               title="Buka Obrolan Global & Mabar"
@@ -644,6 +695,19 @@ export default function ModeSelectionScreen({
                 <Crown size={18} />
                 <span>Lihat Hall of Fame Top Global</span>
                 <ChevronRight size={16} />
+              </button>
+
+              <button
+                type="button"
+                className="btn-mlbb-quick-friends"
+                onClick={() => setIsFriendsModalOpen(true)}
+                title="Buka Daftar Teman & Permintaan Pertemanan"
+              >
+                <Users size={17} />
+                <span>Daftar Teman ({friendsCount})</span>
+                {incomingReqCount > 0 && (
+                  <span className="hero-friends-badge">+{incomingReqCount} Request</span>
+                )}
               </button>
 
               <button
@@ -742,6 +806,25 @@ export default function ModeSelectionScreen({
                           >
                             {tier.icon} {tier.shortName}
                           </span>
+                          {!isMeRow && (
+                            <button
+                              type="button"
+                              className="btn-dm-quick"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDirectChatPartner({
+                                  name: player.player_name,
+                                  avatar: player.avatar,
+                                  tier,
+                                });
+                                setIsLobbyChatOpen(true);
+                              }}
+                              title={`Chat Pribadi (DM) dengan ${player.player_name}`}
+                            >
+                              <Lock size={9} />
+                              <span>DM</span>
+                            </button>
+                          )}
                           {isMeRow && (
                             <span
                               style={{
@@ -1599,9 +1682,16 @@ export default function ModeSelectionScreen({
           =================================================================== */}
       <LobbyChatDrawer
         isOpen={isLobbyChatOpen}
-        onToggleOpen={() => setIsLobbyChatOpen((prev) => !prev)}
+        onToggleOpen={() => {
+          setIsLobbyChatOpen((prev) => !prev);
+          if (isLobbyChatOpen) {
+            setDirectChatPartner(null);
+            if (onClearDmPartner) onClearDmPartner();
+          }
+        }}
         myProfile={profile}
         myRankTier={myRankTier}
+        initialDmPartner={directChatPartner}
         onJoinRoomFromChat={(code) => {
           onSelectMode('multiplayer', 4, activeGame, { inviteCode: code });
         }}
@@ -1611,6 +1701,34 @@ export default function ModeSelectionScreen({
           setEditPinInput(profile.pin || '');
           setProfileError('');
           setIsProfileModalOpen(true);
+        }}
+      />
+
+      {/* ===================================================================
+          MODAL DAFTAR TEMAN, PERMINTAAN PERTEMANAN & CARI USERNAME (ACC/KONFIRMASI)
+          =================================================================== */}
+      <FriendsModal
+        isOpen={isFriendsModalOpen}
+        onClose={() => setIsFriendsModalOpen(false)}
+        myProfile={profile}
+        myRankTier={myRankTier}
+        onOpenDirectChat={(friend) => {
+          setIsFriendsModalOpen(false);
+          setDirectChatPartner({
+            name: friend.name,
+            avatar: friend.avatar,
+            tier: friend.tier,
+          });
+          setIsLobbyChatOpen(true);
+        }}
+        onInviteToRoom={(friend) => {
+          setIsFriendsModalOpen(false);
+          setDirectChatPartner({
+            name: friend.name,
+            avatar: friend.avatar,
+            tier: friend.tier,
+          });
+          setIsLobbyChatOpen(true);
         }}
       />
     </div>

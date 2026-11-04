@@ -388,6 +388,7 @@ export default function App() {
   });
   const [showScoreboardModal, setShowScoreboardModal] = useState(false);
   const [globalScoreboardCategory, setGlobalScoreboardCategory] = useState('all');
+  const [directChatPartner, setDirectChatPartner] = useState(null);
 
   // Real-time Action Announcement Pop-up State
   const [recentActionPopup, setRecentActionPopup] = useState(null);
@@ -2871,6 +2872,8 @@ export default function App() {
           isMuted={isMuted}
           onToggleSound={handleToggleSound}
           currentMyId={myPlayerId}
+          initialDmPartner={directChatPartner}
+          onClearDmPartner={() => setDirectChatPartner(null)}
         />
 
         {/* Top Global Modal (Khusus di Menu Utama seperti Mobile Legends) */}
@@ -2884,6 +2887,10 @@ export default function App() {
           currentMyId={myPlayerId}
           currentMyName={getLocalPlayerName()}
           mode="global"
+          onStartDirectChat={(player) => {
+            setShowScoreboardModal(false);
+            setDirectChatPartner(player);
+          }}
         />
 
         {/* Rules Guide Modals */}

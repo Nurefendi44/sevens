@@ -7,8 +7,10 @@
 
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { audio } from './audioService';
+import { getPlayerRankTier } from './leaderboardService';
 
 const STORAGE_KEY = 'royal_cards_global_lobby_chat_v1';
+const PM_STORAGE_PREFIX = 'royal_cards_pm_history_v1_';
 const MAX_MESSAGES = 50;
 
 /**
@@ -39,8 +41,13 @@ export function getStoredLobbyChats() {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      // Remove any leftover dummy/seed messages from storage
-      return parsed.filter((m) => m && !m.id?.startsWith('seed_'));
+      // Remove any leftover dummy/seed messages from storage and deduplicate by ID
+      const seen = new Set();
+      return parsed.filter((m) => {
+        if (!m || !m.id || m.id.startsWith('seed_') || seen.has(m.id)) return false;
+        seen.add(m.id);
+        return true;
+      });
     }
   } catch (e) {
     // Ignore error
@@ -89,16 +96,115 @@ try {
 }
 
 /**
- * Subscribes to Realtime Lobby Chat
+ * Search registered players in the Supabase leaderboard table
+ */
+export async function searchRegisteredPlayers(query) {
+  const clean = String(query || '').trim();
+  if (!clean) return [];
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const sanitized = clean.replace(/[\\%_]/g, (c) => '\\' + c);
+      const { data, error } = await supabase
+        .from('leaderboard')
+        .select('player_name, avatar, score, wins')
+        .ilike('player_name', `%${sanitized}%`)
+        .limit(12);
+
+      if (!error && Array.isArray(data)) {
+        const map = new Map();
+        for (const row of data) {
+          const name = String(row.player_name || '').trim();
+          if (!name) continue;
+          const key = name.toLowerCase();
+          const existing = map.get(key);
+          const score = Number(row.score || 0) + (existing ? existing.score : 0);
+          const wins = Number(row.wins || 0) + (existing ? existing.wins : 0);
+          const tier = getPlayerRankTier(score, wins);
+          map.set(key, {
+            name,
+            avatar: row.avatar || existing?.avatar || '👤',
+            score,
+            wins,
+            tier,
+          });
+        }
+        return Array.from(map.values());
+      }
+    } catch (e) {
+      console.warn('[LobbyChat] searchRegisteredPlayers warning:', e);
+    }
+  }
+
+  return [];
+}
+
+/**
+ * Get stored private chat conversation threads for a specific user
+ */
+export function getStoredPrivateChats(myUsername) {
+  if (typeof localStorage === 'undefined' || !myUsername) return {};
+  const norm = String(myUsername).trim().toLowerCase();
+  try {
+    const raw = localStorage.getItem(`${PM_STORAGE_PREFIX}${norm}`);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      const cleaned = {};
+      for (const [key, list] of Object.entries(parsed)) {
+        if (Array.isArray(list)) {
+          const seen = new Set();
+          cleaned[key] = list.filter((m) => {
+            if (!m || !m.id || seen.has(m.id)) return false;
+            seen.add(m.id);
+            return true;
+          });
+        }
+      }
+      return cleaned;
+    }
+  } catch (e) {
+    // Ignore error
+  }
+  return {};
+}
+
+/**
+ * Append a private message to local conversation history
+ */
+export function appendStoredPrivateChat(myUsername, partnerUsername, messageObj) {
+  if (typeof localStorage === 'undefined' || !myUsername || !partnerUsername || !messageObj) return;
+  const myNorm = String(myUsername).trim().toLowerCase();
+  const partnerNorm = String(partnerUsername).trim().toLowerCase();
+
+  try {
+    const allThreads = getStoredPrivateChats(myNorm);
+    const thread = allThreads[partnerNorm] || [];
+    if (thread.some((m) => m.id === messageObj.id)) return;
+
+    allThreads[partnerNorm] = [...thread, messageObj].slice(-MAX_MESSAGES);
+    localStorage.setItem(`${PM_STORAGE_PREFIX}${myNorm}`, JSON.stringify(allThreads));
+  } catch (e) {
+    // Ignore error
+  }
+}
+
+/**
+ * Subscribes to Realtime Lobby Chat (both global public & direct messages)
  * @param {Function} onNewMessage Callback receiving incoming chat message
+ * @param {string} currentUsername Current user's nickname for direct message filtering
  * @returns {Function} Unsubscribe function
  */
-export function subscribeToLobbyChat(onNewMessage) {
+export function subscribeToLobbyChat(onNewMessage, currentUsername = '') {
   activeSubscribers.add(onNewMessage);
 
   if (!lobbyChannel && isSupabaseConfigured && supabase) {
     lobbyChannel = supabase
-      .channel('global_lobby_chat')
+      .channel('global_lobby_chat', {
+        config: {
+          broadcast: { self: false },
+        },
+      })
       .on('broadcast', { event: 'lobby_chat_message' }, ({ payload }) => {
         if (!payload || !payload.id) return;
         appendStoredLobbyChat(payload);
@@ -110,6 +216,32 @@ export function subscribeToLobbyChat(onNewMessage) {
             cb(payload);
           } catch (err) {
             console.error('Error in lobby chat listener:', err);
+          }
+        });
+      })
+      .on('broadcast', { event: 'lobby_private_message' }, ({ payload }) => {
+        if (!payload || !payload.id) return;
+
+        // Verify if message is meant for or sent by this client
+        const myNameNorm = String(currentUsername || '').trim().toLowerCase();
+        const targetNorm = String(payload.targetUsername || '').trim().toLowerCase();
+        const senderNorm = String(payload.senderName || '').trim().toLowerCase();
+
+        const isForMe = myNameNorm && (targetNorm === myNameNorm || senderNorm === myNameNorm);
+        if (!isForMe) return;
+
+        const partnerName = senderNorm === myNameNorm ? payload.targetUsername : payload.senderName;
+        appendStoredPrivateChat(myNameNorm, partnerName, payload);
+
+        try {
+          audio.playChatPopSound();
+        } catch {}
+
+        activeSubscribers.forEach((cb) => {
+          try {
+            cb(payload);
+          } catch (err) {
+            console.error('Error in PM listener:', err);
           }
         });
       })
@@ -193,7 +325,9 @@ export async function sendLobbyChatMessage({
   if (isSupabaseConfigured && supabase) {
     try {
       if (!lobbyChannel) {
-        lobbyChannel = supabase.channel('global_lobby_chat');
+        lobbyChannel = supabase.channel('global_lobby_chat', {
+          config: { broadcast: { self: false } },
+        });
         await lobbyChannel.subscribe();
       }
 
@@ -204,6 +338,92 @@ export async function sendLobbyChatMessage({
       });
     } catch (err) {
       console.warn('[LobbyChat] Supabase broadcast notice:', err);
+    }
+  }
+
+  return { success: true, message: payload };
+}
+
+/**
+ * Send a direct 1-on-1 private message to a specific registered user
+ */
+export async function sendPrivateChatMessage({
+  senderName,
+  targetUsername,
+  avatar = '👑',
+  tier = null,
+  message,
+  roomCode = null,
+}) {
+  const cleanMsg = String(message || '').trim();
+  const cleanSender = String(senderName || '').trim() || 'Player';
+  const cleanTarget = String(targetUsername || '').trim();
+
+  if (!cleanMsg) {
+    return { success: false, error: 'Pesan tidak boleh kosong.' };
+  }
+  if (!cleanTarget) {
+    return { success: false, error: 'Tujuan penerima pesan tidak ditemukan.' };
+  }
+
+  const detectedCode = roomCode || extractRoomCodeFromMessage(cleanMsg);
+
+  const payload = {
+    id: `pm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    senderName: cleanSender,
+    targetUsername: cleanTarget,
+    avatar: avatar || '👑',
+    tier: tier || {
+      id: 'warrior',
+      name: 'Bronze',
+      shortName: 'Bronze',
+      icon: '🥉',
+      color: '#d97706',
+      accent: '#fde68a',
+    },
+    message: cleanMsg,
+    type: 'private',
+    roomCode: detectedCode || null,
+    timestamp: Date.now(),
+  };
+
+  // 1. Store in sender's local direct message history
+  appendStoredPrivateChat(cleanSender, cleanTarget, payload);
+
+  // 2. Notify local subscribers & tabs
+  try {
+    audio.playChatPopSound();
+  } catch {}
+
+  activeSubscribers.forEach((cb) => {
+    try {
+      cb(payload);
+    } catch {}
+  });
+
+  if (broadcastChannel) {
+    try {
+      broadcastChannel.postMessage(payload);
+    } catch {}
+  }
+
+  // 3. Broadcast to Supabase Realtime channel
+  if (isSupabaseConfigured && supabase) {
+    try {
+      if (!lobbyChannel) {
+        lobbyChannel = supabase.channel('global_lobby_chat', {
+          config: { broadcast: { self: false } },
+        });
+        await lobbyChannel.subscribe();
+      }
+
+      await lobbyChannel.send({
+        type: 'broadcast',
+        event: 'lobby_private_message',
+        payload,
+      });
+    } catch (err) {
+      console.warn('[LobbyChat] Send private message broadcast warning:', err);
     }
   }
 

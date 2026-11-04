@@ -27,6 +27,7 @@ import {
   Search,
   Zap,
   Hourglass,
+  MessageSquare,
 } from 'lucide-react';
 import '../styles/multiplayer.css';
 import { getLocalPlayerName, MATCHMAKING_MIN_PLAYERS } from '../services/multiplayerAdapter.js';
@@ -34,6 +35,7 @@ import {
   getLocalPlayerProfile,
   verifyAndSaveProfileWithPin,
 } from '../services/leaderboardService.js';
+import { sendLobbyChatMessage } from '../services/lobbyChatService.js';
 import MatchmakingScreen from './MatchmakingScreen.jsx';
 
 
@@ -150,6 +152,7 @@ export default function MultiplayerLobby({
   const [deckMode, setDeckMode] = useState(initialDeckMode || 'double');
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [sentChatInvite, setSentChatInvite] = useState(false);
   const [usernameInput, setUsernameInput] = useState(() => getLocalPlayerName() || '');
   const [pinInput, setPinInput] = useState(() => getLocalPlayerProfile().pin || '');
   const [roomCodeInput, setRoomCodeInput] = useState(() =>
@@ -278,6 +281,29 @@ export default function MultiplayerLobby({
       setTimeout(() => setCopiedLink(false), 2000);
     } catch {
       // Fallback
+    }
+  };
+
+  // Broadcast Room Invite directly to Global World Live Chat
+  const handleBroadcastToLiveChat = async () => {
+    if (!room?.code) return;
+    const profile = getLocalPlayerProfile();
+    const myName = usernameInput.trim() || profile.name || 'Pemain';
+    const remainingSlots = Math.max(0, (selectedPlayerCount || seatTarget) - players.length);
+    const inviteMsg = `⚔️ Ayo mabar ${meta.title} di Room ${room.code}! Sisa ${remainingSlots} kursi kosong, klik Gabung sekarang!`;
+
+    try {
+      await sendLobbyChatMessage({
+        senderName: myName,
+        avatar: profile.avatar || '👑',
+        message: inviteMsg,
+        gameType: activeGameType,
+        roomCode: room.code,
+      });
+      setSentChatInvite(true);
+      setTimeout(() => setSentChatInvite(false), 3000);
+    } catch (err) {
+      console.warn('Gagal broadcast ke live chat:', err);
     }
   };
 
@@ -1051,6 +1077,24 @@ export default function MultiplayerLobby({
                 >
                   {copiedLink ? <Check size={15} /> : <Share2 size={15} />}
                   <span>{copiedLink ? 'Link Tersalin!' : 'Undang Teman'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-ticket-action"
+                  onClick={handleBroadcastToLiveChat}
+                  title="Kirim Undangan Room Langsung ke Live Chat Global"
+                  style={{
+                    background: sentChatInvite
+                      ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                      : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    borderColor: sentChatInvite ? '#34d399' : '#fbbf24',
+                    color: '#090d16',
+                    fontWeight: 800,
+                  }}
+                >
+                  {sentChatInvite ? <Check size={15} /> : <MessageSquare size={15} />}
+                  <span>{sentChatInvite ? 'Terkirim ke Chat!' : 'Kirim ke Live Chat'}</span>
                 </button>
               </div>
             </div>

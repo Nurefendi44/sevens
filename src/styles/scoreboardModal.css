@@ -517,6 +517,99 @@
 .text-cyan { color: #38bdf8; }
 .text-emerald { color: #34d399; }
 
+/* Podium Action Buttons */
+.podium-action-btns {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+  width: 100%;
+}
+
+.btn-podium-dm,
+.btn-podium-friend {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.22rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  border: 1px solid;
+}
+
+.btn-podium-dm {
+  background: rgba(14, 165, 233, 0.22);
+  border-color: rgba(56, 189, 248, 0.45);
+  color: #7dd3fc;
+}
+.btn-podium-dm:hover {
+  background: rgba(14, 165, 233, 0.4);
+  color: #ffffff;
+}
+
+.btn-podium-friend {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(251, 191, 36, 0.4);
+  color: #fde047;
+}
+.btn-podium-friend.is-friend {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #6ee7b7;
+}
+.btn-podium-friend:hover {
+  transform: scale(1.04);
+}
+
+/* Table Row Actions */
+.mlbb-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.45rem;
+}
+
+.btn-row-dm,
+.btn-row-friend {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0.12rem 0.38rem;
+  border-radius: 4px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid;
+}
+
+.btn-row-dm {
+  background: rgba(14, 165, 233, 0.18);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #7dd3fc;
+}
+.btn-row-dm:hover {
+  background: rgba(14, 165, 233, 0.35);
+  color: #ffffff;
+}
+
+.btn-row-friend {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fde047;
+}
+.btn-row-friend.is-friend {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #6ee7b7;
+}
+
 /* ==========================================================================
    TOOLBAR: SEARCH + INFO + REFRESH
    ========================================================================== */

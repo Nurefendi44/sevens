@@ -12,6 +12,12 @@ import {
   Shield,
   Swords,
   Star,
+  UserPlus,
+  UserCheck,
+  MessageCircle,
+  Clock,
+  AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 import {
   fetchGlobalLeaderboard,
@@ -22,6 +28,14 @@ import {
   extractPinHashFromItem,
   hashProfilePin,
 } from '../services/leaderboardService';
+import {
+  getFriendsList,
+  isFriend,
+  getFriendshipStatus,
+  sendFriendRequest,
+  removeFriend,
+  subscribeToFriendEvents,
+} from '../services/friendService';
 import '../styles/scoreboardModal.css';
 
 const GAME_TABS = [
@@ -41,6 +55,7 @@ export default function ScoreboardModal({
   currentMyId = '',
   currentMyName = '',
   mode = 'global', // 'global' (Menu Utama) | 'session' (Di dalam meja permainan)
+  onStartDirectChat = null,
 }) {
   const isGlobalMode = mode === 'global';
   const [globalCategory, setGlobalCategory] = useState(activeGameType || 'all');
@@ -52,6 +67,59 @@ export default function ScoreboardModal({
   const localProfile = useMemo(() => getLocalPlayerProfile(), [isOpen, currentMyName]);
   const effectiveMyName = currentMyName || localProfile.name || '';
   const myNormalizedName = useMemo(() => normalizeUsernameKey(effectiveMyName), [effectiveMyName]);
+
+  const [friendsList, setFriendsList] = useState(() => getFriendsList(effectiveMyName));
+  const [friendToDelete, setFriendToDelete] = useState(null);
+  const [friendActionNotice, setFriendActionNotice] = useState(null);
+
+  const refreshFriends = () => {
+    if (effectiveMyName) {
+      setFriendsList(getFriendsList(effectiveMyName));
+    }
+  };
+
+  useEffect(() => {
+    refreshFriends();
+    if (effectiveMyName) {
+      const unsub = subscribeToFriendEvents(effectiveMyName, () => {
+        refreshFriends();
+      });
+      return () => unsub();
+    }
+  }, [effectiveMyName, isOpen]);
+
+  const handleToggleFriend = async (targetPlayer, tier = null) => {
+    const targetName = targetPlayer.player_name || targetPlayer.name;
+    if (!targetName || !effectiveMyName) return;
+
+    const currentStatus = getFriendshipStatus(effectiveMyName, targetName);
+
+    if (currentStatus === 'friend') {
+      // Buka popup konfirmasi hapus pertemanan
+      setFriendToDelete({
+        name: targetName,
+        avatar: targetPlayer.avatar,
+      });
+    } else if (currentStatus === 'none') {
+      // Kirim permintaan pertemanan (harus di-ACC)
+      const res = await sendFriendRequest(
+        effectiveMyName,
+        localProfile,
+        {
+          name: targetName,
+          avatar: targetPlayer.avatar,
+          tier: tier || targetPlayer.tier,
+          score: targetPlayer.score,
+          wins: targetPlayer.wins,
+        }
+      );
+      if (res.success) {
+        setFriendActionNotice(`Permintaan pertemanan dikirim ke ${targetName}!`);
+        setTimeout(() => setFriendActionNotice(null), 3000);
+      }
+      refreshFriends();
+    }
+  };
 
   // Synchronize category when modal opens
   useEffect(() => {
@@ -244,6 +312,64 @@ export default function ScoreboardModal({
             <span className="podium-stat-lbl">WR ({games})</span>
           </div>
         </div>
+
+        {/* Actions for other players: Chat DM & Add Friend */}
+        {!isMe && (
+          <div className="podium-action-btns">
+            {onStartDirectChat && (
+              <button
+                type="button"
+                className="btn-podium-dm"
+                onClick={() => {
+                  onClose();
+                  onStartDirectChat({
+                    name: player.player_name,
+                    avatar: player.avatar,
+                    tier,
+                    score,
+                    wins,
+                  });
+                }}
+                title={`Kirim Pesan Pribadi (DM) ke ${player.player_name}`}
+              >
+                <MessageCircle size={11} />
+                <span>DM</span>
+              </button>
+            )}
+            {(() => {
+              const fStatus = getFriendshipStatus(effectiveMyName, player.player_name);
+              return (
+                <button
+                  type="button"
+                  className={`btn-podium-friend ${fStatus === 'friend' ? 'is-friend' : ''}`}
+                  onClick={() => handleToggleFriend(player, tier)}
+                  title={
+                    fStatus === 'friend'
+                      ? 'Hapus dari Teman'
+                      : fStatus === 'pending_outgoing'
+                      ? 'Menunggu Konfirmasi'
+                      : 'Kirim Permintaan Teman'
+                  }
+                >
+                  {fStatus === 'friend' ? (
+                    <UserCheck size={11} />
+                  ) : fStatus === 'pending_outgoing' ? (
+                    <Clock size={11} />
+                  ) : (
+                    <UserPlus size={11} />
+                  )}
+                  <span>
+                    {fStatus === 'friend'
+                      ? 'Teman'
+                      : fStatus === 'pending_outgoing'
+                      ? 'Pending'
+                      : '+ Teman'}
+                  </span>
+                </button>
+              );
+            })()}
+          </div>
+        )}
       </div>
     );
   };
@@ -447,6 +573,59 @@ export default function ScoreboardModal({
                                   <div className="mlbb-player-name-line">
                                     <span className="mlbb-player-name">{item.player_name}</span>
                                     {isMe && <span className="mlbb-you-chip">KAMU</span>}
+                                    {!isMe && (
+                                      <div className="mlbb-row-actions">
+                                        {onStartDirectChat && (
+                                          <button
+                                            type="button"
+                                            className="btn-row-dm"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              onClose();
+                                              onStartDirectChat({
+                                                name: item.player_name,
+                                                avatar: item.avatar,
+                                                tier,
+                                                score: totalScore,
+                                                wins,
+                                              });
+                                            }}
+                                            title={`Kirim Pesan Pribadi ke ${item.player_name}`}
+                                          >
+                                            <MessageCircle size={10} />
+                                            <span>DM</span>
+                                          </button>
+                                        )}
+                                        {(() => {
+                                          const fStatus = getFriendshipStatus(effectiveMyName, item.player_name);
+                                          return (
+                                            <button
+                                              type="button"
+                                              className={`btn-row-friend ${fStatus === 'friend' ? 'is-friend' : ''}`}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleToggleFriend(item, tier);
+                                              }}
+                                              title={
+                                                fStatus === 'friend'
+                                                  ? 'Hapus dari Teman'
+                                                  : fStatus === 'pending_outgoing'
+                                                  ? 'Menunggu Konfirmasi'
+                                                  : 'Kirim Permintaan Teman'
+                                              }
+                                            >
+                                              {fStatus === 'friend' ? (
+                                                <UserCheck size={10} />
+                                              ) : fStatus === 'pending_outgoing' ? (
+                                                <Clock size={10} />
+                                              ) : (
+                                                <UserPlus size={10} />
+                                              )}
+                                            </button>
+                                          );
+                                        })()}
+                                      </div>
+                                    )}
                                   </div>
                                   {rankNumber <= 10 && (
                                     <span className={`mlbb-supreme-sub sub-${supreme.tier}`}>
@@ -700,6 +879,151 @@ export default function ScoreboardModal({
                   <span>Reset Skor Sesi</span>
                 </button>
               )}
+            </div>
+          </div>
+        )}
+        {/* Toast Notifikasi Aksi Teman */}
+        {friendActionNotice && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '1rem',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(16, 185, 129, 0.95)',
+              border: '1px solid #34d399',
+              color: '#ffffff',
+              padding: '0.5rem 1.1rem',
+              borderRadius: '999px',
+              fontSize: '0.8rem',
+              fontWeight: 800,
+              zIndex: 100,
+              boxShadow: '0 8px 20px rgba(0,0,0,0.5)',
+            }}
+          >
+            <span>{friendActionNotice}</span>
+          </div>
+        )}
+
+        {/* Modal Konfirmasi Hapus Pertemanan */}
+        {friendToDelete && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(3, 7, 18, 0.85)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              zIndex: 200,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '1rem',
+            }}
+            onClick={() => setFriendToDelete(null)}
+          >
+            <div
+              style={{
+                width: '100%',
+                maxWidth: 360,
+                background: 'linear-gradient(180deg, #1e1b29 0%, #110e19 100%)',
+                border: '1.5px solid rgba(239, 68, 68, 0.45)',
+                borderRadius: 16,
+                padding: '1.4rem 1.2rem',
+                textAlign: 'center',
+                boxShadow: '0 20px 50px rgba(0,0,0,0.8)',
+                color: '#f8fafc',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div
+                style={{
+                  width: 50,
+                  height: 50,
+                  borderRadius: '50%',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1.5px solid rgba(239, 68, 68, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 0.8rem auto',
+                }}
+              >
+                <AlertTriangle size={26} color="#ef4444" />
+              </div>
+
+              <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', fontWeight: 900 }}>
+                Hapus Pertemanan?
+              </h3>
+
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.35rem 0.8rem',
+                  background: 'rgba(255,255,255,0.06)',
+                  borderRadius: 999,
+                  marginBottom: '0.8rem',
+                  fontSize: '0.88rem',
+                  color: '#fde047',
+                  fontWeight: 800,
+                }}
+              >
+                <span>{friendToDelete.avatar || '👤'}</span>
+                <span>{friendToDelete.name}</span>
+              </div>
+
+              <p style={{ fontSize: '0.78rem', color: '#94a3b8', lineHeight: 1.45, margin: '0 0 1.2rem 0' }}>
+                Apakah kamu yakin ingin menghapus <strong style={{ color: '#fff' }}>{friendToDelete.name}</strong> dari daftar teman? Kalian tidak lagi bisa saling mengirim DM cepat.
+              </p>
+
+              <div style={{ display: 'flex', gap: '0.6rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setFriendToDelete(null)}
+                  style={{
+                    flex: 1,
+                    padding: '0.6rem',
+                    borderRadius: 9,
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    color: '#cbd5e1',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    removeFriend(effectiveMyName, friendToDelete.name);
+                    refreshFriends();
+                    setFriendToDelete(null);
+                  }}
+                  style={{
+                    flex: 1.2,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.4rem',
+                    padding: '0.6rem',
+                    borderRadius: 9,
+                    background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
+                    border: 'none',
+                    color: '#ffffff',
+                    fontSize: '0.8rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 15px rgba(239,68,68,0.4)',
+                  }}
+                >
+                  <Trash2 size={14} />
+                  <span>Ya, Hapus</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
