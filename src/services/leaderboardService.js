@@ -46,7 +46,8 @@ export function saveLocalPlayerProfile({ name, avatar }) {
 }
 
 /**
- * Mobile Legends: Bang Bang (MLBB) inspired Rank Tier calculator
+ * Permata & Kasino Rank Tier calculator:
+ * Bronze ➔ Silver ➔ Gold ➔ Diamond ➔ Crown ➔ Ace ➔ Royal King
  * Computed from player's accumulated Global Score (points) and Wins (Juara 1).
  */
 export function getPlayerRankTier(score = 0, wins = 0) {
@@ -55,136 +56,120 @@ export function getPlayerRankTier(score = 0, wins = 0) {
   // Effective rating combines score + bonus weight for 1st place wins
   const rating = s + w * 2;
 
-  if (s >= 100 || w >= 25 || rating >= 140) {
+  if (s >= 85 || w >= 20 || rating >= 120) {
     return {
       id: 'immortal',
-      name: 'Mythical Immortal',
-      shortName: 'Immortal',
-      subTier: 'Supreme ★ ' + s,
-      icon: '🐦‍🔥',
+      name: 'Royal King',
+      shortName: 'Royal King',
+      subTier: 'Royal King ★ ' + s,
+      icon: '🦁',
       color: '#ff4d4d',
       accent: '#fde047',
       borderGlow: 'rgba(239, 68, 68, 0.65)',
-      minScore: 100,
+      minScore: 85,
       nextTierName: null,
       nextMinScore: null,
       progress: 100,
     };
   }
-  if (s >= 60 || w >= 15 || rating >= 85) {
+  if (s >= 50 || w >= 12 || rating >= 70) {
     return {
       id: 'glory',
-      name: 'Mythical Glory',
-      shortName: 'Glory',
-      subTier: 'Glory ★ ' + s,
-      icon: '👑',
+      name: 'Ace',
+      shortName: 'Ace',
+      subTier: 'Ace ★ ' + s,
+      icon: '♠️',
       color: '#f59e0b',
       accent: '#fef08a',
       borderGlow: 'rgba(245, 158, 11, 0.6)',
-      minScore: 60,
-      nextTierName: 'Mythical Immortal',
-      nextMinScore: 100,
-      progress: Math.min(99, Math.round(((s - 60) / 40) * 100)),
+      minScore: 50,
+      nextTierName: 'Royal King',
+      nextMinScore: 85,
+      progress: Math.min(99, Math.round(((s - 50) / 35) * 100)),
     };
   }
-  if (s >= 35 || w >= 9 || rating >= 50) {
-    return {
-      id: 'honor',
-      name: 'Mythical Honor',
-      shortName: 'Honor',
-      subTier: 'Honor ★ ' + s,
-      icon: '💠',
-      color: '#38bdf8',
-      accent: '#bae6fd',
-      borderGlow: 'rgba(56, 189, 248, 0.55)',
-      minScore: 35,
-      nextTierName: 'Mythical Glory',
-      nextMinScore: 60,
-      progress: Math.min(99, Math.round(((s - 35) / 25) * 100)),
-    };
-  }
-  if (s >= 20 || w >= 5 || rating >= 30) {
+  if (s >= 28 || w >= 7 || rating >= 40) {
     return {
       id: 'mythic',
-      name: 'Mythic',
-      shortName: 'Mythic',
-      subTier: 'Mythic ★ ' + s,
-      icon: '🔮',
+      name: 'Crown',
+      shortName: 'Crown',
+      subTier: 'Crown ★ ' + s,
+      icon: '👑',
       color: '#c084fc',
       accent: '#f5d0fe',
       borderGlow: 'rgba(192, 132, 252, 0.55)',
-      minScore: 20,
-      nextTierName: 'Mythical Honor',
-      nextMinScore: 35,
-      progress: Math.min(99, Math.round(((s - 20) / 15) * 100)),
+      minScore: 28,
+      nextTierName: 'Ace',
+      nextMinScore: 50,
+      progress: Math.min(99, Math.round(((s - 28) / 22) * 100)),
     };
   }
-  if (s >= 12 || w >= 3 || rating >= 18) {
+  if (s >= 14 || w >= 4 || rating >= 20) {
     return {
-      id: 'legend',
-      name: 'Legend',
-      shortName: 'Legend',
-      subTier: 'Legend I',
-      icon: '🦁',
-      color: '#fbbf24',
-      accent: '#fde68a',
-      borderGlow: 'rgba(251, 191, 36, 0.45)',
-      minScore: 12,
-      nextTierName: 'Mythic',
-      nextMinScore: 20,
-      progress: Math.min(99, Math.round(((s - 12) / 8) * 100)),
+      id: 'honor',
+      name: 'Diamond',
+      shortName: 'Diamond',
+      subTier: 'Diamond I',
+      icon: '💎',
+      color: '#38bdf8',
+      accent: '#bae6fd',
+      borderGlow: 'rgba(56, 189, 248, 0.55)',
+      minScore: 14,
+      nextTierName: 'Crown',
+      nextMinScore: 28,
+      progress: Math.min(99, Math.round(((s - 14) / 14) * 100)),
     };
   }
   if (s >= 6 || w >= 2 || rating >= 9) {
     return {
-      id: 'epic',
-      name: 'Epic',
-      shortName: 'Epic',
-      subTier: 'Epic II',
-      icon: '🦏',
-      color: '#10b981',
-      accent: '#6ee7b7',
-      borderGlow: 'rgba(16, 185, 129, 0.45)',
+      id: 'legend',
+      name: 'Gold',
+      shortName: 'Gold',
+      subTier: 'Gold I',
+      icon: '🥇',
+      color: '#fbbf24',
+      accent: '#fde68a',
+      borderGlow: 'rgba(251, 191, 36, 0.45)',
       minScore: 6,
-      nextTierName: 'Legend',
-      nextMinScore: 12,
-      progress: Math.min(99, Math.round(((s - 6) / 6) * 100)),
+      nextTierName: 'Diamond',
+      nextMinScore: 14,
+      progress: Math.min(99, Math.round(((s - 6) / 8) * 100)),
     };
   }
   if (s >= 2 || w >= 1 || rating >= 3) {
     return {
       id: 'grandmaster',
-      name: 'Grandmaster',
-      shortName: 'Grandmaster',
-      subTier: 'GM III',
-      icon: '⚔️',
-      color: '#60a5fa',
-      accent: '#bfdbfe',
-      borderGlow: 'rgba(96, 165, 250, 0.4)',
+      name: 'Silver',
+      shortName: 'Silver',
+      subTier: 'Silver II',
+      icon: '🥈',
+      color: '#93c5fd',
+      accent: '#dbeafe',
+      borderGlow: 'rgba(147, 197, 253, 0.45)',
       minScore: 2,
-      nextTierName: 'Epic',
+      nextTierName: 'Gold',
       nextMinScore: 6,
       progress: Math.min(99, Math.round(((s - 2) / 4) * 100)),
     };
   }
   return {
     id: 'warrior',
-    name: 'Warrior',
-    shortName: 'Warrior',
-    subTier: 'Warrior III',
-    icon: '🛡️',
-    color: '#94a3b8',
-    accent: '#e2e8f0',
-    borderGlow: 'rgba(148, 163, 184, 0.3)',
+    name: 'Bronze',
+    shortName: 'Bronze',
+    subTier: 'Bronze III',
+    icon: '🥉',
+    color: '#d97706',
+    accent: '#fde68a',
+    borderGlow: 'rgba(217, 119, 6, 0.35)',
     minScore: 0,
-    nextTierName: 'Grandmaster',
+    nextTierName: 'Silver',
     nextMinScore: 2,
     progress: Math.min(99, Math.round((s / 2) * 100)),
   };
 }
 
 /**
- * Returns MLBB-style Supreme / Global Title badge for a given leaderboard rank
+ * Returns Permata & Kasino Global Title badge for a given leaderboard rank
  */
 export function getSupremeTitle(rankNumber, gameType = 'all') {
   const gameLabels = {
@@ -197,34 +182,34 @@ export function getSupremeTitle(rankNumber, gameType = 'all') {
 
   if (rankNumber === 1) {
     return {
-      badge: `SUPREME #1`,
-      fullTitle: `Supreme No.1 ${label}`,
+      badge: `ROYAL KING #1`,
+      fullTitle: `Royal King #1 ${label}`,
       tier: 'supreme-1',
       icon: '👑',
     };
   }
   if (rankNumber === 2) {
     return {
-      badge: `SUPREME #2`,
-      fullTitle: `Supreme No.2 ${label}`,
+      badge: `ACE #2`,
+      fullTitle: `Ace Master #2 ${label}`,
       tier: 'supreme-2',
-      icon: '⚜️',
+      icon: '♠️',
     };
   }
   if (rankNumber === 3) {
     return {
-      badge: `SUPREME #3`,
-      fullTitle: `Supreme No.3 ${label}`,
+      badge: `ACE #3`,
+      fullTitle: `Ace Master #3 ${label}`,
       tier: 'supreme-3',
-      icon: '⚜️',
+      icon: '♠️',
     };
   }
   if (rankNumber <= 10) {
     return {
-      badge: `TOP #${rankNumber}`,
-      fullTitle: `Top 10 ${label}`,
+      badge: `CROWN #${rankNumber}`,
+      fullTitle: `Top 10 Crown ${label}`,
       tier: 'top-10',
-      icon: '🏅',
+      icon: '💎',
     };
   }
   return {

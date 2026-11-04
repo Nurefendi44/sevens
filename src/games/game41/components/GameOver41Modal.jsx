@@ -76,7 +76,7 @@ export default function GameOver41Modal({
                   <span className="mlbb-mvp-ribbon">MVP • JUARA 1</span>
                 </div>
                 <div className="mlbb-mvp-info">
-                  <span className="mlbb-mvp-tag">SUPREME TACTICIAN</span>
+                  <span className="mlbb-mvp-tag">ROYAL KING • REMI 41</span>
                   <div className="mlbb-mvp-name">
                     <span>{winner.name}</span>
                   </div>

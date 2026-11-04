@@ -185,11 +185,11 @@ export default function ScoreboardModal({
         {/* Top Crown / Rank Crest */}
         <div className="podium-rank-crest">
           {targetRank === 1 ? (
-            <span className="crest-supreme-1">👑 SUPREME #1</span>
+            <span className="crest-supreme-1">👑 ROYAL KING #1</span>
           ) : targetRank === 2 ? (
-            <span className="crest-supreme-2">🥈 SUPREME #2</span>
+            <span className="crest-supreme-2">♠️ ACE MASTER #2</span>
           ) : (
-            <span className="crest-supreme-3">🥉 SUPREME #3</span>
+            <span className="crest-supreme-3">♠️ ACE MASTER #3</span>
           )}
         </div>
 

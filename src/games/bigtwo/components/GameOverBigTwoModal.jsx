@@ -66,7 +66,7 @@ export default function GameOverBigTwoModal({
                   <span className="mlbb-mvp-ribbon">MVP • JUARA 1</span>
                 </div>
                 <div className="mlbb-mvp-info">
-                  <span className="mlbb-mvp-tag">SUPREME COMMANDER</span>
+                  <span className="mlbb-mvp-tag">ROYAL KING • BIG TWO</span>
                   <div className="mlbb-mvp-name">
                     <span>{winner.name}</span>
                   </div>
