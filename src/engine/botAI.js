@@ -31,13 +31,21 @@ const BOT_AVATARS = ['🤖', '👾', '🦾', '🎯', '🧠'];
  */
 export function createSinglePlayerRoster(totalPlayers = 2) {
   const count = Math.max(2, Math.min(6, Number(totalPlayers) || 2));
+  let savedName = 'Anda';
+  let savedAvatar = '👑';
+  if (typeof localStorage !== 'undefined') {
+    try {
+      savedName = localStorage.getItem('sevens_player_name') || 'Anda';
+      savedAvatar = localStorage.getItem('sevens_player_avatar') || '👑';
+    } catch (e) {}
+  }
   return Array.from({ length: count }, (_, idx) => {
     if (idx === 0) {
       return {
         id: SINGLE_HUMAN_ID,
-        name: 'Anda',
+        name: savedName,
         seat: SEATS[0],
-        avatar: '👑',
+        avatar: savedAvatar,
         isHuman: true,
         isBot: false,
         isHost: true,

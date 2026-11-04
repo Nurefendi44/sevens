@@ -111,6 +111,11 @@ export function getLocalPlayerName() {
   return localStorage.getItem(STORAGE_PLAYER_NAME) || '';
 }
 
+export function getLocalPlayerAvatar(fallback = null) {
+  if (typeof localStorage === 'undefined') return fallback || AVATARS[0];
+  return localStorage.getItem('sevens_player_avatar') || fallback || AVATARS[0];
+}
+
 /**
  * Saves active session info to localStorage
  */
@@ -294,7 +299,7 @@ export const multiplayerAdapter = {
       seatIndex: 0,
       isHost: true,
       isReady: true,
-      avatar: AVATARS[0],
+      avatar: getLocalPlayerAvatar(AVATARS[0]),
       joinedAt: Date.now(),
     };
 
@@ -383,7 +388,7 @@ export const multiplayerAdapter = {
         seatIndex: 0,
         isHost: true,
         isReady: true,
-        avatar: AVATARS[0] || '👤',
+        avatar: getLocalPlayerAvatar(AVATARS[0] || '👤'),
         joinedAt: Date.now(),
       };
 
@@ -436,7 +441,7 @@ export const multiplayerAdapter = {
       seatIndex: seatIdx,
       isHost: false,
       isReady: false,
-      avatar: AVATARS[seatIdx] || '👤',
+      avatar: getLocalPlayerAvatar(AVATARS[seatIdx] || '👤'),
       joinedAt: Date.now(),
     };
 
@@ -475,7 +480,7 @@ export const multiplayerAdapter = {
 
     const { data, error } = await supabase.rpc('matchmake', {
       p_game_type: gameType || 'sevens',
-      p_player: { id: playerId, name, avatar: AVATARS[0], joinedAt: Date.now() },
+      p_player: { id: playerId, name, avatar: getLocalPlayerAvatar(AVATARS[0]), joinedAt: Date.now() },
     });
 
     if (error) {

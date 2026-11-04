@@ -9,6 +9,231 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 const LOCAL_STORAGE_KEY_FALLBACK = 'poker_global_leaderboard_cache';
+const STORAGE_PLAYER_NAME = 'sevens_player_name';
+const STORAGE_PLAYER_AVATAR = 'sevens_player_avatar';
+
+export const PROFILE_AVATARS = [
+  '👑', '🐉', '🦁', '🦊', '🐼', '🐯', '🥷', '🧙‍♂️', '🧛', '⚡', '🔥', '💎', '👤', '🐨'
+];
+
+/**
+ * Get saved local player profile (username & avatar)
+ */
+export function getLocalPlayerProfile() {
+  if (typeof localStorage === 'undefined') {
+    return { name: '', avatar: '👑' };
+  }
+  return {
+    name: localStorage.getItem(STORAGE_PLAYER_NAME) || '',
+    avatar: localStorage.getItem(STORAGE_PLAYER_AVATAR) || '👑',
+  };
+}
+
+/**
+ * Save local player profile (username & avatar) to localStorage
+ */
+export function saveLocalPlayerProfile({ name, avatar }) {
+  if (typeof localStorage === 'undefined') return;
+  if (typeof name === 'string') {
+    const clean = name.trim();
+    if (clean) {
+      localStorage.setItem(STORAGE_PLAYER_NAME, clean);
+    }
+  }
+  if (avatar) {
+    localStorage.setItem(STORAGE_PLAYER_AVATAR, avatar);
+  }
+}
+
+/**
+ * Mobile Legends: Bang Bang (MLBB) inspired Rank Tier calculator
+ * Computed from player's accumulated Global Score (points) and Wins (Juara 1).
+ */
+export function getPlayerRankTier(score = 0, wins = 0) {
+  const s = Math.max(0, Number(score || 0));
+  const w = Math.max(0, Number(wins || 0));
+  // Effective rating combines score + bonus weight for 1st place wins
+  const rating = s + w * 2;
+
+  if (s >= 100 || w >= 25 || rating >= 140) {
+    return {
+      id: 'immortal',
+      name: 'Mythical Immortal',
+      shortName: 'Immortal',
+      subTier: 'Supreme ★ ' + s,
+      icon: '🐦‍🔥',
+      color: '#ff4d4d',
+      accent: '#fde047',
+      borderGlow: 'rgba(239, 68, 68, 0.65)',
+      minScore: 100,
+      nextTierName: null,
+      nextMinScore: null,
+      progress: 100,
+    };
+  }
+  if (s >= 60 || w >= 15 || rating >= 85) {
+    return {
+      id: 'glory',
+      name: 'Mythical Glory',
+      shortName: 'Glory',
+      subTier: 'Glory ★ ' + s,
+      icon: '👑',
+      color: '#f59e0b',
+      accent: '#fef08a',
+      borderGlow: 'rgba(245, 158, 11, 0.6)',
+      minScore: 60,
+      nextTierName: 'Mythical Immortal',
+      nextMinScore: 100,
+      progress: Math.min(99, Math.round(((s - 60) / 40) * 100)),
+    };
+  }
+  if (s >= 35 || w >= 9 || rating >= 50) {
+    return {
+      id: 'honor',
+      name: 'Mythical Honor',
+      shortName: 'Honor',
+      subTier: 'Honor ★ ' + s,
+      icon: '💠',
+      color: '#38bdf8',
+      accent: '#bae6fd',
+      borderGlow: 'rgba(56, 189, 248, 0.55)',
+      minScore: 35,
+      nextTierName: 'Mythical Glory',
+      nextMinScore: 60,
+      progress: Math.min(99, Math.round(((s - 35) / 25) * 100)),
+    };
+  }
+  if (s >= 20 || w >= 5 || rating >= 30) {
+    return {
+      id: 'mythic',
+      name: 'Mythic',
+      shortName: 'Mythic',
+      subTier: 'Mythic ★ ' + s,
+      icon: '🔮',
+      color: '#c084fc',
+      accent: '#f5d0fe',
+      borderGlow: 'rgba(192, 132, 252, 0.55)',
+      minScore: 20,
+      nextTierName: 'Mythical Honor',
+      nextMinScore: 35,
+      progress: Math.min(99, Math.round(((s - 20) / 15) * 100)),
+    };
+  }
+  if (s >= 12 || w >= 3 || rating >= 18) {
+    return {
+      id: 'legend',
+      name: 'Legend',
+      shortName: 'Legend',
+      subTier: 'Legend I',
+      icon: '🦁',
+      color: '#fbbf24',
+      accent: '#fde68a',
+      borderGlow: 'rgba(251, 191, 36, 0.45)',
+      minScore: 12,
+      nextTierName: 'Mythic',
+      nextMinScore: 20,
+      progress: Math.min(99, Math.round(((s - 12) / 8) * 100)),
+    };
+  }
+  if (s >= 6 || w >= 2 || rating >= 9) {
+    return {
+      id: 'epic',
+      name: 'Epic',
+      shortName: 'Epic',
+      subTier: 'Epic II',
+      icon: '🦏',
+      color: '#10b981',
+      accent: '#6ee7b7',
+      borderGlow: 'rgba(16, 185, 129, 0.45)',
+      minScore: 6,
+      nextTierName: 'Legend',
+      nextMinScore: 12,
+      progress: Math.min(99, Math.round(((s - 6) / 6) * 100)),
+    };
+  }
+  if (s >= 2 || w >= 1 || rating >= 3) {
+    return {
+      id: 'grandmaster',
+      name: 'Grandmaster',
+      shortName: 'Grandmaster',
+      subTier: 'GM III',
+      icon: '⚔️',
+      color: '#60a5fa',
+      accent: '#bfdbfe',
+      borderGlow: 'rgba(96, 165, 250, 0.4)',
+      minScore: 2,
+      nextTierName: 'Epic',
+      nextMinScore: 6,
+      progress: Math.min(99, Math.round(((s - 2) / 4) * 100)),
+    };
+  }
+  return {
+    id: 'warrior',
+    name: 'Warrior',
+    shortName: 'Warrior',
+    subTier: 'Warrior III',
+    icon: '🛡️',
+    color: '#94a3b8',
+    accent: '#e2e8f0',
+    borderGlow: 'rgba(148, 163, 184, 0.3)',
+    minScore: 0,
+    nextTierName: 'Grandmaster',
+    nextMinScore: 2,
+    progress: Math.min(99, Math.round((s / 2) * 100)),
+  };
+}
+
+/**
+ * Returns MLBB-style Supreme / Global Title badge for a given leaderboard rank
+ */
+export function getSupremeTitle(rankNumber, gameType = 'all') {
+  const gameLabels = {
+    all: 'Global',
+    sevens: 'Tujuh Sekop',
+    bigtwo: 'Big Two',
+    game41: 'Remi 41',
+  };
+  const label = gameLabels[gameType] || 'Global';
+
+  if (rankNumber === 1) {
+    return {
+      badge: `SUPREME #1`,
+      fullTitle: `Supreme No.1 ${label}`,
+      tier: 'supreme-1',
+      icon: '👑',
+    };
+  }
+  if (rankNumber === 2) {
+    return {
+      badge: `SUPREME #2`,
+      fullTitle: `Supreme No.2 ${label}`,
+      tier: 'supreme-2',
+      icon: '⚜️',
+    };
+  }
+  if (rankNumber === 3) {
+    return {
+      badge: `SUPREME #3`,
+      fullTitle: `Supreme No.3 ${label}`,
+      tier: 'supreme-3',
+      icon: '⚜️',
+    };
+  }
+  if (rankNumber <= 10) {
+    return {
+      badge: `TOP #${rankNumber}`,
+      fullTitle: `Top 10 ${label}`,
+      tier: 'top-10',
+      icon: '🏅',
+    };
+  }
+  return {
+    badge: `#${rankNumber}`,
+    fullTitle: `Top Global ${label}`,
+    tier: 'global',
+    icon: '🎖️',
+  };
+}
 
 /**
  * Helper to normalize username key for consistent aggregation across sessions/devices

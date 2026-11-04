@@ -378,6 +378,7 @@ export default function App() {
     }
   });
   const [showScoreboardModal, setShowScoreboardModal] = useState(false);
+  const [globalScoreboardCategory, setGlobalScoreboardCategory] = useState('all');
 
   // Real-time Action Announcement Pop-up State
   const [recentActionPopup, setRecentActionPopup] = useState(null);
@@ -2522,9 +2523,13 @@ export default function App() {
             else if (game === 'game41') setShowRules41Modal(true);
             else setShowRulesModal(true);
           }}
-          onOpenScoreboard={() => {
+          onOpenScoreboard={(category = 'all') => {
+            setGlobalScoreboardCategory(typeof category === 'string' ? category : 'all');
             setShowScoreboardModal(true);
           }}
+          isMuted={isMuted}
+          onToggleSound={handleToggleSound}
+          currentMyId={myPlayerId}
         />
 
         {/* Top Global Modal (Khusus di Menu Utama seperti Mobile Legends) */}
@@ -2534,7 +2539,7 @@ export default function App() {
           scoreboardData={getCurrentScoreboardList()}
           onResetScoreboard={() => handleResetScoreboard(activeGameType)}
           activeGameTitle={getCurrentScoreboardTitle()}
-          activeGameType="all"
+          activeGameType={globalScoreboardCategory}
           currentMyId={myPlayerId}
           currentMyName={getLocalPlayerName()}
           mode="global"
