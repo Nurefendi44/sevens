@@ -192,17 +192,23 @@ export function determineWinners41(players = [], hands = {}, closerPlayerId = nu
     const otherPlayers = playerScores.filter((p) => p.player.id !== closerPlayerId);
 
     if (closer) {
-      // Check if any other player scored HIGHER than the closer
-      const higherScorer = otherPlayers.find((other) => {
+      // Aturan Tutup Kartu 41:
+      // Penutup kartu (closer) harus memiliki skor MUTLAK LEBIH TINGGI dari SEMUA pemain lain.
+      // Jika ada pemain lain yang skornya LEBIH TINGGI atau SERI (>= closer.score), closer AUTO KALAH (Busted)!
+      const notBeatenByCloser = otherPlayers.find((other) => {
         if (other.is41 && !closer.is41) return true;
         if (closer.is41 && !other.is41) return false;
-        return other.score > closer.score;
+        if (other.is41 && closer.is41) return true; // Seri 41 murni: penutup tidak mutlak lebih tinggi
+        return other.score >= closer.score; // Skor lebih tinggi ATAU SERI (misal 30 vs 30) -> closer kalah!
       });
 
-      if (higherScorer) {
+      if (notBeatenByCloser) {
         // BUSTED KNOCK! Closer kalah dan ditempatkan di posisi paling bawah
         closer.isBusted = true;
-        closer.penaltyReason = `Kalah Tutup Kartu: Poin (${closer.score}) dilampaui oleh ${higherScorer.player.name} (${higherScorer.score} pts)`;
+        const isTie = notBeatenByCloser.score === closer.score && !notBeatenByCloser.is41 && !closer.is41;
+        closer.penaltyReason = isTie
+          ? `Kalah Tutup Kartu: Skor seri (${closer.score} pts) dengan ${notBeatenByCloser.player.name}. Penutup kartu wajib memiliki skor tertinggi mutlak!`
+          : `Kalah Tutup Kartu: Poin (${closer.score}) dilampaui oleh ${notBeatenByCloser.player.name} (${notBeatenByCloser.score} pts)`;
         
         otherPlayers.sort(sortRule);
         const rankings = [...otherPlayers, closer];

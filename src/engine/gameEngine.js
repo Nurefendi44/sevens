@@ -84,7 +84,11 @@ export function initGame(configOverrides = {}, customPlayers = null) {
   const hands = dealCards(shuffledDeck, playerIds);
 
   let startingPlayerId;
-  if (playerCount === 2 || playerCount === 4) {
+  if (config.startingPlayerId && players.some(p => p.id === config.startingPlayerId)) {
+    startingPlayerId = config.startingPlayerId;
+  } else if (config.firstPlayerId && players.some(p => p.id === config.firstPlayerId)) {
+    startingPlayerId = config.firstPlayerId;
+  } else if (playerCount === 2 || playerCount === 4) {
     startingPlayerId = findStartingPlayer(hands, config.starterCard);
   } else {
     // 3, 5, atau 6 pemain: ♠7 sudah di meja oleh sistem, giliran dimulai oleh player pertama

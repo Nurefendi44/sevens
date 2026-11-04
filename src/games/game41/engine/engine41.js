@@ -56,11 +56,12 @@ export function initGame41(config = DEFAULT_CONFIG_41, customPlayers = null) {
   const drawPile = [...deck];
 
   // Determine starting player:
-  // If firstPlayerId is specified in config (e.g. previous game winner), use that player.
+  // If startingPlayerId / firstPlayerId is specified in config (e.g. from spinner or previous winner), use that player.
   // Otherwise (first game / new match), randomly pick a player to start!
+  const targetStarterId = config?.startingPlayerId || config?.firstPlayerId;
   let firstPlayer;
-  if (config?.firstPlayerId && players.some((p) => p.id === config.firstPlayerId)) {
-    firstPlayer = players.find((p) => p.id === config.firstPlayerId);
+  if (targetStarterId && players.some((p) => p.id === targetStarterId)) {
+    firstPlayer = players.find((p) => p.id === targetStarterId);
   } else {
     const randomIndex = Math.floor(Math.random() * players.length);
     firstPlayer = players[randomIndex];
@@ -505,7 +506,7 @@ export function closeHand41(gameState, playerId, cardToDiscard = null) {
       {
         turn: gameState.turnNumber,
         message: isBusted
-          ? `⚠️ ${playerName} menutup kartu dengan ${closerEval.bestScore} poin, TETAPI KALAH dari ${winnerPlayer?.name} (${result.winner?.score} poin)! Sesuai aturan, ${playerName} kalah di urutan paling bawah.`
+          ? (result.closerPlayer?.penaltyReason || `⚠️ ${playerName} menutup kartu dengan ${closerEval.bestScore} poin, TETAPI KALAH dari ${winnerPlayer?.name} (${result.winner?.score} poin)! Sesuai aturan, ${playerName} kalah di urutan paling bawah.`)
           : `🏆 ${playerName} menutup kartu dengan ${closerEval.bestScore} poin dan BERHASIL MENANG!`,
       },
     ],

@@ -727,6 +727,7 @@ export const multiplayerAdapter = {
 
   /**
    * Merges two sessionScores maps so neither server nor client ever overwrites a more complete session history.
+   * Matches entries consistently by player name or ID to prevent duplicates.
    */
   mergeSessionScoreMaps(mapA = {}, mapB = {}) {
     const merged = {};
@@ -734,16 +735,24 @@ export const multiplayerAdapter = {
       if (!src || typeof src !== 'object') return;
       Object.entries(src).forEach(([rawKey, val]) => {
         if (!val || typeof val !== 'object') return;
-        const key = val.id || rawKey || val.name;
-        if (!key) return;
-        const existing = merged[key];
+        const normName = val.name ? val.name.trim().toLowerCase() : '';
+        const normKey = normName || val.id || rawKey;
+        if (!normKey) return;
+
+        // Cari apakah sudah ada entri dengan normName atau normKey
+        const existingKey = Object.keys(merged).find(
+          (k) => k === normKey || (normName && merged[k]?.name && merged[k].name.trim().toLowerCase() === normName)
+        );
+        const existing = existingKey ? merged[existingKey] : null;
+
         const gamesNew = Number(val.games || 0);
         const winsNew = Number(val.wins || 0);
         const scoreNew = Number(val.score || 0);
+
         if (!existing) {
-          merged[key] = {
+          merged[normKey] = {
             ...val,
-            id: val.id || key,
+            id: val.id || normKey,
             games: gamesNew,
             wins: winsNew,
             score: scoreNew,
@@ -752,26 +761,20 @@ export const multiplayerAdapter = {
           const gamesOld = Number(existing.games || 0);
           const winsOld = Number(existing.wins || 0);
           const scoreOld = Number(existing.score || 0);
-          if (gamesNew > gamesOld) {
-            merged[key] = {
-              ...existing,
-              ...val,
-              name: val.name || existing.name,
-              avatar: val.avatar || existing.avatar,
-              games: gamesNew,
-              wins: Math.max(winsNew, winsOld),
-              score: Math.max(scoreNew, scoreOld),
-            };
-          } else if (gamesNew === gamesOld) {
-            merged[key] = {
-              ...existing,
-              name: val.name || existing.name,
-              avatar: val.avatar || existing.avatar,
-              games: gamesOld,
-              wins: Math.max(winsOld, winsNew),
-              score: Math.max(scoreOld, scoreNew),
-            };
-          }
+          const bestGames = Math.max(gamesNew, gamesOld);
+          const bestWins = Math.max(winsNew, winsOld);
+          const bestScore = Math.max(scoreNew, scoreOld);
+
+          merged[existingKey] = {
+            ...existing,
+            ...val,
+            name: val.name || existing.name,
+            avatar: val.avatar || existing.avatar,
+            id: val.id || existing.id,
+            games: bestGames,
+            wins: bestWins,
+            score: bestScore,
+          };
         }
       });
     };
@@ -872,6 +875,18 @@ export const multiplayerAdapter = {
       gameState.config.roomPlayerCount = targetRoomSeats;
       gameState.config.desiredPlayerCount = targetRoomSeats;
       delete gameState.config.sessionScores;
+    }
+
+    const chosenStartId = safeOverrides.startingPlayerId || safeOverrides.firstPlayerId;
+    if (gameState && chosenStartId) {
+      gameState.currentPlayer = chosenStartId;
+      if (determinedGameType === 'bigtwo') {
+        gameState.trickLeaderId = chosenStartId;
+      }
+    }
+
+    if (gameState && safeOverrides.firstTurnWheel) {
+      gameState.firstTurnWheel = safeOverrides.firstTurnWheel;
     }
 
     const { data: updatedRoom, error: updateErr } = await supabase

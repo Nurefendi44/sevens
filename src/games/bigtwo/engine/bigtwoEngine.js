@@ -353,24 +353,34 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
       const prevSessionScores = gameState.sessionScores || {};
       const updatedSessionScores = { ...prevSessionScores };
       rankings.forEach((r) => {
-        const key = r.id || r.name;
-        const current = updatedSessionScores[key] || {
-          id: r.id,
-          name: r.name,
-          avatar: r.avatar,
-          games: 0,
-          wins: 0,
-          score: 0,
-        };
+        const nameKey = r.name ? r.name.trim().toLowerCase() : '';
+        const idKey = r.id || '';
+        const key = nameKey || idKey;
+        const current =
+          updatedSessionScores[nameKey] ||
+          updatedSessionScores[idKey] ||
+          updatedSessionScores[r.name] || {
+            id: r.id,
+            name: r.name,
+            avatar: r.avatar,
+            games: 0,
+            wins: 0,
+            score: 0,
+          };
         const isFirstPlace = Boolean(!r.isDisqualified && (r.rank === 1 || r.isWinner));
-        updatedSessionScores[key] = {
+        const updatedEntry = {
           ...current,
+          id: r.id || current.id,
           name: r.name || current.name,
           avatar: r.avatar || current.avatar,
           games: (current.games || 0) + 1,
           wins: (current.wins || 0) + (isFirstPlace ? 1 : 0),
           score: (current.score || 0) + (r.pointsEarned || 0),
         };
+        updatedSessionScores[key] = updatedEntry;
+        if (nameKey && idKey && idKey !== nameKey && updatedSessionScores[idKey]) {
+          delete updatedSessionScores[idKey];
+        }
       });
 
       const finishedState = {
@@ -468,24 +478,34 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
       const updatedSessionScores = { ...prevSessionScores };
       const normalWinnerId = nextFinishedPlayers[0]?.id || playerId;
       finalRankings.forEach((r) => {
-        const key = r.id || r.name;
-        const current = updatedSessionScores[key] || {
-          id: r.id,
-          name: r.name,
-          avatar: r.avatar,
-          games: 0,
-          wins: 0,
-          score: 0,
-        };
+        const nameKey = r.name ? r.name.trim().toLowerCase() : '';
+        const idKey = r.id || '';
+        const key = nameKey || idKey;
+        const current =
+          updatedSessionScores[nameKey] ||
+          updatedSessionScores[idKey] ||
+          updatedSessionScores[r.name] || {
+            id: r.id,
+            name: r.name,
+            avatar: r.avatar,
+            games: 0,
+            wins: 0,
+            score: 0,
+          };
         const isFirstPlace = Boolean(!r.isDisqualified && (r.rank === 1 || r.isWinner));
-        updatedSessionScores[key] = {
+        const updatedEntry = {
           ...current,
+          id: r.id || current.id,
           name: r.name || current.name,
           avatar: r.avatar || current.avatar,
           games: (current.games || 0) + 1,
           wins: (current.wins || 0) + (isFirstPlace ? 1 : 0),
           score: (current.score || 0) + (r.pointsEarned || 0),
         };
+        updatedSessionScores[key] = updatedEntry;
+        if (nameKey && idKey && idKey !== nameKey && updatedSessionScores[idKey]) {
+          delete updatedSessionScores[idKey];
+        }
       });
 
       const finalState = {

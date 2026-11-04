@@ -21,6 +21,7 @@ export default function BigTwoFirstTurnWheel({
   onRespin,
   isHost = true,
   isMultiplayer = false,
+  gameType = 'bigtwo',
 }) {
   const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
@@ -203,7 +204,11 @@ export default function BigTwoFirstTurnWheel({
           </div>
           <h2 className="wheel-main-title">MENENTUKAN GILIRAN PERTAMA</h2>
           <p className="wheel-subtitle">
-            Roda keberuntungan berputar menentukan siapa yang berhak jalan pertama (Meja Bebas)!
+            {gameType === 'game41'
+              ? 'Roda keberuntungan berputar menentukan siapa yang pertama mengambil kartu!'
+              : gameType === 'sevens'
+              ? 'Roda keberuntungan berputar menentukan siapa yang pertama memainkan kartu di meja!'
+              : 'Roda keberuntungan berputar menentukan siapa yang berhak jalan pertama (Meja Bebas)!'}
           </p>
         </div>
 
@@ -336,7 +341,11 @@ export default function BigTwoFirstTurnWheel({
                 <span className="winner-name">{winnerPlayer.name}</span>
               </div>
               <p className="winner-instruction">
-                Bebas membuka meja dengan Single, Pair, Triple, atau 5 Kartu Poker!
+                {gameType === 'game41'
+                  ? 'Mendapat giliran pertama mengambil kartu dari tumpukan Dek atau Buangan Meja!'
+                  : gameType === 'sevens'
+                  ? 'Mendapat giliran pertama untuk mulai menyusun kartu di meja!'
+                  : 'Bebas membuka meja dengan Single, Pair, Triple, atau 5 Kartu Poker!'}
               </p>
 
               <div className="wheel-actions">
