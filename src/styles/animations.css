@@ -230,3 +230,289 @@
   }
 }
 
+/* ===================================================
+   MLBB POST-MATCH VICTORY / MVP RESULT MODAL
+   =================================================== */
+
+.mlbb-gameover-card {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.24) 0%, transparent 50%),
+    linear-gradient(180deg, #0d1629 0%, #070c18 100%) !important;
+  border: 2px solid rgba(251, 191, 36, 0.6) !important;
+  border-radius: 22px !important;
+  box-shadow:
+    0 28px 70px rgba(0, 0, 0, 0.88),
+    0 0 40px rgba(245, 158, 11, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+  overflow: hidden;
+  position: relative;
+}
+
+.mlbb-victory-header {
+  position: relative;
+  padding: 1.35rem 1.5rem 1.1rem;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(251, 191, 36, 0.32) 0%, rgba(15, 23, 42, 0.4) 75%),
+    linear-gradient(180deg, rgba(30, 41, 59, 0.7) 0%, rgba(7, 12, 24, 0.95) 100%);
+  border-bottom: 1.5px solid rgba(251, 191, 36, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.3rem;
+}
+
+.mlbb-victory-close-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #fde68a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mlbb-victory-close-btn:hover {
+  background: rgba(245, 158, 11, 0.25);
+  transform: scale(1.08);
+}
+
+.mlbb-victory-kicker {
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #38bdf8;
+  background: rgba(14, 165, 233, 0.16);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  padding: 0.16rem 0.75rem;
+  border-radius: 999px;
+}
+
+.mlbb-victory-banner-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.55rem, 3.8vw, 2.2rem);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, #ffffff 0%, #fef08a 38%, #f59e0b 80%, #b45309 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 4px 12px rgba(245, 158, 11, 0.45));
+  line-height: 1.1;
+}
+
+.mlbb-victory-subtitle {
+  font-size: 0.8rem;
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+/* MVP Spotlight Card */
+.mlbb-mvp-spotlight {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.95rem 1.2rem;
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 0% 50%, rgba(251, 191, 36, 0.25) 0%, transparent 65%),
+    linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+  border: 1.5px solid rgba(251, 191, 36, 0.65);
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.55),
+    0 0 24px rgba(245, 158, 11, 0.22);
+  flex-wrap: wrap;
+}
+
+.mlbb-mvp-left {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.mlbb-mvp-avatar-wrap {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.35), rgba(15, 23, 42, 0.95));
+  border: 2.5px solid #fbbf24;
+  box-shadow: 0 0 18px rgba(251, 191, 36, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.9rem;
+  flex-shrink: 0;
+}
+
+.mlbb-mvp-crown {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.15rem;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.8));
+}
+
+.mlbb-mvp-ribbon {
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #f59e0b, #b45309);
+  border: 1px solid #fef08a;
+  color: #fff;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.mlbb-mvp-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.mlbb-mvp-tag {
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fbbf24;
+}
+
+.mlbb-mvp-name {
+  font-size: 1.18rem;
+  font-weight: 900;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.mlbb-mvp-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.mlbb-mvp-score-pill {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(180, 83, 9, 0.2));
+  border: 1px solid rgba(251, 191, 36, 0.6);
+  color: #fef08a;
+  padding: 0.35rem 0.8rem;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  font-weight: 900;
+  text-align: right;
+}
+
+/* Player Battle Result Row */
+.mlbb-battle-row {
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.92) 0%, rgba(10, 17, 32, 0.95) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  padding: 0.8rem 1rem;
+  transition: all 0.2s ease;
+}
+
+.mlbb-battle-row.rank-1 {
+  background:
+    radial-gradient(circle at 0% 50%, rgba(245, 158, 11, 0.16) 0%, transparent 55%),
+    linear-gradient(90deg, rgba(24, 34, 56, 0.96) 0%, rgba(12, 20, 38, 0.98) 100%);
+  border: 1.5px solid rgba(251, 191, 36, 0.55);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.14);
+}
+
+.mlbb-battle-row.rank-2 {
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.mlbb-battle-row.rank-3 {
+  border-color: rgba(217, 119, 6, 0.35);
+}
+
+/* Post-Match Footer Buttons */
+.mlbb-gameover-footer {
+  padding: 1rem 1.35rem !important;
+  background: rgba(6, 10, 20, 0.95) !important;
+  border-top: 1px solid rgba(251, 191, 36, 0.28) !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.mlbb-btn-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.62rem 1.25rem;
+  border-radius: 10px;
+  font-size: 0.84rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.mlbb-btn-gold {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 55%, #b45309 100%);
+  border: 1.5px solid #fde68a;
+  color: #ffffff;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.45);
+}
+
+.mlbb-btn-gold:hover {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 55%, #d97706 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(245, 158, 11, 0.65);
+}
+
+.mlbb-btn-cyan {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.22), rgba(2, 132, 199, 0.16));
+  border: 1.5px solid rgba(56, 189, 248, 0.55);
+  color: #7dd3fc;
+}
+
+.mlbb-btn-cyan:hover {
+  background: rgba(14, 165, 233, 0.34);
+  border-color: #38bdf8;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.mlbb-btn-slate {
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #e2e8f0;
+}
+
+.mlbb-btn-slate:hover {
+  background: rgba(51, 65, 85, 0.92);
+  border-color: rgba(251, 191, 36, 0.45);
+  color: #ffffff;
+}
+
+

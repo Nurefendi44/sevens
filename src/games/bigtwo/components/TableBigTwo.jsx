@@ -178,7 +178,7 @@ export default function TableBigTwo({
   return (
     <div className="bigtwo-table-felt">
       <div className="bigtwo-felt-overlay" />
-      <div className="bigtwo-watermark">BIG TWO</div>
+      <div className="bigtwo-watermark">✦ IMPERIAL BIG TWO ✦</div>
 
       {/* SLEEK FLOATING ACTION ALERT BANNER */}
       {actionAlert && (

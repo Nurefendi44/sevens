@@ -2680,47 +2680,50 @@ export default function App() {
             </span>
           )}
 
-          {/* Global Ace Direction Badge & Turn (Desktop Only) */}
-          <div className="desktop-only" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-            {gameState.globalAceDirection === 'bottom' && (
-              <span
-                className="brand-tag"
-                style={{ background: 'rgba(16, 185, 129, 0.18)', borderColor: '#10b981', color: '#34d399' }}
-                title="Arah penutupan rangkaian As terkunci di BAWAH. Kartu As yang ditutup bernilai -1."
-              >
-                ⬇️ Rangkai As: BAWAH (A=-1)
-              </span>
-            )}
-            {gameState.globalAceDirection === 'top' && (
-              <span
-                className="brand-tag"
-                style={{ background: 'rgba(245, 158, 11, 0.18)', borderColor: '#f59e0b', color: '#fbbf24' }}
-                title="Arah penutupan rangkaian As terkunci di ATAS. Kartu As yang ditutup bernilai -11."
-              >
-                ⬆️ Rangkai As: ATAS (A=-11)
-              </span>
-            )}
-            {!gameState.globalAceDirection && (
-              <span
-                className="brand-tag"
-                style={{ color: 'var(--text-muted)', borderColor: 'var(--border-subtle)' }}
-                title="Arah penutupan rangkaian As belum terkunci. Ditentukan saat kartu As pertama dirangkai di meja."
-              >
-                Rangkai As: Terbuka
-              </span>
-            )}
+          {/* Global Ace Direction Badge & Turn (Desktop Only - Sevens Only) */}
+          {activeGameType === 'sevens' && (
+            <div className="desktop-only" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              {gameState.globalAceDirection === 'bottom' && (
+                <span
+                  className="brand-tag"
+                  style={{ background: 'rgba(16, 185, 129, 0.18)', borderColor: '#10b981', color: '#34d399' }}
+                  title="Arah penutupan rangkaian As terkunci di BAWAH. Kartu As yang ditutup bernilai -1."
+                >
+                  ⬇️ Rangkai As: BAWAH (A=-1)
+                </span>
+              )}
+              {gameState.globalAceDirection === 'top' && (
+                <span
+                  className="brand-tag"
+                  style={{ background: 'rgba(245, 158, 11, 0.18)', borderColor: '#f59e0b', color: '#fbbf24' }}
+                  title="Arah penutupan rangkaian As terkunci di ATAS. Kartu As yang ditutup bernilai -11."
+                >
+                  ⬆️ Rangkai As: ATAS (A=-11)
+                </span>
+              )}
+              {!gameState.globalAceDirection && (
+                <span
+                  className="brand-tag"
+                  style={{ color: 'var(--text-muted)', borderColor: 'var(--border-subtle)' }}
+                  title="Arah penutupan rangkaian As belum terkunci. Ditentukan saat kartu As pertama dirangkai di meja."
+                >
+                  Rangkai As: Terbuka
+                </span>
+              )}
 
-            <span
-              style={{
-                fontSize: '0.8rem',
-                color: 'var(--text-muted)',
-                fontFamily: 'var(--font-mono)',
-                marginLeft: '0.25rem',
-              }}
-            >
-              Turn #{gameState.turnNumber}
-            </span>
-          </div>
+              <span
+                style={{
+                  fontSize: '0.78rem',
+                  color: '#fbbf24',
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 700,
+                  marginLeft: '0.2rem',
+                }}
+              >
+                Turn #{gameState.turnNumber}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* DESKTOP NAV ACTIONS (> 768px) */}

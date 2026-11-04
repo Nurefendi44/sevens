@@ -1,222 +1,285 @@
 import React, { useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { Trophy, RotateCcw, Home } from 'lucide-react';
+import { RotateCcw, Award, X, Sparkles } from 'lucide-react';
+import { SUIT_SYMBOLS } from '../engine/constants.js';
+import '../styles/animations.css';
 
 export default function GameOverModal({
-  gameState,
+  results,
   onRestart,
-  onBackToMenu,
-  onOpenScoreboard,
-  isMultiplayer = false,
+  onClose,
   isHost = true,
+  isMultiplayer = false,
+  onOpenScoreboard,
 }) {
-  const { scores = {}, players = [], winners = [] } = gameState;
-
   useEffect(() => {
-    // Fire celebratory confetti
     try {
       confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
+        particleCount: 95,
+        spread: 75,
+        origin: { y: 0.55 },
+        colors: ['#fbbf24', '#f59e0b', '#38bdf8', '#10b981'],
       });
-    } catch (e) {
-      // Ignore in non-browser env
+    } catch {
+      // Ignore confetti error in test environment
     }
   }, []);
 
-  // Sort players by totalScore descending (highest score / least negative points wins)
-  const sortedPlayers = [...players].sort((a, b) => {
-    const scoreA = scores[a.id]?.totalScore ?? -999;
-    const scoreB = scores[b.id]?.totalScore ?? -999;
-    return scoreB - scoreA;
-  });
+  if (!results || !results.rankings) return null;
+
+  const { rankings, aceDirectionUsed } = results;
+  const winner = rankings[0];
 
   return (
     <div className="modal-backdrop">
-      <div className="modal-card" style={{ maxWidth: '780px' }}>
-        <div className="modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Trophy color="#fbbf24" size={24} />
-            <h2 className="modal-title">PERMAINAN SELESAI</h2>
-          </div>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            Turn ke-{gameState.turnNumber}
-          </span>
-        </div>
-
-        <div className="modal-body">
-          {/* Podium Top 3 */}
-          <div className="podium-container">
-            {sortedPlayers.map((player, idx) => {
-              const pScore = scores[player.id];
-              const isWinner = winners.includes(player.id);
-
-              return (
-                <div
-                  key={player.id}
-                  className={`podium-seat ${isWinner ? 'winner' : ''}`}
-                >
-                  {isWinner && <div className="winner-crown">👑</div>}
-                  <div style={{ fontSize: '1.75rem' }}>{player.avatar}</div>
-                  <div style={{ fontWeight: 800, marginTop: '4px', fontSize: '0.9rem' }}>
-                    {player.name}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                    Peringkat #{idx + 1}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '1.25rem',
-                      fontWeight: 900,
-                      fontFamily: 'var(--font-mono)',
-                      color: isWinner ? '#fbbf24' : 'var(--text-primary)',
-                      marginTop: '6px',
-                    }}
-                  >
-                    {pScore?.totalScore ?? 0}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Detailed Score Breakdown Table */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc' }}>
-              📊 Rincian Skor & Penalti
-            </h3>
-
-            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>
-              <table style={{ width: '100%', minWidth: '520px', borderCollapse: 'collapse', fontSize: '0.825rem' }}>
-                <thead>
-                  <tr style={{ background: 'rgba(255, 255, 255, 0.05)', textAlign: 'left', borderBottom: '1px solid var(--border-subtle)' }}>
-                    <th style={{ padding: '8px 12px' }}>Pemain</th>
-                    <th style={{ padding: '8px 12px' }}>Kartu Ditutup (Base)</th>
-                    <th style={{ padding: '8px 12px' }}>Penalti Rule 6 (6 & 8)</th>
-                    <th style={{ padding: '8px 12px' }}>Penalti FAULT</th>
-                    <th style={{ padding: '8px 12px', textAlign: 'right' }}>Total Skor</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedPlayers.map((player) => {
-                    const pScore = scores[player.id];
-                    if (!pScore) return null;
-
-                    return (
-                      <tr key={player.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                        <td style={{ padding: '8px 12px', fontWeight: 700 }}>
-                          <span style={{ marginRight: '6px' }}>{player.avatar}</span>
-                          {player.name}
-                        </td>
-                        <td style={{ padding: '8px 12px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                              {pScore.baseClosedScore}
-                            </span>
-                            <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-                              ({pScore.closedCardsCount} kartu)
-                            </span>
-                          </div>
-                          {pScore.closedCards?.length > 0 && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '4px' }}>
-                              {pScore.closedCards.map((it, cIdx) => (
-                                <span
-                                  key={cIdx}
-                                  style={{
-                                    fontSize: '0.7rem',
-                                    padding: '1px 4px',
-                                    borderRadius: '3px',
-                                    background: 'rgba(255, 255, 255, 0.08)',
-                                  }}
-                                >
-                                  {it.card.label}{it.card.symbol} ({it.penalty})
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </td>
-                        <td style={{ padding: '8px 12px' }}>
-                          <span
-                            style={{
-                              fontFamily: 'var(--font-mono)',
-                              fontWeight: 700,
-                              color: pScore.rule6PenaltyScore < 0 ? '#f87171' : 'inherit',
-                            }}
-                          >
-                            {pScore.rule6PenaltyScore}
-                          </span>
-                          {pScore.rule6Details?.map((r6, rIdx) => (
-                            <div key={rIdx} style={{ fontSize: '0.675rem', color: '#fca5a5', marginTop: '2px' }}>
-                              • {r6.card.label}{r6.card.symbol}: {r6.amount} ({r6.reason})
-                            </div>
-                          ))}
-                        </td>
-                        <td style={{ padding: '8px 12px' }}>
-                          <span
-                            style={{
-                              fontFamily: 'var(--font-mono)',
-                              fontWeight: 700,
-                              color: pScore.faultScore < 0 ? '#ef4444' : 'inherit',
-                            }}
-                          >
-                            {pScore.faultScore}
-                          </span>
-                          <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginLeft: '4px' }}>
-                            ({pScore.faultsCount}x)
-                          </span>
-                        </td>
-                        <td
-                          style={{
-                            padding: '8px 12px',
-                            textAlign: 'right',
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '1rem',
-                            fontWeight: 900,
-                            color: pScore.totalScore >= 0 ? '#34d399' : '#f87171',
-                          }}
-                        >
-                          {pScore.totalScore}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <div className="modal-footer" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-          {onBackToMenu && (
-            <button className="btn-header" onClick={onBackToMenu}>
-              <Home size={15} />
-              <span>Menu Utama</span>
-            </button>
-          )}
-          {onOpenScoreboard && (
+      <div className="modal-card modal-xl mlbb-gameover-card">
+        {/* MLBB VICTORY CREST HEADER */}
+        <div className="mlbb-victory-header">
+          {onClose && (
             <button
-              className="btn-header"
-              onClick={onOpenScoreboard}
-              style={{
-                background: 'rgba(245, 158, 11, 0.15)',
-                borderColor: '#fbbf24',
-                color: '#fbbf24',
-              }}
+              type="button"
+              className="mlbb-victory-close-btn"
+              onClick={onClose}
+              title="Tutup dan lihat meja"
             >
-              <Trophy size={15} />
-              <span>Papan Skor</span>
+              <X size={16} />
             </button>
           )}
-          {(!isMultiplayer || isHost) ? (
-            <button className="btn-header btn-gold" onClick={onRestart}>
+          <span className="mlbb-victory-kicker">
+            <Sparkles size={11} style={{ display: 'inline', marginRight: '4px' }} />
+            SEVENS ROYAL • BATTLE RESULT
+          </span>
+          <div className="mlbb-victory-banner-title">VICTORY</div>
+          <div className="mlbb-victory-subtitle">
+            Klasemen Akhir & Rekapitulasi Poin Tujuh Sekop
+          </div>
+        </div>
+
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.95rem' }}>
+          {/* MVP / CHAMPION SPOTLIGHT CARD */}
+          {winner && (
+            <div className="mlbb-mvp-spotlight">
+              <div className="mlbb-mvp-left">
+                <div className="mlbb-mvp-avatar-wrap">
+                  <span className="mlbb-mvp-crown">👑</span>
+                  <span>{winner.avatar || '🧙‍♂️'}</span>
+                  <span className="mlbb-mvp-ribbon">MVP • JUARA 1</span>
+                </div>
+                <div className="mlbb-mvp-info">
+                  <span className="mlbb-mvp-tag">MYTHIC SOVEREIGN</span>
+                  <div className="mlbb-mvp-name">
+                    <span>{winner.name}</span>
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                    Poin Kartu Tertutup: {winner.closedCardsPoints} • Penalti 6&8: +{winner.faultBonusTotal}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mlbb-mvp-stats">
+                <div className="mlbb-mvp-score-pill">
+                  TOTAL SKOR: {winner.finalScore > 0 ? `+${winner.finalScore}` : winner.finalScore}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* PODIUM TOP 3 */}
+          <div className="podium-container">
+            {rankings.slice(0, 3).map((player, idx) => (
+              <div
+                key={player.id}
+                className={`podium-seat ${idx === 0 ? 'first-place' : ''}`}
+                style={{
+                  background:
+                    idx === 0
+                      ? 'linear-gradient(180deg, rgba(245, 158, 11, 0.22) 0%, rgba(15, 23, 42, 0.92) 100%)'
+                      : 'rgba(15, 23, 42, 0.8)',
+                  borderColor:
+                    idx === 0
+                      ? 'rgba(251, 191, 36, 0.65)'
+                      : 'rgba(148, 163, 184, 0.25)',
+                }}
+              >
+                {idx === 0 && <div className="winner-crown">👑</div>}
+                <div className={`rank-medal rank-${idx + 1}`}>{player.rank}</div>
+                <div style={{ fontSize: '1.75rem' }}>{player.avatar}</div>
+                <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#f8fafc' }}>
+                  {player.name}
+                </div>
+                <div
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '1.1rem',
+                    fontWeight: 900,
+                    color:
+                      player.finalScore >= 0
+                        ? '#34d399'
+                        : '#f87171',
+                  }}
+                >
+                  {player.finalScore > 0 ? `+${player.finalScore}` : player.finalScore} pts
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Global Ace Direction Indicator */}
+          <div
+            style={{
+              background: 'rgba(15, 23, 42, 0.78)',
+              padding: '0.6rem 1rem',
+              borderRadius: '10px',
+              border: '1px solid rgba(251, 191, 36, 0.28)',
+              fontSize: '0.8rem',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '0.4rem',
+            }}
+          >
+            <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+              Aturan Penilaian Kartu As (Tertutup):
+            </span>
+            <strong style={{ color: '#fbbf24' }}>
+              {aceDirectionUsed === 'top'
+                ? '⬆️ Rangkai Atas Terkunci (As = -11 Poin)'
+                : '⬇️ Rangkai Bawah / Default (As = -1 Poin)'}
+            </strong>
+          </div>
+
+          {/* Detailed Score Table */}
+          <div style={{ overflowX: 'auto' }}>
+            <table className="score-breakdown-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Pemain</th>
+                  <th>Kartu Tertutup</th>
+                  <th>Poin Kartu</th>
+                  <th>Bonus & Penalti (6 & 8)</th>
+                  <th>Skor Akhir</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rankings.map((r) => (
+                  <tr key={r.id}>
+                    <td style={{ fontWeight: 800, color: r.rank === 1 ? '#fbbf24' : 'inherit' }}>
+                      #{r.rank}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span>{r.avatar}</span>
+                        <span style={{ fontWeight: 700 }}>{r.name}</span>
+                      </div>
+                    </td>
+                    <td>
+                      {r.closedCardDetails.length === 0 ? (
+                        <span style={{ color: 'var(--color-success)', fontSize: '0.75rem', fontWeight: 700 }}>
+                          ✨ Bersih (0 kartu)
+                        </span>
+                      ) : (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {r.closedCardDetails.map((c) => (
+                            <span
+                              key={c.id}
+                              style={{
+                                fontSize: '0.7rem',
+                                padding: '2px 5px',
+                                background: 'rgba(255,255,255,0.08)',
+                                borderRadius: '4px',
+                                fontFamily: 'var(--font-mono)',
+                              }}
+                              title={`Nilai poin: ${c.pointValue}`}
+                            >
+                              {c.label}
+                              {SUIT_SYMBOLS[c.suit]} ({c.pointValue})
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 700,
+                        color: r.closedCardsPoints < 0 ? 'var(--color-danger)' : 'var(--text-primary)',
+                      }}
+                    >
+                      {r.closedCardsPoints}
+                    </td>
+                    <td
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 700,
+                        color:
+                          r.faultBonusTotal > 0
+                            ? 'var(--color-success)'
+                            : r.faultBonusTotal < 0
+                            ? 'var(--color-danger)'
+                            : 'var(--text-muted)',
+                      }}
+                    >
+                      {r.faultBonusTotal > 0 ? `+${r.faultBonusTotal}` : r.faultBonusTotal}
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: '4px' }}>
+                        ({r.faultCount}x fault)
+                      </span>
+                    </td>
+                    <td
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 900,
+                        fontSize: '0.95rem',
+                        color: r.finalScore >= 0 ? 'var(--color-success)' : '#f87171',
+                      }}
+                    >
+                      {r.finalScore > 0 ? `+${r.finalScore}` : r.finalScore}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* MLBB POST-MATCH ACTION FOOTER */}
+        <div className="modal-footer mlbb-gameover-footer">
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {onClose && (
+              <button
+                type="button"
+                className="mlbb-btn-action mlbb-btn-slate"
+                onClick={onClose}
+              >
+                <span>Lihat Papan Meja</span>
+              </button>
+            )}
+            {onOpenScoreboard && (
+              <button
+                type="button"
+                className="mlbb-btn-action mlbb-btn-cyan"
+                onClick={onOpenScoreboard}
+              >
+                <Award size={16} />
+                <span>Top Global & Skor</span>
+              </button>
+            )}
+          </div>
+
+          {!isMultiplayer || isHost ? (
+            <button
+              type="button"
+              className="mlbb-btn-action mlbb-btn-gold"
+              onClick={onRestart}
+            >
               <RotateCcw size={16} />
-              <span>{isMultiplayer ? 'Kocok Ulang & Main Lagi (Host)' : 'Kocok Ulang & Main Lagi'}</span>
+              <span>Main Lagi (Ronde Baru)</span>
             </button>
           ) : (
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>
-              Menunggu Host untuk memulai babak berikutnya...
-            </div>
+            <span style={{ fontSize: '0.82rem', color: '#fde68a', fontWeight: 700 }}>
+              ⏳ Menunggu Host memulai ronde baru...
+            </span>
           )}
         </div>
       </div>

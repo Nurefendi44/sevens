@@ -58,31 +58,33 @@
   }
 }
 
-/* Poker Table Outer Frame */
+/* Poker Table Outer Frame — MLBB Royal Rim */
 .poker-table-wrapper {
   flex: 1;
   min-height: 520px;
   display: flex;
   position: relative;
-  border-radius: 40px;
-  padding: 16px;
-  background: radial-gradient(circle at 50% 50%, #361b11 0%, #1a0c06 100%);
+  border-radius: 36px;
+  padding: 14px;
+  background: linear-gradient(180deg, #1b160d 0%, #0b0f1c 55%, #19130a 100%);
   box-shadow: 
-    0 25px 60px rgba(0, 0, 0, 0.8),
-    inset 0 2px 4px rgba(255, 255, 255, 0.15),
-    inset 0 -4px 10px rgba(0, 0, 0, 0.6);
-  border: 4px solid #4a281b;
+    0 25px 60px rgba(0, 0, 0, 0.85),
+    0 0 32px rgba(245, 158, 11, 0.14),
+    inset 0 2px 4px rgba(251, 191, 36, 0.3),
+    inset 0 -4px 10px rgba(0, 0, 0, 0.75);
+  border: 3px solid rgba(245, 158, 11, 0.52);
 }
 
-/* Casino Felt Surface */
+/* Casino Felt Surface — Arcane Emerald & Imperial Gold */
 .poker-felt {
   flex: 1;
-  border-radius: 28px;
-  background: 
-    radial-gradient(ellipse at 50% 50%, #155e3e 0%, #0a3521 65%, #051d12 100%);
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(16, 185, 129, 0.2) 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 50%, #0d3b2e 0%, #07221b 65%, #04111a 100%);
   box-shadow: 
-    inset 0 0 45px rgba(0, 0, 0, 0.85),
-    inset 0 0 0 2px rgba(245, 158, 11, 0.25);
+    inset 0 0 55px rgba(0, 0, 0, 0.85),
+    inset 0 0 0 2px rgba(251, 191, 36, 0.35);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -97,12 +99,12 @@
   left: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;
-  opacity: 0.04;
+  opacity: 0.055;
   font-family: var(--font-display);
-  font-size: 8rem;
+  font-size: 7rem;
   font-weight: 900;
-  color: #fff;
-  letter-spacing: 0.1em;
+  color: #fbbf24;
+  letter-spacing: 0.14em;
   text-align: center;
   line-height: 1;
 }
@@ -176,29 +178,32 @@
   min-height: 320px;
 }
 
-/* Player Seat Badge */
+/* Player Seat Badge — MLBB Commander Pod */
 .player-seat {
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.92) 0%, rgba(7, 13, 25, 0.96) 100%);
+  border: 1.5px solid rgba(251, 191, 36, 0.3);
+  border-radius: 14px;
   padding: 0.65rem 0.85rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.35rem;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(10px);
   min-width: 140px;
-  max-width: 180px;
+  max-width: 185px;
   transition: all var(--transition-normal);
   position: relative;
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .player-seat.active-turn {
-  border-color: #f59e0b;
+  border-color: #fbbf24;
   box-shadow: 
-    0 0 0 2px rgba(245, 158, 11, 0.5),
-    0 0 25px rgba(245, 158, 11, 0.35);
-  background: rgba(22, 33, 58, 0.95);
+    0 0 0 2px rgba(245, 158, 11, 0.48),
+    0 0 26px rgba(245, 158, 11, 0.42);
+  background: linear-gradient(180deg, rgba(22, 33, 58, 0.96) 0%, rgba(12, 20, 38, 0.98) 100%);
   transform: scale(1.03);
 }
 
@@ -213,12 +218,12 @@
   width: 34px;
   height: 34px;
   border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.1);
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.25), rgba(15, 23, 42, 0.9));
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.2rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1.5px solid rgba(251, 191, 36, 0.55);
 }
 
 .player-info {
@@ -332,11 +337,13 @@
   gap: 0.6rem;
   width: 100%;
   max-width: 100%;
-  background: rgba(0, 0, 0, 0.38);
-  padding: 0.85rem 1rem;
-  border-radius: var(--radius-lg);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(180deg, rgba(6, 11, 24, 0.72) 0%, rgba(4, 8, 18, 0.82) 100%);
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  border: 1.5px solid rgba(251, 191, 36, 0.35);
+  box-shadow:
+    inset 0 2px 14px rgba(0, 0, 0, 0.6),
+    0 12px 30px rgba(0, 0, 0, 0.45);
   box-sizing: border-box;
 }
 
@@ -344,19 +351,19 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: rgba(255, 255, 255, 0.03);
-  padding: 0.35rem 0.6rem;
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.65) 0%, rgba(15, 23, 42, 0.35) 50%, rgba(15, 23, 42, 0.65) 100%);
+  padding: 0.38rem 0.65rem;
+  border-radius: 12px;
+  border: 1px solid rgba(251, 191, 36, 0.16);
   transition: all 0.25s ease;
   width: 100%;
   box-sizing: border-box;
 }
 
 .board-suit-row.suit-completed-row {
-  background: rgba(245, 158, 11, 0.06);
-  border-color: rgba(245, 158, 11, 0.35);
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.08);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.18), rgba(245, 158, 11, 0.08));
+  border-color: rgba(251, 191, 36, 0.65);
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.2);
 }
 
 .suit-header-badge {
@@ -739,15 +746,18 @@
    =================================================== */
 
 .player-tray {
-  background: rgba(15, 23, 42, 0.9);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.94) 0%, rgba(7, 13, 25, 0.98) 100%);
   backdrop-filter: blur(16px);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border: 1.5px solid rgba(251, 191, 36, 0.35);
+  border-radius: 18px;
   padding: 1rem 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, 0.65),
+    0 0 22px rgba(245, 158, 11, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
   position: relative;
 }
 
