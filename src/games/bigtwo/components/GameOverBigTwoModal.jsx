@@ -5,8 +5,10 @@ import Card from '../../../components/CardView.jsx';
 import '../../../styles/animations.css';
 
 export default function GameOverBigTwoModal({
+  gameState,
   results,
   onRestart,
+  onPlayAgain,
   onBackToMenu,
   onOpenScoreboard,
   isHost = true,
@@ -25,17 +27,26 @@ export default function GameOverBigTwoModal({
     }
   }, []);
 
-  if (!results) return null;
+  const activeState = gameState || results;
+  if (!activeState) return null;
 
-  const rankings = results.rankings || [];
-  const winner = rankings[0];
+  const rankings = activeState.rankings || [];
+  const winner =
+    rankings.find((r) => r.rank === 1 && !r.isDisqualified) ||
+    rankings[0] ||
+    (activeState.players || []).find((p) => p.id === activeState.winner);
+
+  const handleRestartClick = () => {
+    if (onPlayAgain) onPlayAgain();
+    else if (onRestart) onRestart();
+  };
 
   return (
     <div className="modal-backdrop">
       <div className="modal-card modal-xl mlbb-gameover-card" style={{ maxWidth: '720px' }}>
         {/* MLBB VICTORY CREST HEADER */}
         <div className="mlbb-victory-header">
-          {onOpenScoreboard && (
+          {onBackToMenu && (
             <button
               type="button"
               className="mlbb-victory-close-btn"
@@ -49,9 +60,13 @@ export default function GameOverBigTwoModal({
             <Sparkles size={11} style={{ display: 'inline', marginRight: '4px' }} />
             IMPERIAL BIG TWO • BATTLE RESULT
           </span>
-          <div className="mlbb-victory-banner-title">VICTORY</div>
+          <div className="mlbb-victory-banner-title">
+            {activeState.endReason === 'LAST_CARD_TWO_DISQUALIFICATION' ? 'DISQUALIFIED' : 'VICTORY'}
+          </div>
           <div className="mlbb-victory-subtitle">
-            Urutan Kemenangan & Poin Klasemen Capsa Banting
+            {activeState.endReason === 'LAST_CARD_TWO_DISQUALIFICATION'
+              ? `${activeState.disqualifiedPlayerName || 'Pemain'} mengeluarkan Kartu 2 sebagai kartu terakhir!`
+              : 'Urutan Kemenangan & Poin Klasemen Capsa Banting'}
           </div>
         </div>
 
@@ -71,14 +86,14 @@ export default function GameOverBigTwoModal({
                     <span>{winner.name}</span>
                   </div>
                   <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                    Berhasil menghabiskan seluruh kartu pertama kali!
+                    Berhasil meraih Juara 1 di meja Capsa Banting!
                   </span>
                 </div>
               </div>
 
               <div className="mlbb-mvp-stats">
                 <div className="mlbb-mvp-score-pill">
-                  +{winner.pointsEarned !== undefined ? winner.pointsEarned : 3} ★ POIN
+                  +{winner.pointsEarned !== undefined ? winner.pointsEarned : Math.max(0, (activeState.players?.length || 4) - 1)} ★ POIN
                 </div>
               </div>
             </div>
@@ -86,33 +101,44 @@ export default function GameOverBigTwoModal({
 
           {/* RANKING BATTLE ROWS */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-            {rankings.map((player) => {
-              const isFirst = player.rank === 1;
-              const isSecond = player.rank === 2;
-              const isThird = player.rank === 3;
-              const rankBadge = isFirst
+            {rankings.map((player, index) => {
+              const rankPos = player.rank || index + 1;
+              const isDisqualified = Boolean(player.isDisqualified);
+              const isFirst = rankPos === 1 && !isDisqualified;
+              const isSecond = rankPos === 2 && !isDisqualified;
+              const isThird = rankPos === 3 && !isDisqualified;
+              const rankBadge = isDisqualified
+                ? '🚫 DISKUALIFIKASI (KARTU 2 TERAKHIR)'
+                : isFirst
                 ? '🥇 JUARA 1'
                 : isSecond
                 ? '🥈 JUARA 2'
                 : isThird
                 ? '🥉 JUARA 3'
-                : `PERINGKAT ${player.rank}`;
+                : `PERINGKAT ${rankPos}`;
 
-              const pointsEarned =
-                player.pointsEarned !== undefined
-                  ? player.pointsEarned
-                  : isFirst
-                  ? 3
-                  : isSecond
-                  ? 2
-                  : isThird
-                  ? 1
-                  : 0;
+              const totalP = activeState.players?.length || rankings.length || 4;
+              const pointsEarned = isDisqualified
+                ? 0
+                : player.pointsEarned !== undefined
+                ? player.pointsEarned
+                : Math.max(0, totalP - rankPos);
+
+              const handCards = Array.isArray(player.remainingCards)
+                ? player.remainingCards
+                : activeState.hands?.[player.id] || [];
+
+              const remainingCount =
+                player.remainingCount !== undefined
+                  ? player.remainingCount
+                  : typeof player.remainingCards === 'number'
+                  ? player.remainingCards
+                  : handCards.length;
 
               return (
                 <div
-                  key={player.id}
-                  className={`mlbb-battle-row rank-${player.rank}`}
+                  key={player.id || index}
+                  className={`mlbb-battle-row rank-${rankPos}`}
                 >
                   <div
                     style={{
@@ -149,7 +175,9 @@ export default function GameOverBigTwoModal({
                           style={{
                             fontSize: '0.7rem',
                             fontWeight: 900,
-                            color: isFirst
+                            color: isDisqualified
+                              ? '#f87171'
+                              : isFirst
                               ? '#fbbf24'
                               : isSecond
                               ? '#38bdf8'
@@ -192,25 +220,27 @@ export default function GameOverBigTwoModal({
                           padding: '0.24rem 0.65rem',
                           borderRadius: '999px',
                           background:
-                            player.remainingCount === 0
+                            remainingCount === 0 && !isDisqualified
                               ? 'rgba(16, 185, 129, 0.2)'
                               : 'rgba(239, 68, 68, 0.16)',
-                          color: player.remainingCount === 0 ? '#34d399' : '#fca5a5',
+                          color: remainingCount === 0 && !isDisqualified ? '#34d399' : '#fca5a5',
                           border:
-                            player.remainingCount === 0
+                            remainingCount === 0 && !isDisqualified
                               ? '1px solid rgba(52, 211, 153, 0.4)'
                               : '1px solid rgba(248, 113, 113, 0.35)',
                         }}
                       >
-                        {player.remainingCount === 0
+                        {isDisqualified
+                          ? '⚠️ Penalti Kartu 2'
+                          : remainingCount === 0
                           ? '✨ Kartu Habis!'
-                          : `Sisa ${player.remainingCount} Kartu`}
+                          : `Sisa ${remainingCount} Kartu`}
                       </span>
                     </div>
                   </div>
 
                   {/* Show remaining cards for players who didn't finish */}
-                  {player.remainingCards && player.remainingCards.length > 0 && (
+                  {handCards.length > 0 && (
                     <div
                       style={{
                         display: 'flex',
@@ -221,7 +251,7 @@ export default function GameOverBigTwoModal({
                         borderTop: '1px solid rgba(255, 255, 255, 0.06)',
                       }}
                     >
-                      {player.remainingCards.map((c, idx) => (
+                      {handCards.map((c, idx) => (
                         <Card key={c.id || idx} card={c} mini />
                       ))}
                     </div>
@@ -241,7 +271,7 @@ export default function GameOverBigTwoModal({
               onClick={onBackToMenu}
             >
               <Home size={16} />
-              <span>Lobby Utama</span>
+              <span>Menu Utama</span>
             </button>
 
             {onOpenScoreboard && (
@@ -251,7 +281,7 @@ export default function GameOverBigTwoModal({
                 onClick={onOpenScoreboard}
               >
                 <Award size={16} />
-                <span>Top Global & Skor</span>
+                <span>Skor Sesi</span>
               </button>
             )}
           </div>
@@ -260,7 +290,7 @@ export default function GameOverBigTwoModal({
             <button
               type="button"
               className="mlbb-btn-action mlbb-btn-gold"
-              onClick={onRestart}
+              onClick={handleRestartClick}
             >
               <RotateCcw size={16} />
               <span>Main Lagi (Ronde Baru)</span>

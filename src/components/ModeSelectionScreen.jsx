@@ -164,14 +164,39 @@ export default function ModeSelectionScreen({
     loadHomepageLeaderboard(previewCategory);
   }, [previewCategory]);
 
-  // Identify current player's global standing for Top-Left Profile Bar
+  // Keep profile synced with localStorage on mount & window focus
+  useEffect(() => {
+    const syncProfile = () => {
+      const latest = getLocalPlayerProfile();
+      if (latest.name) {
+        setProfile((prev) =>
+          prev.name !== latest.name || prev.avatar !== latest.avatar ? latest : prev
+        );
+      }
+    };
+    syncProfile();
+    window.addEventListener('focus', syncProfile);
+    return () => window.removeEventListener('focus', syncProfile);
+  }, []);
+
+  // Identify current player's global standing for Top-Left Profile Bar & Dock Footer
   const myGlobalStats = useMemo(() => {
     const normName = normalizeUsernameKey(profile.name);
-    const sourceList = allGlobalLeaderboard.length > 0 ? allGlobalLeaderboard : previewLeaderboard;
+    const canonicalId = normName ? `user_${normName}` : '';
+    const sourceList = previewLeaderboard.length > 0 ? previewLeaderboard : allGlobalLeaderboard;
     if (!sourceList || sourceList.length === 0) return null;
 
     const idx = sourceList.findIndex((item) => {
-      if (currentMyId && (item.player_id === currentMyId || (item.player_ids || []).includes(currentMyId))) {
+      if (
+        currentMyId &&
+        (item.player_id === currentMyId || (item.player_ids || []).includes(currentMyId))
+      ) {
+        return true;
+      }
+      if (
+        canonicalId &&
+        (item.player_id === canonicalId || (item.player_ids || []).includes(canonicalId))
+      ) {
         return true;
       }
       const itemNorm = normalizeUsernameKey(item.player_name);
@@ -189,6 +214,37 @@ export default function ModeSelectionScreen({
     () => getPlayerRankTier(myGlobalStats?.score || 0, myGlobalStats?.wins || 0),
     [myGlobalStats]
   );
+
+  // Live preview of rank inside Profile Modal as user types or clicks a Top Global name
+  const previewModalStats = useMemo(() => {
+    const normEdit = normalizeUsernameKey(editNameInput);
+    if (!normEdit) return null;
+    const sourceList = allGlobalLeaderboard.length > 0 ? allGlobalLeaderboard : previewLeaderboard;
+    const idx = sourceList.findIndex(
+      (item) => normalizeUsernameKey(item.player_name) === normEdit
+    );
+    if (idx === -1) return null;
+    return {
+      rank: idx + 1,
+      ...sourceList[idx],
+    };
+  }, [editNameInput, allGlobalLeaderboard, previewLeaderboard]);
+
+  const previewModalTier = useMemo(
+    () => getPlayerRankTier(previewModalStats?.score || 0, previewModalStats?.wins || 0),
+    [previewModalStats]
+  );
+
+  const handleQuickClaimProfile = (playerObj, e) => {
+    if (e) e.stopPropagation();
+    if (!playerObj?.player_name) return;
+    const claimedName = String(playerObj.player_name).trim();
+    const claimedAvatar = playerObj.avatar || profile.avatar || '👑';
+    saveLocalPlayerProfile({ name: claimedName, avatar: claimedAvatar });
+    setProfile({ name: claimedName, avatar: claimedAvatar });
+    setEditNameInput(claimedName);
+    setEditAvatarInput(claimedAvatar);
+  };
 
   const handleSaveProfile = (e) => {
     if (e) e.preventDefault();
@@ -600,6 +656,10 @@ export default function ModeSelectionScreen({
                   const wr = games > 0 ? Math.round((wins / games) * 100) : 0;
                   const tier = getPlayerRankTier(score, wins);
                   const supreme = getSupremeTitle(rankNum, previewCategory);
+                  const isMeRow =
+                    myGlobalStats &&
+                    normalizeUsernameKey(myGlobalStats.player_name) ===
+                      normalizeUsernameKey(player.player_name);
 
                   return (
                     <div
@@ -632,6 +692,21 @@ export default function ModeSelectionScreen({
                           >
                             {tier.icon} {tier.shortName}
                           </span>
+                          {isMeRow && (
+                            <span
+                              style={{
+                                fontSize: '0.6rem',
+                                fontWeight: 900,
+                                padding: '0.08rem 0.42rem',
+                                borderRadius: '999px',
+                                background: 'linear-gradient(135deg, #0ea5e9, #2563eb)',
+                                color: '#fff',
+                                letterSpacing: '0.04em',
+                              }}
+                            >
+                              KAMU
+                            </span>
+                          )}
                         </div>
                         <span className="dock-supreme-title">{supreme.fullTitle} • {wr}% WR</span>
                       </div>
@@ -658,7 +733,7 @@ export default function ModeSelectionScreen({
             <div className="rank-dock-footer">
               <span className="dock-my-standing">
                 {myGlobalStats
-                  ? `Posisi Kamu: #${myGlobalStats.rank} (${myRankTier.icon} ${myRankTier.shortName} • ★ ${myGlobalStats.score})`
+                  ? `Posisi Kamu (${myGlobalStats.player_name}): #${myGlobalStats.rank} (${myRankTier.icon} ${myRankTier.shortName} • ★ ${myGlobalStats.score})`
                   : 'Status Kamu: Unranked (Main Online untuk masuk Top Global)'}
               </span>
               <button
@@ -829,29 +904,43 @@ export default function ModeSelectionScreen({
               </button>
             </div>
 
-            {/* Current Rank Banner */}
+            {/* Current Rank Banner (Live Preview as User Types or Picks) */}
             <div className="mlbb-profile-rank-showcase">
-              <div className={`showcase-avatar tier-border-${myRankTier.id}`}>
+              <div className={`showcase-avatar tier-border-${(previewModalStats ? previewModalTier : myRankTier).id}`}>
                 <span>{editAvatarInput || '👑'}</span>
               </div>
               <div className="showcase-details">
                 <div className="showcase-tier-line">
                   <span
                     className="showcase-tier-badge"
-                    style={{ borderColor: myRankTier.color, color: myRankTier.accent }}
+                    style={{
+                      borderColor: (previewModalStats ? previewModalTier : myRankTier).color,
+                      color: (previewModalStats ? previewModalTier : myRankTier).accent,
+                    }}
                   >
-                    {myRankTier.icon} {myRankTier.name}
+                    {(previewModalStats ? previewModalTier : myRankTier).icon}{' '}
+                    {(previewModalStats ? previewModalTier : myRankTier).name}
                   </span>
                   <span className="showcase-rank-pos">
-                    {myGlobalStats ? `Peringkat #${myGlobalStats.rank} Global` : 'Unranked'}
+                    {previewModalStats
+                      ? `Peringkat #${previewModalStats.rank} Global`
+                      : myGlobalStats
+                      ? `Peringkat #${myGlobalStats.rank} Global`
+                      : 'Unranked'}
                   </span>
                 </div>
                 <div className="showcase-stats-line">
-                  <span>🏆 <strong>{myGlobalStats?.wins || 0}</strong> Juara 1</span>
+                  <span>
+                    🏆 <strong>{(previewModalStats || myGlobalStats)?.wins || 0}</strong> Juara 1
+                  </span>
                   <span>•</span>
-                  <span>★ <strong>{myGlobalStats?.score || 0}</strong> Skor Poin</span>
+                  <span>
+                    ★ <strong>{(previewModalStats || myGlobalStats)?.score || 0}</strong> Skor Poin
+                  </span>
                   <span>•</span>
-                  <span>🎮 <strong>{myGlobalStats?.games_played || 0}</strong> Match</span>
+                  <span>
+                    🎮 <strong>{(previewModalStats || myGlobalStats)?.games_played || 0}</strong> Match
+                  </span>
                 </div>
               </div>
             </div>

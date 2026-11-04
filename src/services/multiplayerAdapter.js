@@ -1327,7 +1327,22 @@ export const multiplayerAdapter = {
         },
         (payload) => {
           if (payload.new) {
-            onRoomUpdate(payload.new);
+            const incoming = payload.new;
+            // If Postgres TOASTed game_state (>8KB) during 'playing' or 'game_over', fetch full record
+            if (
+              incoming.status !== 'lobby' &&
+              (!incoming.game_state || !incoming.game_state.players)
+            ) {
+              this.getRoom(code)
+                .then(({ room }) => {
+                  onRoomUpdate(room || incoming);
+                })
+                .catch(() => {
+                  onRoomUpdate(incoming);
+                });
+            } else {
+              onRoomUpdate(incoming);
+            }
           }
         }
       )

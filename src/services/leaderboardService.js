@@ -17,15 +17,65 @@ export const PROFILE_AVATARS = [
 ];
 
 /**
- * Get saved local player profile (username & avatar)
+ * Get saved local player profile (username & avatar).
+ * Also auto-recovers username from cached room or local scoreboard if `sevens_player_name` was cleared.
  */
 export function getLocalPlayerProfile() {
   if (typeof localStorage === 'undefined') {
     return { name: '', avatar: '👑' };
   }
+  let name = (localStorage.getItem(STORAGE_PLAYER_NAME) || '').trim();
+  let avatar = localStorage.getItem(STORAGE_PLAYER_AVATAR) || '';
+  const localId = localStorage.getItem('sevens_player_id') || '';
+
+  if (!name && localId) {
+    try {
+      const cachedRoomRaw = localStorage.getItem('sevens_cached_room');
+      if (cachedRoomRaw) {
+        const parsedRoom = JSON.parse(cachedRoomRaw);
+        const meInRoom = (parsedRoom?.players || []).find((p) => p.id === localId && !p.isBot);
+        if (meInRoom?.name) {
+          name = String(meInRoom.name).trim();
+          if (!avatar && meInRoom.avatar) avatar = meInRoom.avatar;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!name && localId) {
+    try {
+      const rawScores = localStorage.getItem('poker_scoreboard_data');
+      if (rawScores) {
+        const parsedScores = JSON.parse(rawScores);
+        for (const sessionObj of Object.values(parsedScores || {})) {
+          if (sessionObj && typeof sessionObj === 'object' && sessionObj[localId]?.name) {
+            const candidate = String(sessionObj[localId].name).trim();
+            if (candidate && candidate !== 'Anda' && !candidate.startsWith('Bot ')) {
+              name = candidate;
+              if (!avatar && sessionObj[localId].avatar) avatar = sessionObj[localId].avatar;
+              break;
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (name && !localStorage.getItem(STORAGE_PLAYER_NAME)) {
+    try {
+      localStorage.setItem(STORAGE_PLAYER_NAME, name);
+    } catch {
+      // ignore
+    }
+  }
+
   return {
-    name: localStorage.getItem(STORAGE_PLAYER_NAME) || '',
-    avatar: localStorage.getItem(STORAGE_PLAYER_AVATAR) || '👑',
+    name,
+    avatar: avatar || '👑',
   };
 }
 

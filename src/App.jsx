@@ -14,6 +14,7 @@ import {
   multiplayerAdapter,
   getRelativeSeats,
   getActiveSession,
+  setLocalSession,
   clearLocalSession,
   getLocalPlayerId,
   getLocalPlayerName,
@@ -389,9 +390,13 @@ export default function App() {
     }
   }, [activeGameType]);
 
-  // Synchronize game_state inside cached room when it changes (only when game is playing)
+  // Synchronize game_state inside cached room when it changes (when game is playing or game_over)
   useEffect(() => {
-    if (typeof localStorage !== 'undefined' && currentRoom?.code && currentRoom?.status === 'playing') {
+    if (
+      typeof localStorage !== 'undefined' &&
+      currentRoom?.code &&
+      (currentRoom?.status === 'playing' || currentRoom?.status === 'game_over')
+    ) {
       try {
         const cached = localStorage.getItem('sevens_cached_room');
         if (cached) {
@@ -853,10 +858,47 @@ export default function App() {
           return;
         }
 
-        if (updatedRoom.game_state) {
-          const nextState = updatedRoom.game_state;
+        const nextState = updatedRoom.game_state;
+        const detectedType =
+          nextState?.gameType ||
+          getGameTypeFromRoomCode(updatedRoom.code) ||
+          activeGameType;
 
-          if (nextState.gameType === 'bigtwo') {
+        // If Realtime payload had its JSONB game_state truncated by Postgres TOAST (>8KB),
+        // immediately fetch the complete room record from Supabase (both during 'playing' and 'game_over'!)
+        if (
+          (updatedRoom.status === 'playing' || updatedRoom.status === 'game_over') &&
+          (!nextState || !nextState.players)
+        ) {
+          multiplayerAdapter
+            .getRoom(currentRoom.code)
+            .then(({ room }) => {
+              if (room?.game_state?.players) {
+                const fullState = room.game_state;
+                const rType = fullState.gameType || detectedType;
+                if (rType === 'bigtwo') {
+                  setActiveGameType('bigtwo');
+                  setGameStateBigtwo(fullState);
+                  if (fullState.gameStatus === 'GAME_OVER') audio.victorySound();
+                } else if (rType === 'game41') {
+                  setActiveGameType('game41');
+                  setGameState41(fullState);
+                  if (fullState.gameStatus === 'GAME_OVER' || fullState.gameStatus === 'game_over') {
+                    audio.victorySound();
+                  }
+                } else {
+                  setActiveGameType('sevens');
+                  setGameState(fullState);
+                }
+              }
+              if (room) setCurrentRoom(room);
+            })
+            .catch(() => {});
+          return;
+        }
+
+        if (nextState) {
+          if (detectedType === 'bigtwo') {
             setActiveGameType('bigtwo');
             if (nextState.players && nextState.hands) {
               setGameStateBigtwo(nextState);
@@ -865,12 +907,18 @@ export default function App() {
                 if (nextState.lastAction.type === 'PLAY_COMBO') audio.playCardSound();
                 else if (nextState.lastAction.type === 'PASS') audio.closeCardSound();
               }
+              if (nextState.gameStatus === 'GAME_OVER') {
+                audio.victorySound();
+              }
               setCurrentRoom(updatedRoom);
-            } else if (updatedRoom.status === 'playing') {
+            } else if (updatedRoom.status === 'playing' || updatedRoom.status === 'game_over') {
               // Realtime payload might be compact/truncated; fetch full record immediately
               multiplayerAdapter.getRoom(currentRoom.code).then(({ room }) => {
                 if (room?.game_state?.players && room?.game_state?.hands) {
                   setGameStateBigtwo(room.game_state);
+                  if (room.game_state.gameStatus === 'GAME_OVER') {
+                    audio.victorySound();
+                  }
                 }
                 setCurrentRoom(room || updatedRoom);
               }).catch(() => {
@@ -3376,7 +3424,10 @@ export default function App() {
       )}
 
       {/* Big Two Game Over Modal */}
-      {activeGameType === 'bigtwo' && gameStateBigtwo?.gameStatus === 'GAME_OVER' && (
+      {activeGameType === 'bigtwo' &&
+        (gameStateBigtwo?.gameStatus === 'GAME_OVER' ||
+          gameStateBigtwo?.gameStatus === 'game_over' ||
+          Boolean(gameStateBigtwo?.winner && gameStateBigtwo?.rankings?.length > 0)) && (
         <GameOverBigTwoModal
           gameState={gameStateBigtwo}
           onRestart={handleRestartBigTwo}

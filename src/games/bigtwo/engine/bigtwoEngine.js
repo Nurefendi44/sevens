@@ -145,7 +145,6 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
     players,
     hands,
     sessionScores: configOverrides.sessionScores || {},
-    undealtCards: fullDeck,
     currentTrick: {
       cards: [],
       combo: null,
