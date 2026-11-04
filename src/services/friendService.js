@@ -28,6 +28,20 @@ try {
       }
     };
   }
+
+  // Sinkronisasi lintas tab saat localStorage diperbarui
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (e) => {
+      if (
+        e.key &&
+        (e.key.startsWith(FRIENDS_PREFIX) ||
+          e.key.startsWith(REQ_IN_PREFIX) ||
+          e.key.startsWith(REQ_OUT_PREFIX))
+      ) {
+        handleIncomingSocialEvent({ type: 'local_storage_sync' });
+      }
+    });
+  }
 } catch (e) {
   // Ignore
 }
@@ -97,10 +111,14 @@ export function getIncomingFriendRequests(username) {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
+      const friends = getFriendsList(username);
+      const friendKeys = new Set(friends.map((f) => normalizeUsernameKey(f.name)));
       const seen = new Set();
       return parsed.filter((r) => {
         if (!r || !r.name) return false;
         const k = normalizeUsernameKey(r.name);
+        // Jika sudah berteman, otomatis jangan tampilkan di permintaan
+        if (friendKeys.has(k)) return false;
         if (seen.has(k)) return false;
         seen.add(k);
         return true;
@@ -125,10 +143,14 @@ export function getSentFriendRequests(username) {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
+      const friends = getFriendsList(username);
+      const friendKeys = new Set(friends.map((f) => normalizeUsernameKey(f.name)));
       const seen = new Set();
       return parsed.filter((r) => {
         if (!r || !r.name) return false;
         const k = normalizeUsernameKey(r.name);
+        // Jika sudah berteman, otomatis jangan tampilkan di pending outgoing
+        if (friendKeys.has(k)) return false;
         if (seen.has(k)) return false;
         seen.add(k);
         return true;
@@ -542,6 +564,33 @@ export function removeFriend(myUsername, targetUsername) {
     localStorage.setItem(`${FRIENDS_PREFIX}${targetNorm}`, JSON.stringify(targetUpdated));
   } catch {}
 
+  const payload = {
+    id: `frem_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    type: 'friend_remove',
+    from: myUsername.trim(),
+    to: targetUsername.trim(),
+    timestamp: Date.now(),
+  };
+
+  if (broadcastChannel) {
+    try {
+      broadcastChannel.postMessage(payload);
+    } catch {}
+  }
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      initSocialChannel();
+      if (socialChannel) {
+        socialChannel.send({
+          type: 'broadcast',
+          event: 'social_event',
+          payload,
+        });
+      }
+    } catch {}
+  }
+
   return { success: true, friends: updated };
 }
 
@@ -628,7 +677,18 @@ export function subscribeToFriendEvents(currentUsername, onEvent) {
   const norm = normalizeUsernameKey(currentUsername);
 
   const wrappedListener = (payload) => {
-    if (!payload || !norm) return;
+    if (!payload) return;
+
+    if (payload.type === 'local_storage_sync') {
+      try {
+        onEvent(payload);
+      } catch (e) {
+        console.warn('[FriendService] onEvent error:', e);
+      }
+      return;
+    }
+
+    if (!norm) return;
     const toNorm = normalizeUsernameKey(payload.to);
     const fromNorm = normalizeUsernameKey(payload.from);
 
@@ -640,11 +700,21 @@ export function subscribeToFriendEvents(currentUsername, onEvent) {
 
     // Sinkronisasi otomatis data pertemanan jika permintaan di-acc
     if (payload.type === 'friend_request_accept') {
-      if (isSender && payload.accepterProfile) {
+      // User A (target penerima event accept) otomatis menambahkan User B sebagai teman dan menghapus pending request
+      if (isTarget && payload.accepterProfile) {
         addFriend(currentUsername, payload.accepterProfile);
+        cleanPendingRequests(norm, fromNorm);
         try {
           audio.playVictorySound?.();
         } catch {}
+      }
+    } else if (payload.type === 'friend_request_reject') {
+      if (isTarget) {
+        cleanPendingRequests(norm, fromNorm);
+      }
+    } else if (payload.type === 'friend_remove') {
+      if (isTarget) {
+        removeFriend(currentUsername, payload.from);
       }
     } else if (payload.type === 'friend_request_send' && isTarget) {
       // Simpan ke incoming requests

@@ -54,14 +54,18 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 1100;
-  padding: 0.6rem 1.2rem;
-  border-radius: 999px;
+  width: calc(100% - 2rem);
+  max-width: 420px;
+  padding: 0.75rem 1.1rem;
+  border-radius: 12px;
   font-size: 0.82rem;
   font-weight: 700;
   display: flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   gap: 0.5rem;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.75);
   animation: toastPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
@@ -950,9 +954,9 @@
 }
 
 .confirm-icon-box {
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
   background: rgba(239, 68, 68, 0.15);
   border: 1.5px solid rgba(239, 68, 68, 0.4);
   display: flex;
@@ -973,15 +977,18 @@
 }
 
 .confirm-profile-preview {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  padding: 0.4rem 0.85rem;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 999px;
+  padding: 0.6rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
   margin-bottom: 0.85rem;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   color: #fde047;
+  width: 100%;
 }
 
 .confirm-avatar {
@@ -1124,5 +1131,31 @@
   .showcase-name-row,
   .showcase-stats-strip {
     justify-content: center;
+  }
+
+  .friends-confirm-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .friends-confirm-dialog {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 22px 22px 0 0;
+    padding: 1.25rem 1.2rem max(env(safe-area-inset-bottom, 16px), 16px);
+    border-bottom: none;
+    border-left: none;
+    border-right: none;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.9);
+  }
+
+  .confirm-btn-row {
+    gap: 0.75rem;
+  }
+
+  .btn-confirm-cancel,
+  .btn-confirm-delete {
+    padding: 0.75rem 1rem;
+    font-size: 0.86rem;
   }
 }

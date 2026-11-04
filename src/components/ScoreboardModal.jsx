@@ -898,12 +898,14 @@ export default function ScoreboardModal({
               background: 'rgba(16, 185, 129, 0.95)',
               border: '1px solid #34d399',
               color: '#ffffff',
-              padding: '0.5rem 1.1rem',
-              borderRadius: '999px',
-              fontSize: '0.8rem',
+              padding: '0.7rem 1.1rem',
+              borderRadius: 12,
+              fontSize: '0.82rem',
               fontWeight: 800,
               zIndex: 100,
-              boxShadow: '0 8px 20px rgba(0,0,0,0.5)',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
+              width: 'min(90%, 380px)',
+              textAlign: 'center',
             }}
           >
             <span>{friendActionNotice}</span>
@@ -913,116 +915,45 @@ export default function ScoreboardModal({
         {/* Modal Konfirmasi Hapus Pertemanan */}
         {friendToDelete && (
           <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'rgba(3, 7, 18, 0.85)',
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              zIndex: 200,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '1rem',
-            }}
+            className="friends-confirm-overlay"
             onClick={() => setFriendToDelete(null)}
           >
             <div
-              style={{
-                width: '100%',
-                maxWidth: 360,
-                background: 'linear-gradient(180deg, #1e1b29 0%, #110e19 100%)',
-                border: '1.5px solid rgba(239, 68, 68, 0.45)',
-                borderRadius: 16,
-                padding: '1.4rem 1.2rem',
-                textAlign: 'center',
-                boxShadow: '0 20px 50px rgba(0,0,0,0.8)',
-                color: '#f8fafc',
-              }}
+              className="friends-confirm-dialog"
               onClick={(e) => e.stopPropagation()}
             >
-              <div
-                style={{
-                  width: 50,
-                  height: 50,
-                  borderRadius: '50%',
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  border: '1.5px solid rgba(239, 68, 68, 0.4)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 0.8rem auto',
-                }}
-              >
-                <AlertTriangle size={26} color="#ef4444" />
+              <div className="confirm-icon-box">
+                <AlertTriangle size={24} className="confirm-warning-icon" />
               </div>
 
-              <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', fontWeight: 900 }}>
+              <h3 className="confirm-title">
                 Hapus Pertemanan?
               </h3>
 
-              <div
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  padding: '0.35rem 0.8rem',
-                  background: 'rgba(255,255,255,0.06)',
-                  borderRadius: 999,
-                  marginBottom: '0.8rem',
-                  fontSize: '0.88rem',
-                  color: '#fde047',
-                  fontWeight: 800,
-                }}
-              >
+              <div className="confirm-profile-preview">
                 <span>{friendToDelete.avatar || '👤'}</span>
-                <span>{friendToDelete.name}</span>
+                <strong>{friendToDelete.name}</strong>
               </div>
 
-              <p style={{ fontSize: '0.78rem', color: '#94a3b8', lineHeight: 1.45, margin: '0 0 1.2rem 0' }}>
+              <p className="confirm-desc">
                 Apakah kamu yakin ingin menghapus <strong style={{ color: '#fff' }}>{friendToDelete.name}</strong> dari daftar teman? Kalian tidak lagi bisa saling mengirim DM cepat.
               </p>
 
-              <div style={{ display: 'flex', gap: '0.6rem' }}>
+              <div className="confirm-btn-row">
                 <button
                   type="button"
+                  className="btn-confirm-cancel"
                   onClick={() => setFriendToDelete(null)}
-                  style={{
-                    flex: 1,
-                    padding: '0.6rem',
-                    borderRadius: 9,
-                    background: 'rgba(255,255,255,0.08)',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    color: '#cbd5e1',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
                 >
                   Batal
                 </button>
                 <button
                   type="button"
+                  className="btn-confirm-delete"
                   onClick={() => {
                     removeFriend(effectiveMyName, friendToDelete.name);
                     refreshFriends();
                     setFriendToDelete(null);
-                  }}
-                  style={{
-                    flex: 1.2,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.4rem',
-                    padding: '0.6rem',
-                    borderRadius: 9,
-                    background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
-                    border: 'none',
-                    color: '#ffffff',
-                    fontSize: '0.8rem',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 15px rgba(239,68,68,0.4)',
                   }}
                 >
                   <Trash2 size={14} />

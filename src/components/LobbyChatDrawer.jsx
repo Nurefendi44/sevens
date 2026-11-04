@@ -296,105 +296,6 @@ export default function LobbyChatDrawer({
           <div className="ticker-expand-hint">
             <span>Buka</span>
             <ChevronUp size={13} />
-            {/* Popup Konfirmasi Hapus Pertemanan */}
-            {friendToDelete && (
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  background: 'rgba(3, 7, 18, 0.88)',
-                  backdropFilter: 'blur(8px)',
-                  WebkitBackdropFilter: 'blur(8px)',
-                  zIndex: 250,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '1.2rem',
-                }}
-                onClick={() => setFriendToDelete(null)}
-              >
-                <div
-                  style={{
-                    width: '100%',
-                    maxWidth: 320,
-                    background: 'linear-gradient(180deg, #1e1b29 0%, #110e19 100%)',
-                    border: '1.5px solid rgba(239, 68, 68, 0.45)',
-                    borderRadius: 14,
-                    padding: '1.2rem',
-                    textAlign: 'center',
-                    color: '#f8fafc',
-                    boxShadow: '0 15px 40px rgba(0,0,0,0.8)',
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: '50%',
-                      background: 'rgba(239, 68, 68, 0.15)',
-                      border: '1.5px solid rgba(239, 68, 68, 0.4)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      margin: '0 auto 0.6rem auto',
-                    }}
-                  >
-                    <AlertTriangle size={22} color="#ef4444" />
-                  </div>
-                  <h4 style={{ margin: '0 0 0.4rem 0', fontSize: '1rem', fontWeight: 900 }}>
-                    Hapus Pertemanan?
-                  </h4>
-                  <p style={{ fontSize: '0.75rem', color: '#94a3b8', lineHeight: 1.4, margin: '0 0 1rem 0' }}>
-                    Yakin ingin menghapus <strong style={{ color: '#fde047' }}>{friendToDelete.name}</strong> dari daftar teman?
-                  </p>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button
-                      type="button"
-                      onClick={() => setFriendToDelete(null)}
-                      style={{
-                        flex: 1,
-                        padding: '0.5rem',
-                        borderRadius: 8,
-                        background: 'rgba(255,255,255,0.08)',
-                        border: '1px solid rgba(255,255,255,0.15)',
-                        color: '#cbd5e1',
-                        fontSize: '0.78rem',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Batal
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleRemoveFriend(friendToDelete.name);
-                        setFriendToDelete(null);
-                      }}
-                      style={{
-                        flex: 1.2,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.35rem',
-                        padding: '0.5rem',
-                        borderRadius: 8,
-                        background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
-                        border: 'none',
-                        color: '#ffffff',
-                        fontSize: '0.78rem',
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <Trash2 size={13} />
-                      <span>Ya, Hapus</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -1086,93 +987,40 @@ export default function LobbyChatDrawer({
             {/* Popup Konfirmasi Hapus Pertemanan */}
             {friendToDelete && (
               <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  background: 'rgba(3, 7, 18, 0.88)',
-                  backdropFilter: 'blur(8px)',
-                  WebkitBackdropFilter: 'blur(8px)',
-                  zIndex: 250,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '1.2rem',
-                }}
+                className="friends-confirm-overlay"
                 onClick={() => setFriendToDelete(null)}
               >
                 <div
-                  style={{
-                    width: '100%',
-                    maxWidth: 320,
-                    background: 'linear-gradient(180deg, #1e1b29 0%, #110e19 100%)',
-                    border: '1.5px solid rgba(239, 68, 68, 0.45)',
-                    borderRadius: 14,
-                    padding: '1.2rem',
-                    textAlign: 'center',
-                    color: '#f8fafc',
-                    boxShadow: '0 15px 40px rgba(0,0,0,0.8)',
-                  }}
+                  className="friends-confirm-dialog"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: '50%',
-                      background: 'rgba(239, 68, 68, 0.15)',
-                      border: '1.5px solid rgba(239, 68, 68, 0.4)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      margin: '0 auto 0.6rem auto',
-                    }}
-                  >
-                    <AlertTriangle size={22} color="#ef4444" />
+                  <div className="confirm-icon-box">
+                    <AlertTriangle size={22} className="confirm-warning-icon" />
                   </div>
-                  <h4 style={{ margin: '0 0 0.4rem 0', fontSize: '1rem', fontWeight: 900 }}>
+                  <h4 className="confirm-title" style={{ fontSize: '1.05rem', margin: '0 0 0.5rem 0' }}>
                     Hapus Pertemanan?
                   </h4>
-                  <p style={{ fontSize: '0.75rem', color: '#94a3b8', lineHeight: 1.4, margin: '0 0 1rem 0' }}>
+                  <div className="confirm-profile-preview">
+                    <span>{friendToDelete.avatar || '👤'}</span>
+                    <strong>{friendToDelete.name}</strong>
+                  </div>
+                  <p className="confirm-desc">
                     Yakin ingin menghapus <strong style={{ color: '#fde047' }}>{friendToDelete.name}</strong> dari daftar teman?
                   </p>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div className="confirm-btn-row">
                     <button
                       type="button"
+                      className="btn-confirm-cancel"
                       onClick={() => setFriendToDelete(null)}
-                      style={{
-                        flex: 1,
-                        padding: '0.5rem',
-                        borderRadius: 8,
-                        background: 'rgba(255,255,255,0.08)',
-                        border: '1px solid rgba(255,255,255,0.15)',
-                        color: '#cbd5e1',
-                        fontSize: '0.78rem',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                      }}
                     >
                       Batal
                     </button>
                     <button
                       type="button"
+                      className="btn-confirm-delete"
                       onClick={() => {
                         handleRemoveFriend(friendToDelete.name);
                         setFriendToDelete(null);
-                      }}
-                      style={{
-                        flex: 1.2,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.35rem',
-                        padding: '0.5rem',
-                        borderRadius: 8,
-                        background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
-                        border: 'none',
-                        color: '#ffffff',
-                        fontSize: '0.78rem',
-                        fontWeight: 800,
-                        cursor: 'pointer',
                       }}
                     >
                       <Trash2 size={13} />
