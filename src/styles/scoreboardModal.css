@@ -303,6 +303,35 @@
   color: #92400e;
 }
 
+/* Himbauan Username Sama di Top Global */
+.global-username-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%);
+  border: 1px solid #bae6fd;
+  border-left: 4px solid #0284c7;
+  padding: 0.6rem 0.85rem;
+  border-radius: 10px;
+  margin-bottom: 0.8rem;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: #0c4a6e;
+}
+
+.username-notice-icon {
+  color: #0284c7;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  display: flex;
+  align-items: center;
+}
+
+.username-notice-text strong {
+  color: #0369a1;
+  font-weight: 800;
+}
+
 .global-setup-notice strong {
   display: block;
   font-size: 0.82rem;

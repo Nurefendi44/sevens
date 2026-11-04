@@ -336,12 +336,12 @@ export default function ModeSelectionScreen({
               <button
                 type="button"
                 className="btn-portal-leaderboard"
-                onClick={() => onOpenScoreboard()}
-                title="Buka Papan Peringkat & Top Global"
+                onClick={() => onOpenScoreboard('all')}
+                title="Lihat Peringkat Top Global Semua Permainan"
               >
                 <Trophy size={18} className="trophy-gold" />
                 <span>Top Global Leaderboard</span>
-                <span className="portal-badge-live">ONLINE</span>
+                <span className="portal-badge-live">RANKING</span>
               </button>
             </div>
           )}
@@ -378,20 +378,6 @@ export default function ModeSelectionScreen({
                 </span>
 
                 <div className="catalog-header-actions-right">
-                  {onOpenScoreboard && (
-                    <button
-                      type="button"
-                      className="btn-card-rules-mini btn-card-rank-mini"
-                      title={`Top Global ${game.title}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenScoreboard(game.id);
-                      }}
-                    >
-                      <Trophy size={12} className="card-mini-trophy" />
-                      <span>Rank</span>
-                    </button>
-                  )}
                   <button
                     type="button"
                     className="btn-card-rules-mini"

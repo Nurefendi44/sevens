@@ -575,6 +575,22 @@ export default function MultiplayerLobby({
                   </span>
                 )}
               </div>
+              <p
+                style={{
+                  margin: '0.45rem 0 0',
+                  fontSize: '0.75rem',
+                  lineHeight: 1.45,
+                  color: '#fde68a',
+                  background: 'rgba(251, 191, 36, 0.08)',
+                  border: '1px solid rgba(251, 191, 36, 0.25)',
+                  borderRadius: '8px',
+                  padding: '0.45rem 0.65rem',
+                }}
+              >
+                🏆 <strong>Himbauan Top Global:</strong> Gunakan <strong>username yang sama</strong> setiap
+                kali bermain agar total kemenangan Juara 1 &amp; skor poin Anda selalu terangkum di papan{' '}
+                <strong>Top Global</strong>.
+              </p>
             </div>
 
             {/* Step 2: Segmented Tab Switcher (Buat Room vs Gabung Room) */}

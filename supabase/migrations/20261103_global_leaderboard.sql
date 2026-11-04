@@ -63,7 +63,9 @@ BEGIN
   END IF;
 END $$;
 
--- 7. RPC to record / increment player stats safely
+-- 7. RPC to record / increment player stats safely (Aggregated by Username)
+-- Wins = Jumlah kemenangan Juara 1
+-- Score = Total poin yang didapatkan dari keseluruhan permainan
 CREATE OR REPLACE FUNCTION public.record_game_stats(
     p_player_id TEXT,
     p_player_name TEXT,
@@ -76,7 +78,24 @@ RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
+DECLARE
+    v_clean_name VARCHAR(60);
+    v_existing_id TEXT;
 BEGIN
+    v_clean_name := COALESCE(NULLIF(TRIM(p_player_name), ''), 'Pemain');
+
+    -- Cari apakah username yang sama (case-insensitive) sudah ada di game_type ini
+    SELECT player_id INTO v_existing_id
+    FROM public.leaderboard
+    WHERE game_type = p_game_type
+      AND LOWER(TRIM(player_name)) = LOWER(v_clean_name)
+    ORDER BY last_played_at DESC
+    LIMIT 1;
+
+    IF v_existing_id IS NULL THEN
+        v_existing_id := COALESCE(NULLIF(TRIM(p_player_id), ''), 'user_' || LOWER(v_clean_name));
+    END IF;
+
     INSERT INTO public.leaderboard (
         player_id,
         player_name,
@@ -88,13 +107,13 @@ BEGIN
         last_played_at
     )
     VALUES (
-        p_player_id,
-        COALESCE(NULLIF(TRIM(p_player_name), ''), 'Pemain'),
+        v_existing_id,
+        v_clean_name,
         COALESCE(NULLIF(TRIM(p_avatar), ''), '👤'),
         p_game_type,
         CASE WHEN p_is_win THEN 1 ELSE 0 END,
         1,
-        GREATEST(0, p_score),
+        GREATEST(0, COALESCE(p_score, 0)),
         timezone('utc'::text, now())
     )
     ON CONFLICT (player_id, game_type) DO UPDATE SET
@@ -105,12 +124,12 @@ BEGIN
         avatar = COALESCE(NULLIF(TRIM(EXCLUDED.avatar), ''), public.leaderboard.avatar),
         wins = public.leaderboard.wins + (CASE WHEN p_is_win THEN 1 ELSE 0 END),
         games_played = public.leaderboard.games_played + 1,
-        score = public.leaderboard.score + GREATEST(0, p_score),
+        score = public.leaderboard.score + GREATEST(0, COALESCE(p_score, 0)),
         last_played_at = timezone('utc'::text, now());
 END;
 $$;
 
--- 8. RPC to retrieve Top Global leaderboard (supports 'all' or specific game_type)
+-- 8. RPC to retrieve Top Global leaderboard (supports 'all' or specific game_type, grouped by username)
 CREATE OR REPLACE FUNCTION public.get_global_leaderboard(
     p_game_type VARCHAR DEFAULT 'all',
     p_limit INT DEFAULT 50
@@ -132,33 +151,35 @@ BEGIN
     IF p_game_type IS NULL OR p_game_type = 'all' THEN
         RETURN QUERY
         SELECT
-            l.player_id,
+            (ARRAY_AGG(l.player_id ORDER BY l.last_played_at DESC))[1]::TEXT AS player_id,
             (ARRAY_AGG(l.player_name ORDER BY l.last_played_at DESC))[1]::VARCHAR AS player_name,
             (ARRAY_AGG(l.avatar ORDER BY l.last_played_at DESC))[1]::TEXT AS avatar,
             'all'::VARCHAR AS game_type,
             SUM(l.wins)::BIGINT AS wins,
             SUM(l.games_played)::BIGINT AS games_played,
-            SUM(l.score)::BIGINT AS score,
+            GREATEST(SUM(l.score), SUM(l.wins) * 3)::BIGINT AS score,
             MAX(l.last_played_at) AS last_played_at
         FROM public.leaderboard l
-        GROUP BY l.player_id
+        GROUP BY LOWER(TRIM(l.player_name))
         HAVING SUM(l.games_played) > 0
         ORDER BY wins DESC, score DESC, games_played ASC
         LIMIT p_limit;
     ELSE
         RETURN QUERY
         SELECT
-            l.player_id,
-            l.player_name,
-            l.avatar,
-            l.game_type,
-            l.wins::BIGINT,
-            l.games_played::BIGINT,
-            l.score::BIGINT,
-            l.last_played_at
+            (ARRAY_AGG(l.player_id ORDER BY l.last_played_at DESC))[1]::TEXT AS player_id,
+            (ARRAY_AGG(l.player_name ORDER BY l.last_played_at DESC))[1]::VARCHAR AS player_name,
+            (ARRAY_AGG(l.avatar ORDER BY l.last_played_at DESC))[1]::TEXT AS avatar,
+            p_game_type::VARCHAR AS game_type,
+            SUM(l.wins)::BIGINT AS wins,
+            SUM(l.games_played)::BIGINT AS games_played,
+            GREATEST(SUM(l.score), SUM(l.wins) * 3)::BIGINT AS score,
+            MAX(l.last_played_at) AS last_played_at
         FROM public.leaderboard l
         WHERE l.game_type = p_game_type
-        ORDER BY l.wins DESC, l.score DESC, l.games_played ASC
+        GROUP BY LOWER(TRIM(l.player_name))
+        HAVING SUM(l.games_played) > 0
+        ORDER BY wins DESC, score DESC, games_played ASC
         LIMIT p_limit;
     END IF;
 END;

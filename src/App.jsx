@@ -1884,28 +1884,83 @@ export default function App() {
     return gameKey;
   };
 
-  const recordGameEndScore = (gameKey, rankings = [], winnerId = null) => {
+  const lastRecordedMatchRef = useRef({});
+
+  const recordGameEndScore = (gameKey, rankings = [], winnerId = null, matchSignature = '') => {
     if (!rankings || rankings.length === 0) return;
+
+    // Prevent recording the exact same finished game twice (e.g. on page refresh or realtime resync)
+    const sigKey = `poker_last_recorded_match_${gameKey}`;
+    if (matchSignature) {
+      if (lastRecordedMatchRef.current[gameKey] === matchSignature) return;
+      try {
+        if (typeof localStorage !== 'undefined' && localStorage.getItem(sigKey) === matchSignature) {
+          lastRecordedMatchRef.current[gameKey] = matchSignature;
+          return;
+        }
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(sigKey, matchSignature);
+        }
+      } catch (e) {}
+      lastRecordedMatchRef.current[gameKey] = matchSignature;
+    }
+
     const sessionKey = getScoreSessionKey(gameKey);
+    const totalPlayers = rankings.length;
+    const resolvedWinnerId =
+      winnerId && typeof winnerId === 'object' && !Array.isArray(winnerId)
+        ? winnerId.id || winnerId.player?.id
+        : winnerId;
 
     setScoreboardData((prev) => {
       const gameScores = { ...(prev[sessionKey] || {}) };
       rankings.forEach((r, idx) => {
-        const key = r.id || r.name;
+        const pObj = r.player || r;
+        const pId = r.id || pObj?.id;
+        const pName = r.name || pObj?.name;
+        const pAvatar = r.avatar || pObj?.avatar;
+        const key = pId || pName;
+        if (!key) return;
+
         const current = gameScores[key] || {
-          id: r.id,
-          name: r.name,
-          avatar: r.avatar,
+          id: pId,
+          name: pName,
+          avatar: pAvatar,
           games: 0,
+          wins: 0,
           score: 0,
         };
-        const isWinner = r.isWinner || idx === 0 || (winnerId && r.id === winnerId);
+
+        const rank = r.rank !== undefined ? Number(r.rank) : idx + 1;
+        const isDisqualified = Boolean(r.isDisqualified || r.isBusted);
+        const isFirstPlace = Boolean(
+          !isDisqualified &&
+            (rank === 1 ||
+              r.isWinner === true ||
+              (r.rank === undefined &&
+                r.isWinner === undefined &&
+                (idx === 0 ||
+                  (resolvedWinnerId && pId === resolvedWinnerId) ||
+                  (Array.isArray(resolvedWinnerId) && resolvedWinnerId.includes(pId)))))
+        );
+
+        // Rumus seragam: Poin = Jumlah pemain - Peringkat (diskualifikasi = 0)
+        let pointsEarned = 0;
+        if (isDisqualified) {
+          pointsEarned = 0;
+        } else if (r.pointsEarned !== undefined) {
+          pointsEarned = Math.max(0, Number(r.pointsEarned || 0));
+        } else {
+          pointsEarned = Math.max(0, totalPlayers - rank);
+        }
+
         gameScores[key] = {
           ...current,
-          name: r.name || current.name,
-          avatar: r.avatar || current.avatar,
+          name: pName || current.name,
+          avatar: pAvatar || current.avatar,
           games: (current.games || 0) + 1,
-          score: (current.score || 0) + (isWinner ? 1 : 0),
+          wins: (current.wins || 0) + (isFirstPlace ? 1 : 0),
+          score: (current.score || 0) + pointsEarned,
         };
       });
       const nextScores = { ...prev, [sessionKey]: gameScores };
@@ -1924,6 +1979,8 @@ export default function App() {
         rankings,
         winnerId,
         isMultiplayer: isMultiplayerMode,
+        myPlayerId,
+        isHost,
       });
     }
   };
@@ -2276,29 +2333,48 @@ export default function App() {
   ));
   const currentTurnPlayerName = currentTurnPlayer?.name || 'Pemain Lain';
 
-  // Automatic Score Recording for Cumulative Scoreboard (Points model)
+  // Automatic Score Recording for Cumulative Scoreboard & Top Global (Points model)
   useEffect(() => {
     if (activeGameType === 'bigtwo' && gameStateBigtwo?.gameStatus === 'GAME_OVER' && gameStateBigtwo?.rankings) {
-      recordGameEndScore('bigtwo', gameStateBigtwo.rankings, gameStateBigtwo.winner);
+      const sig = `bigtwo_${currentRoom?.code || gameMode}_${gameStateBigtwo.history?.length || 0}_${gameStateBigtwo.winner || ''}`;
+      recordGameEndScore('bigtwo', gameStateBigtwo.rankings, gameStateBigtwo.winner, sig);
     }
   }, [gameStateBigtwo?.gameStatus]);
 
   useEffect(() => {
     if (activeGameType === 'game41' && (gameState41.gameStatus === 'game_over' || gameState41.gameStatus === 'GAME_OVER') && gameState41.rankings) {
-      recordGameEndScore('game41', gameState41.rankings, gameState41.winner);
+      const winnerId = gameState41.winner?.id || gameState41.winner || '';
+      const sig = `game41_${currentRoom?.code || gameMode}_${gameState41.turnNumber || gameState41.history?.length || 0}_${winnerId}`;
+      recordGameEndScore('game41', gameState41.rankings, gameState41.winner, sig);
     }
   }, [gameState41.gameStatus]);
 
   useEffect(() => {
     if (activeGameType === 'sevens' && gameState?.gameStatus === GAME_STATUS.GAME_OVER && gameState?.scores) {
-      const rankings = (gameState.players || []).map((p) => ({
-        id: p.id,
-        name: p.name,
-        avatar: p.avatar,
-        score: gameState.scores[p.id]?.totalScore ?? 0,
-        isWinner: (gameState.winners || []).includes(p.id),
-      })).sort((a, b) => b.score - a.score);
-      recordGameEndScore('sevens', rankings, gameState.winners?.[0]);
+      const totalPlayers = (gameState.players || []).length || 4;
+      const sortedPlayers = [...(gameState.players || [])].sort((a, b) => {
+        const sA = gameState.scores[a.id]?.totalScore ?? -999;
+        const sB = gameState.scores[b.id]?.totalScore ?? -999;
+        return sB - sA;
+      });
+      const rankings = sortedPlayers.map((p, idx) => {
+        const isFirstPlace = (gameState.winners || []).includes(p.id);
+        const rank = isFirstPlace ? 1 : idx + 1;
+        const pointsEarned = Math.max(0, totalPlayers - rank);
+        return {
+          id: p.id,
+          name: p.name,
+          avatar: p.avatar,
+          isBot: Boolean(p.isBot),
+          isBotTakeover: Boolean(p.isBotTakeover),
+          rank,
+          pointsEarned,
+          score: gameState.scores[p.id]?.totalScore ?? 0,
+          isWinner: isFirstPlace,
+        };
+      });
+      const sig = `sevens_${currentRoom?.code || gameMode}_${gameState.turnNumber || 0}_${(gameState.winners || []).join(',')}`;
+      recordGameEndScore('sevens', rankings, gameState.winners, sig);
     }
   }, [gameState.gameStatus]);
 
@@ -2446,21 +2522,22 @@ export default function App() {
             else if (game === 'game41') setShowRules41Modal(true);
             else setShowRulesModal(true);
           }}
-          onOpenScoreboard={(game) => {
-            if (game) setActiveGameType(game);
+          onOpenScoreboard={() => {
             setShowScoreboardModal(true);
           }}
         />
 
-        {/* Scoreboard & Top Global Modal */}
+        {/* Top Global Modal (Khusus di Menu Utama seperti Mobile Legends) */}
         <ScoreboardModal
           isOpen={showScoreboardModal}
           onClose={() => setShowScoreboardModal(false)}
           scoreboardData={getCurrentScoreboardList()}
           onResetScoreboard={() => handleResetScoreboard(activeGameType)}
           activeGameTitle={getCurrentScoreboardTitle()}
-          activeGameType={activeGameType}
+          activeGameType="all"
           currentMyId={myPlayerId}
+          currentMyName={getLocalPlayerName()}
+          mode="global"
         />
 
         {/* Rules Guide Modals */}
@@ -3304,7 +3381,7 @@ export default function App() {
         />
       )}
 
-      {/* Cumulative Scoreboard Modal (Points Model & Top Global) */}
+      {/* Cumulative Scoreboard Modal (Khusus Sesi Meja Saat Bermain) */}
       <ScoreboardModal
         isOpen={showScoreboardModal}
         onClose={() => setShowScoreboardModal(false)}
@@ -3313,6 +3390,11 @@ export default function App() {
         activeGameTitle={getCurrentScoreboardTitle()}
         activeGameType={activeGameType}
         currentMyId={myPlayerId}
+        currentMyName={
+          (currentRoom?.players || []).find((p) => p.id === myPlayerId)?.name ||
+          getLocalPlayerName()
+        }
+        mode="session"
       />
 
       {/* Rules Guide Modals */}

@@ -348,13 +348,16 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
           name: r.name,
           avatar: r.avatar,
           games: 0,
+          wins: 0,
           score: 0,
         };
+        const isFirstPlace = Boolean(!r.isDisqualified && (r.rank === 1 || r.isWinner));
         updatedSessionScores[key] = {
           ...current,
           name: r.name || current.name,
           avatar: r.avatar || current.avatar,
           games: (current.games || 0) + 1,
+          wins: (current.wins || 0) + (isFirstPlace ? 1 : 0),
           score: (current.score || 0) + (r.pointsEarned || 0),
         };
       });
@@ -460,13 +463,16 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
           name: r.name,
           avatar: r.avatar,
           games: 0,
+          wins: 0,
           score: 0,
         };
+        const isFirstPlace = Boolean(!r.isDisqualified && (r.rank === 1 || r.isWinner));
         updatedSessionScores[key] = {
           ...current,
           name: r.name || current.name,
           avatar: r.avatar || current.avatar,
           games: (current.games || 0) + 1,
+          wins: (current.wins || 0) + (isFirstPlace ? 1 : 0),
           score: (current.score || 0) + (r.pointsEarned || 0),
         };
       });
