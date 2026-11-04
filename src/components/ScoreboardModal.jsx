@@ -386,6 +386,11 @@ export default function ScoreboardModal({
         <div className="mlbb-corner-decor corner-bl" aria-hidden="true" />
         <div className="mlbb-corner-decor corner-br" aria-hidden="true" />
 
+        {/* Mobile Bottom Sheet Drag Handle */}
+        <div className="sheet-drag-handle" aria-hidden="true">
+          <div className="sheet-drag-bar" />
+        </div>
+
         {/* ======================= HEADER ======================= */}
         <div className="mlbb-scoreboard-header">
           <div className="mlbb-header-brand">

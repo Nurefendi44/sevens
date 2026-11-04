@@ -1020,6 +1020,11 @@ export default function ModeSelectionScreen({
             className="mlbb-profile-modal-card"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Indikator Drag Handle untuk Mobile Bottom Sheet */}
+            <div className="sheet-drag-handle" aria-hidden="true">
+              <div className="sheet-drag-bar" />
+            </div>
+
             <div className="mlbb-profile-modal-header">
               <div className="profile-modal-title-group">
                 <Crown size={20} className="text-gold" />
@@ -1032,54 +1037,56 @@ export default function ModeSelectionScreen({
                 type="button"
                 className="btn-modal-close"
                 onClick={() => setIsProfileModalOpen(false)}
+                aria-label="Tutup"
               >
                 <X size={18} />
               </button>
             </div>
 
-            {/* Current Rank Banner (Live Preview as User Types or Picks) */}
-            <div className="mlbb-profile-rank-showcase">
-              <div className={`showcase-avatar tier-border-${(previewModalStats ? previewModalTier : myRankTier).id}`}>
-                <span>{editAvatarInput || '👑'}</span>
-              </div>
-              <div className="showcase-details">
-                <div className="showcase-tier-line">
-                  <span
-                    className="showcase-tier-badge"
-                    style={{
-                      borderColor: (previewModalStats ? previewModalTier : myRankTier).color,
-                      color: (previewModalStats ? previewModalTier : myRankTier).accent,
-                    }}
-                  >
-                    {(previewModalStats ? previewModalTier : myRankTier).icon}{' '}
-                    {(previewModalStats ? previewModalTier : myRankTier).name}
-                  </span>
-                  <span className="showcase-rank-pos">
-                    {previewModalStats
-                      ? `Peringkat #${previewModalStats.rank} Global`
-                      : myGlobalStats
-                      ? `Peringkat #${myGlobalStats.rank} Global`
-                      : 'Unranked'}
-                  </span>
-                </div>
-                <div className="showcase-stats-line">
-                  <span>
-                    🏆 <strong>{(previewModalStats || myGlobalStats)?.wins || 0}</strong> Juara 1
-                  </span>
-                  <span>•</span>
-                  <span>
-                    ★ <strong>{(previewModalStats || myGlobalStats)?.score || 0}</strong> Skor Poin
-                  </span>
-                  <span>•</span>
-                  <span>
-                    🎮 <strong>{(previewModalStats || myGlobalStats)?.games_played || 0}</strong> Match
-                  </span>
-                </div>
-              </div>
-            </div>
-
             <form onSubmit={handleSaveProfile} className="mlbb-profile-form">
-              <label className="mlbb-form-label">
+              <div className="mlbb-profile-modal-body">
+                {/* Current Rank Banner (Live Preview as User Types or Picks) */}
+                <div className="mlbb-profile-rank-showcase">
+                  <div className={`showcase-avatar tier-border-${(previewModalStats ? previewModalTier : myRankTier).id}`}>
+                    <span>{editAvatarInput || '👑'}</span>
+                  </div>
+                  <div className="showcase-details">
+                    <div className="showcase-tier-line">
+                      <span
+                        className="showcase-tier-badge"
+                        style={{
+                          borderColor: (previewModalStats ? previewModalTier : myRankTier).color,
+                          color: (previewModalStats ? previewModalTier : myRankTier).accent,
+                        }}
+                      >
+                        {(previewModalStats ? previewModalTier : myRankTier).icon}{' '}
+                        {(previewModalStats ? previewModalTier : myRankTier).name}
+                      </span>
+                      <span className="showcase-rank-pos">
+                        {previewModalStats
+                          ? `Peringkat #${previewModalStats.rank} Global`
+                          : myGlobalStats
+                          ? `Peringkat #${myGlobalStats.rank} Global`
+                          : 'Unranked'}
+                      </span>
+                    </div>
+                    <div className="showcase-stats-line">
+                      <span>
+                        🏆 <strong>{(previewModalStats || myGlobalStats)?.wins || 0}</strong> Juara 1
+                      </span>
+                      <span>•</span>
+                      <span>
+                        ★ <strong>{(previewModalStats || myGlobalStats)?.score || 0}</strong> Skor Poin
+                      </span>
+                      <span>•</span>
+                      <span>
+                        🎮 <strong>{(previewModalStats || myGlobalStats)?.games_played || 0}</strong> Match
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <label className="mlbb-form-label">
                 <span>Nickname Pemain (Digunakan saat Online & Top Global)</span>
                 <input
                   type="text"
@@ -1192,20 +1199,21 @@ export default function ModeSelectionScreen({
               <div className="mlbb-profile-tip">
                 🔐 <strong>Proteksi Anti-Bajak:</strong> Dengan <strong>PIN 4 Digit</strong>, kamu tetap bisa login ke profil Top Global milikmu dari HP/browser mana saja tanpa takut dipakai orang lain!
               </div>
+            </div>
 
-              <div className="mlbb-profile-modal-actions">
-                <button
-                  type="button"
-                  className="btn-profile-cancel"
-                  onClick={() => setIsProfileModalOpen(false)}
-                >
-                  Batal
-                </button>
-                <button type="submit" className="btn-profile-save" disabled={isSavingProfile}>
-                  <Check size={16} />
-                  <span>{isSavingProfile ? 'Memverifikasi PIN...' : 'Simpan & Kunci Profil'}</span>
-                </button>
-              </div>
+            <div className="mlbb-profile-modal-actions">
+              <button
+                type="button"
+                className="btn-profile-cancel"
+                onClick={() => setIsProfileModalOpen(false)}
+              >
+                Batal
+              </button>
+              <button type="submit" className="btn-profile-save" disabled={isSavingProfile}>
+                <Check size={16} />
+                <span>{isSavingProfile ? 'Memverifikasi PIN...' : 'Simpan Profil'}</span>
+              </button>
+            </div>
             </form>
           </div>
         </div>
@@ -1682,6 +1690,7 @@ export default function ModeSelectionScreen({
           =================================================================== */}
       <LobbyChatDrawer
         isOpen={isLobbyChatOpen}
+        hideTicker={isProfileModalOpen || isFriendsModalOpen || isModalOpen}
         onToggleOpen={() => {
           setIsLobbyChatOpen((prev) => !prev);
           if (isLobbyChatOpen) {

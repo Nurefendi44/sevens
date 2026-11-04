@@ -8,11 +8,13 @@
   background: rgba(5, 10, 20, 0.85);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  z-index: 1050;
+  z-index: 10000;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1rem;
+  padding-top: max(env(safe-area-inset-top, 16px), 16px);
+  padding-bottom: max(env(safe-area-inset-bottom, 16px), 16px);
   animation: friendsFadeIn 0.22s ease-out;
 }
 
@@ -1039,15 +1041,49 @@
   box-shadow: 0 6px 20px rgba(239, 68, 68, 0.55);
 }
 
+/* Drag handle for mobile bottom sheet */
+.sheet-drag-handle {
+  display: none;
+  width: 100%;
+  padding: 8px 0 10px 0;
+  cursor: grab;
+}
+
+.sheet-drag-bar {
+  width: 44px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.35);
+  margin: 0 auto;
+}
+
 /* Mobile Responsive */
 @media (max-width: 600px) {
+  .friends-modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .sheet-drag-handle {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
   .friends-modal-dialog {
-    max-height: 94vh;
-    border-radius: 16px;
+    max-height: 88vh;
+    max-height: 88dvh;
+    border-radius: 24px 24px 0 0;
+    margin-top: max(env(safe-area-inset-top, 24px), 32px);
+    padding-bottom: max(env(safe-area-inset-bottom, 14px), 14px);
+    border-bottom: none;
+    border-left: none;
+    border-right: none;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.9);
   }
 
   .friends-modal-header {
-    padding: 0.85rem 1rem;
+    padding: 0.9rem 1.15rem;
   }
 
   .friends-nav-tabs {

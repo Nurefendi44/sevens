@@ -259,6 +259,11 @@ export default function FriendsModal({
           </div>
         )}
 
+        {/* Mobile Bottom Sheet Drag Handle */}
+        <div className="sheet-drag-handle" aria-hidden="true">
+          <div className="sheet-drag-bar" />
+        </div>
+
         {/* ===================================================================
             HEADER: Title & Close Button
             =================================================================== */}

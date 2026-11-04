@@ -6,9 +6,9 @@
 /* Floating Bottom Ticker / Dock Bar */
 .mlbb-chat-ticker-bar {
   position: fixed;
-  bottom: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   left: 20px;
-  z-index: 100;
+  z-index: 90;
   display: flex;
   align-items: center;
   gap: 0.65rem;
@@ -585,12 +585,14 @@
 
   .mlbb-chat-panel {
     max-width: 100%;
-    height: 75vh;
-    height: 75dvh;
-    max-height: calc(100dvh - 30px);
+    height: 78vh;
+    height: 78dvh;
+    max-height: calc(100dvh - 36px);
+    margin-top: max(env(safe-area-inset-top, 24px), 32px);
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border-bottom: none;
+    padding-bottom: max(env(safe-area-inset-bottom, 12px), 12px);
   }
 
   .pm-search-input {

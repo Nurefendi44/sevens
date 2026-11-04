@@ -51,6 +51,7 @@ export default function LobbyChatDrawer({
   onJoinRoomFromChat,
   onOpenProfileModal,
   initialDmPartner = null,
+  hideTicker = false,
 }) {
   const [messages, setMessages] = useState(() => getStoredLobbyChats());
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'recruit' | 'private'
@@ -254,7 +255,7 @@ export default function LobbyChatDrawer({
       {/* ===================================================================
           1. MINI TICKER / FLOATING DOCK BAR (ALWAYS VISIBLE IN MAIN MENU)
           =================================================================== */}
-      {!isOpen && (
+      {!isOpen && !hideTicker && (
         <div
           className="mlbb-chat-ticker-bar"
           onClick={onToggleOpen}
