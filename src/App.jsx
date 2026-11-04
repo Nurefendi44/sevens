@@ -2853,6 +2853,9 @@ export default function App() {
               setGameMode('local');
             } else {
               setMultiplayerInitOptions(options);
+              if (options?.inviteCode) {
+                setInviteRoomCode(options.inviteCode);
+              }
               setGameMode(mode);
             }
           }}

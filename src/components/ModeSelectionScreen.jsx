@@ -23,6 +23,7 @@ import {
   ChevronRight,
   RotateCw,
   Check,
+  MessageSquare,
 } from 'lucide-react';
 import {
   fetchGlobalLeaderboard,
@@ -35,6 +36,7 @@ import {
   hashProfilePin,
   PROFILE_AVATARS,
 } from '../services/leaderboardService';
+import LobbyChatDrawer from './LobbyChatDrawer';
 import '../styles/modeSelection.css';
 
 const BOT_PREVIEWS = [
@@ -124,6 +126,7 @@ export default function ModeSelectionScreen({
   const [offlinePlayerCount, setOfflinePlayerCount] = useState(4);
   const [botCount, setBotCount] = useState(1);
   const [deckMode, setDeckMode] = useState('double');
+  const [isLobbyChatOpen, setIsLobbyChatOpen] = useState(false);
 
   // Player Profile State (MLBB Top-Left Profile Bar + 4-Digit PIN)
   const [profile, setProfile] = useState(() => getLocalPlayerProfile());
@@ -575,6 +578,16 @@ export default function ModeSelectionScreen({
                 {isMuted ? <VolumeX size={17} /> : <Volume2 size={17} />}
               </button>
             )}
+
+            <button
+              type="button"
+              className={`mlbb-hud-icon-btn ${isLobbyChatOpen ? 'is-active' : ''}`}
+              onClick={() => setIsLobbyChatOpen((prev) => !prev)}
+              title="Buka Obrolan Global & Mabar"
+            >
+              <MessageSquare size={17} />
+              <span className="hud-btn-label">Chat</span>
+            </button>
 
             <button
               type="button"
@@ -1580,6 +1593,26 @@ export default function ModeSelectionScreen({
           </div>
         </div>
       )}
+
+      {/* ===================================================================
+          MLBB WORLD CHAT & RECRUITMENT LIVECHAT (MENU UTAMA)
+          =================================================================== */}
+      <LobbyChatDrawer
+        isOpen={isLobbyChatOpen}
+        onToggleOpen={() => setIsLobbyChatOpen((prev) => !prev)}
+        myProfile={profile}
+        myRankTier={myRankTier}
+        onJoinRoomFromChat={(code) => {
+          onSelectMode('multiplayer', 4, activeGame, { inviteCode: code });
+        }}
+        onOpenProfileModal={() => {
+          setEditNameInput(profile.name || '');
+          setEditAvatarInput(profile.avatar || '👑');
+          setEditPinInput(profile.pin || '');
+          setProfileError('');
+          setIsProfileModalOpen(true);
+        }}
+      />
     </div>
   );
 }
