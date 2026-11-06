@@ -1191,6 +1191,14 @@ export default function App() {
 
   // MATCHMAKING: earliest player in the queue becomes the host of a new room
   const handleFindMatch = async (username, gameType = activeGameType) => {
+    // Selalu mulai segar: tinggalkan room lama (jika ada) sebelum mencari lawan
+    if (currentRoom?.code) {
+      try {
+        await multiplayerAdapter.leaveRoom(currentRoom.code, myPlayerId, username);
+      } catch (e) {}
+      setCurrentRoom(null);
+      clearLocalSession();
+    }
     const res = await multiplayerAdapter.findMatch(username, gameType);
     if (res.success) {
       enterJoinedRoom(
@@ -2204,12 +2212,10 @@ export default function App() {
   };
 
   const getCurrentScoreboardList = () => {
-    const mergedScores = getMergedSessionScoresMap(activeGameType);
-    if (mergedScores && Object.keys(mergedScores).length > 0) {
-      return Object.values(mergedScores);
-    }
+    const mergedScores = getMergedSessionScoresMap(activeGameType) || {};
 
-    const players = (isMultiplayerMode && currentRoom?.players)
+    // Skor sesi hanya untuk pemain yang ada di meja/room saat ini
+    const players = (isMultiplayerMode && currentRoom?.players?.length)
       ? currentRoom.players
       : activeGameType === 'bigtwo'
       ? (gameStateBigtwo.players || [])
@@ -2217,14 +2223,23 @@ export default function App() {
       ? (gameState41.players || [])
       : (gameState.players || []);
 
-    return players.map((p) => ({
-      id: p.id,
-      name: p.name,
-      avatar: p.avatar,
-      games: 0,
-      wins: 0,
-      score: 0,
-    }));
+    if (!players.length) return Object.values(mergedScores);
+
+    const entries = Object.values(mergedScores);
+    return players.map((p) => {
+      const nameKey = (p.name || '').trim().toLowerCase();
+      const found = entries.find(
+        (e) =>
+          (e.id && e.id === p.id) ||
+          (nameKey && (e.name || '').trim().toLowerCase() === nameKey)
+      );
+      return {
+        ...(found || { games: 0, wins: 0, score: 0 }),
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar || found?.avatar,
+      };
+    });
   };
 
   const getCurrentScoreboardTitle = () => {

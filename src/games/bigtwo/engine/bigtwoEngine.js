@@ -240,11 +240,21 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
 
   const playerHand = gameState.hands[playerId] || [];
   // Verify player actually holds all selected cards
+  // Setiap kartu terpilih harus cocok dengan kartu BERBEDA di tangan (double deck: 10♠ kembar = 2 kartu)
+  const usedIdx = new Set();
+  const matchedIdxs = [];
   for (const card of selectedCards) {
-    const holds = playerHand.some((c) => c.id === card.id || (c.rank === card.rank && c.suit === card.suit));
-    if (!holds) {
+    let idx = playerHand.findIndex((c, i) => !usedIdx.has(i) && c.id === card.id);
+    if (idx === -1) {
+      idx = playerHand.findIndex(
+        (c, i) => !usedIdx.has(i) && c.rank === card.rank && c.suit === card.suit
+      );
+    }
+    if (idx === -1) {
       return { success: false, error: 'Kartu tidak ada di tangan Anda!' };
     }
+    usedIdx.add(idx);
+    matchedIdxs.push(idx);
   }
 
   // 1. Evaluate Combination
@@ -274,9 +284,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
   }
 
   // 4. Remove cards from player's hand
-  const newPlayerHand = playerHand.filter(
-    (c) => !selectedCards.some((sc) => sc.id === c.id || (sc.rank === c.rank && sc.suit === c.suit))
-  );
+  const newPlayerHand = playerHand.filter((_, i) => !usedIdx.has(i));
 
   const playerName = gameState.players.find((p) => p.id === playerId)?.name || 'Pemain';
 

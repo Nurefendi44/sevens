@@ -104,13 +104,10 @@ export default function TableBigTwo({
   const toggleSelectCard = (card) => {
     setSelectedCards((prev) => {
       const exists = prev.some(
-        (c) => c.id === card.id || (c.rank === card.rank && c.suit === card.suit)
+        (c) => c.id === card.id
       );
       if (exists) {
-        return prev.filter(
-          (c) =>
-            !(c.id === card.id || (c.rank === card.rank && c.suit === card.suit))
-        );
+        return prev.filter((c) => c.id !== card.id);
       }
       return [...prev, card];
     });
@@ -447,8 +444,7 @@ export default function TableBigTwo({
         >
           {myHand.map((card, idx) => {
             const isSelected = selectedCards.some(
-              (c) =>
-                c.id === card.id || (c.rank === card.rank && c.suit === card.suit)
+              (c) => c.id === card.id
             );
 
             return (
