@@ -199,7 +199,7 @@ function evaluateFiveCardHand(cards) {
 
   // Check Straight
   // In Big Two, consecutive sequences can be:
-  // 3-4-5-6-7, 4-5-6-7-8, ..., 10-J-Q-K-A, J-Q-K-A-2, A-2-3-4-5
+  // 3-4-5-6-7, 4-5-6-7-8, ..., 10-J-Q-K-A, J-Q-K-A-2 (A dan 2 hanya bernilai tinggi; tidak ada A-2-3-4-5)
   const ranksSorted = cards.map((c) => getCardRank(c));
   let isStraight = false;
   let straightHighestCard = cards[4];
@@ -214,30 +214,8 @@ function evaluateFiveCardHand(cards) {
   ) {
     isStraight = true;
     straightHighestCard = cards[4];
-  } else if (
-    // Wheel sequences with 2 and A:
-    // A-2-3-4-5 -> Big Two ranks: [3, 4, 5, 14, 15]
-    uniqueRanks.length === 5 &&
-    ranksSorted[0] === 3 &&
-    ranksSorted[1] === 4 &&
-    ranksSorted[2] === 5 &&
-    ranksSorted[3] === 14 &&
-    ranksSorted[4] === 15
-  ) {
-    isStraight = true;
-    straightHighestCard = cards[4]; // Two is highest
-  } else if (
-    // 2-3-4-5-6 -> Big Two ranks: [3, 4, 5, 6, 15]
-    uniqueRanks.length === 5 &&
-    ranksSorted[0] === 3 &&
-    ranksSorted[1] === 4 &&
-    ranksSorted[2] === 5 &&
-    ranksSorted[3] === 6 &&
-    ranksSorted[4] === 15
-  ) {
-    isStraight = true;
-    straightHighestCard = cards[4]; // Two is highest
   }
+  // A-2-3-4-5 dan 2-3-4-5-6 TIDAK sah: As tidak bisa jadi 1 dan 2 tidak bisa jadi angka rendah
 
   // 5.1. ROYAL FLUSH (10-J-Q-K-A of the same suit)
   if (
