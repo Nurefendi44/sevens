@@ -1254,6 +1254,19 @@ export default function App() {
       : isGame41
       ? { gameType: 'game41', sessionScores: carriedSessionScores, ...mmOverride }
       : { ...gameConfig, sessionScores: carriedSessionScores, ...mmOverride };
+    if (actualPlayerCount > 4) {
+      const wheelPlayers = room.players || [];
+      const starter = wheelPlayers[Math.floor(Math.random() * wheelPlayers.length)];
+      if (starter) {
+        configToUse.startingPlayerId = starter.id;
+        configToUse.firstTurnWheel = {
+          isOpen: true,
+          targetPlayerId: starter.id,
+          gameType: determinedGame,
+          players: wheelPlayers.map((p) => ({ id: p.id, name: p.name, avatar: p.avatar, isBot: Boolean(p.isBot) })),
+        };
+      }
+    }
     const res = await multiplayerAdapter.startGame(room.code, myPlayerId, configToUse, determinedGame);
     if (res.success) {
       completedWheelKeyRef.current = null;

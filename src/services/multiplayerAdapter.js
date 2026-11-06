@@ -333,7 +333,7 @@ export const multiplayerAdapter = {
   /**
    * Joins an existing room
    */
-  async joinRoom(roomCode, playerName) {
+  async joinRoom(roomCode, playerName, _attempt = 0) {
     if (!supabase) {
       return { success: false, error: 'Supabase belum terkonfigurasi pada .env file.' };
     }
@@ -447,22 +447,30 @@ export const multiplayerAdapter = {
 
     const updatedPlayers = [...players, newPlayer];
 
-    const { data: updatedRoom, error: updateErr } = await supabase
+    // Optimistic lock: hanya tulis jika room belum berubah (mis. host belum menekan Mulai / pemain lain belum join)
+    const { data: updatedRows, error: updateErr } = await supabase
       .from('rooms')
       .update({
         players: updatedPlayers,
         updated_at: new Date().toISOString(),
       })
       .eq('id', room.id)
-      .select()
-      .single();
+      .eq('status', 'lobby')
+      .eq('updated_at', room.updated_at)
+      .select();
 
     if (updateErr) {
       return { success: false, error: updateErr.message };
     }
 
+    if (!updatedRows || updatedRows.length === 0) {
+      // Room berubah di tengah jalan: ulangi dengan data terbaru (akan menolak jika game sudah mulai)
+      if (_attempt < 4) return this.joinRoom(roomCode, playerName, _attempt + 1);
+      return { success: false, error: 'Room sedang berubah, coba lagi.' };
+    }
+
     setLocalSession(playerId, name, code);
-    return { success: true, room: updatedRoom, player: newPlayer };
+    return { success: true, room: updatedRows[0], player: newPlayer };
   },
 
   /**
@@ -518,7 +526,7 @@ export const multiplayerAdapter = {
   /**
    * Host fills ALL empty seats with bots in one update (used by matchmaking prompt)
    */
-  async fillBots(roomCode, hostId, targetCount = null) {
+  async fillBots(roomCode, hostId, targetCount = null, _attempt = 0) {
     if (!supabase) return { success: false, error: 'Supabase offline.' };
     const { room, error } = await this.getRoom(roomCode);
     if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
@@ -552,15 +560,23 @@ export const multiplayerAdapter = {
       };
     });
 
-    const { data: updatedRoom, error: updateErr } = await supabase
+    const { data: botRows, error: updateErr } = await supabase
       .from('rooms')
       .update({
         players: [...currentPlayers, ...newBots],
         updated_at: new Date().toISOString(),
       })
       .eq('code', room.code)
-      .select()
-      .single();
+      .eq('status', 'lobby')
+      .eq('updated_at', room.updated_at)
+      .select();
+
+    // Ada pemain yang baru join / berubah: ulangi agar pemain itu tidak tertimpa
+    if (!updateErr && (!botRows || botRows.length === 0)) {
+      if (_attempt < 4) return this.fillBots(roomCode, hostId, targetCount, _attempt + 1);
+      return { success: false, error: 'Room sedang berubah, coba lagi.' };
+    }
+    const updatedRoom = botRows ? botRows[0] : null;
 
     if (updateErr) return { success: false, error: updateErr.message };
     return { success: true, room: updatedRoom };
@@ -569,7 +585,7 @@ export const multiplayerAdapter = {
   /**
    * Toggles ready state for a player
    */
-  async toggleReady(roomCode, playerId, isReady) {
+  async toggleReady(roomCode, playerId, isReady, _attempt = 0) {
     if (!supabase) return;
     const { room } = await this.getRoom(roomCode);
     if (!room) return;
@@ -582,13 +598,22 @@ export const multiplayerAdapter = {
       return p;
     });
 
-    await supabase
+    if (room.status !== 'lobby') return;
+
+    const { data: rows } = await supabase
       .from('rooms')
       .update({
         players: updatedPlayers,
         updated_at: new Date().toISOString(),
       })
-      .eq('code', code);
+      .eq('code', code)
+      .eq('status', 'lobby')
+      .eq('updated_at', room.updated_at)
+      .select();
+
+    if ((!rows || rows.length === 0) && _attempt < 4) {
+      return this.toggleReady(roomCode, playerId, isReady, _attempt + 1);
+    }
   },
 
   /**
@@ -786,7 +811,7 @@ export const multiplayerAdapter = {
   /**
    * Host starts the game for all players
    */
-  async startGame(roomCode, hostId, configOverrides = {}, forceGameType = null) {
+  async startGame(roomCode, hostId, configOverrides = {}, forceGameType = null, _attempt = 0) {
     if (!supabase) return { success: false, error: 'Supabase offline.' };
     const { room, error } = await this.getRoom(roomCode);
     if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
@@ -889,7 +914,8 @@ export const multiplayerAdapter = {
       gameState.firstTurnWheel = safeOverrides.firstTurnWheel;
     }
 
-    const { data: updatedRoom, error: updateErr } = await supabase
+    // Optimistic lock: jika ada pemain yang baru join saat kartu dikocok, ulangi dengan roster terbaru
+    const { data: startedRows, error: updateErr } = await supabase
       .from('rooms')
       .update({
         status: 'playing',
@@ -897,14 +923,18 @@ export const multiplayerAdapter = {
         updated_at: new Date().toISOString(),
       })
       .eq('code', code)
-      .select()
-      .single();
+      .eq('updated_at', room.updated_at)
+      .select();
 
     if (updateErr) {
       return { success: false, error: updateErr.message };
     }
+    if (!startedRows || startedRows.length === 0) {
+      if (_attempt < 4) return this.startGame(roomCode, hostId, configOverrides, forceGameType, _attempt + 1);
+      return { success: false, error: 'Room sedang berubah, coba mulai lagi.' };
+    }
 
-    return { success: true, room: updatedRoom, gameState };
+    return { success: true, room: startedRows[0], gameState };
   },
 
   /**

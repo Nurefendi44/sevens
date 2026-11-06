@@ -438,7 +438,8 @@ function aggregateRowsByUsername(rows = [], gameType = 'all') {
     }
   });
 
-  const result = Array.from(playerMap.values());
+  // Top Global hanya menampilkan akun yang sudah login/terdaftar (punya PIN pada player_id)
+  const result = Array.from(playerMap.values()).filter((p) => Boolean(extractPinHashFromItem(p)));
   result.sort((a, b) => {
     if (b.wins !== a.wins) return b.wins - a.wins;
     if (b.score !== a.score) return b.score - a.score;
@@ -631,6 +632,16 @@ export async function recordMultiplayerGameStats({
       // block recording if the local PIN does not match the owner's PIN!
       if (existingPinHash && isMe && !player.isBotTakeover && existingPinHash !== myPinHash) {
         console.warn(`[Leaderboard] Blocked unauthorized score update for PIN-protected user "${cleanName}"`);
+        continue;
+      }
+
+      // Hanya pemain yang sudah "login" (punya PIN terdaftar) yang masuk Top Global:
+      // - Pemain sendiri: wajib punya PIN lokal
+      // - Pemain digantikan bot (takeover): hanya jika username-nya sudah terdaftar dengan PIN
+      if (isMe && !player.isBotTakeover && !myPinHash) {
+        continue;
+      }
+      if (player.isBotTakeover && !existingPinHash) {
         continue;
       }
 
