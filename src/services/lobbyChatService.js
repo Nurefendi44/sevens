@@ -45,6 +45,8 @@ export function getStoredLobbyChats() {
       const seen = new Set();
       return parsed.filter((m) => {
         if (!m || !m.id || m.id.startsWith('seed_') || seen.has(m.id)) return false;
+        // Pesan DM tidak boleh pernah masuk chat global (membersihkan data tercemar lama juga)
+        if (m.type === 'private' || m.targetUsername || String(m.id).startsWith('pm_')) return false;
         seen.add(m.id);
         return true;
       });
@@ -60,6 +62,7 @@ export function getStoredLobbyChats() {
  */
 function appendStoredLobbyChat(msg) {
   if (typeof localStorage === 'undefined') return;
+  if (msg && (msg.type === 'private' || msg.targetUsername)) return;
   try {
     const list = getStoredLobbyChats();
     // Avoid duplicate IDs
@@ -69,6 +72,26 @@ function appendStoredLobbyChat(msg) {
   } catch (e) {
     // Ignore error
   }
+}
+
+function removeStoredLobbyChat(id) {
+  if (typeof localStorage === 'undefined' || !id) return;
+  try {
+    const list = getStoredLobbyChats().filter((m) => m.id !== id);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  } catch (e) {}
+}
+
+function removeStoredPrivateChat(myUsername, partnerUsername, id) {
+  if (typeof localStorage === 'undefined' || !myUsername || !partnerUsername || !id) return;
+  const myNorm = String(myUsername).trim().toLowerCase();
+  const partnerNorm = String(partnerUsername).trim().toLowerCase();
+  try {
+    const all = getStoredPrivateChats(myNorm);
+    if (!all[partnerNorm]) return;
+    all[partnerNorm] = all[partnerNorm].filter((m) => m.id !== id);
+    localStorage.setItem(`${PM_STORAGE_PREFIX}${myNorm}`, JSON.stringify(all));
+  } catch (e) {}
 }
 
 // In-memory active channel reference
@@ -81,8 +104,17 @@ try {
     broadcastChannel = new BroadcastChannel('royal_lobby_chat_bc');
     broadcastChannel.onmessage = (event) => {
       const msg = event?.data;
+      if (msg && msg.type === 'retract' && msg.id) {
+        if (msg.scope !== 'private') removeStoredLobbyChat(msg.id);
+        activeSubscribers.forEach((cb) => {
+          try {
+            cb(msg);
+          } catch {}
+        });
+        return;
+      }
       if (msg && msg.id) {
-        appendStoredLobbyChat(msg);
+        appendStoredLobbyChat(msg); // otomatis mengabaikan pesan private
         activeSubscribers.forEach((cb) => {
           try {
             cb(msg);
@@ -217,6 +249,25 @@ export function subscribeToLobbyChat(onNewMessage, currentUsername = '') {
           } catch (err) {
             console.error('Error in lobby chat listener:', err);
           }
+        });
+      })
+      .on('broadcast', { event: 'lobby_chat_retract' }, ({ payload }) => {
+        if (!payload || !payload.id) return;
+        const myNameNorm = String(currentUsername || '').trim().toLowerCase();
+        const senderNorm = String(payload.senderName || '').trim().toLowerCase();
+        const targetNorm = String(payload.targetUsername || '').trim().toLowerCase();
+        if (payload.scope === 'private') {
+          // Hanya penerima DM yang perlu menghapus; pengirim lain tidak relevan
+          if (!myNameNorm || (targetNorm !== myNameNorm && senderNorm !== myNameNorm)) return;
+          removeStoredPrivateChat(myNameNorm, senderNorm === myNameNorm ? targetNorm : senderNorm, payload.id);
+        } else {
+          removeStoredLobbyChat(payload.id);
+        }
+        const note = { ...payload, type: 'retract' };
+        activeSubscribers.forEach((cb) => {
+          try {
+            cb(note);
+          } catch {}
         });
       })
       .on('broadcast', { event: 'lobby_private_message' }, ({ payload }) => {
@@ -428,4 +479,56 @@ export async function sendPrivateChatMessage({
   }
 
   return { success: true, message: payload };
+}
+
+/**
+ * Batal kirim: menarik kembali pesan milik sendiri (global maupun DM) dari semua perangkat.
+ * Hanya pengirim asli (senderName cocok) yang boleh menarik pesan.
+ */
+export async function retractChatMessage({ id, scope = 'public', senderName, targetUsername = null }) {
+  if (!id || !senderName) return { success: false, error: 'Data pesan tidak lengkap.' };
+
+  const payload = {
+    id,
+    scope: scope === 'private' ? 'private' : 'public',
+    senderName: String(senderName).trim(),
+    targetUsername: targetUsername ? String(targetUsername).trim() : null,
+    type: 'retract',
+  };
+
+  // 1. Hapus lokal
+  if (payload.scope === 'private') {
+    removeStoredPrivateChat(payload.senderName, payload.targetUsername, id);
+  } else {
+    removeStoredLobbyChat(id);
+  }
+
+  // 2. Beritahu subscriber lokal & tab lain
+  activeSubscribers.forEach((cb) => {
+    try {
+      cb(payload);
+    } catch {}
+  });
+  if (broadcastChannel) {
+    try {
+      broadcastChannel.postMessage(payload);
+    } catch {}
+  }
+
+  // 3. Siarkan ke pemain lain
+  if (isSupabaseConfigured && supabase) {
+    try {
+      if (!lobbyChannel) {
+        lobbyChannel = supabase.channel('global_lobby_chat', {
+          config: { broadcast: { self: false } },
+        });
+        await lobbyChannel.subscribe();
+      }
+      await lobbyChannel.send({ type: 'broadcast', event: 'lobby_chat_retract', payload });
+    } catch (err) {
+      console.warn('[LobbyChat] Retract broadcast warning:', err);
+    }
+  }
+
+  return { success: true };
 }

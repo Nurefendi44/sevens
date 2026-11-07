@@ -23,6 +23,7 @@ import {
   subscribeToLobbyChat,
   sendLobbyChatMessage,
   sendPrivateChatMessage,
+  retractChatMessage,
   getStoredPrivateChats,
   searchRegisteredPlayers,
   extractRoomCodeFromMessage,
@@ -124,6 +125,20 @@ export default function LobbyChatDrawer({
   // Subscribe to realtime global lobby chat & direct private messages
   useEffect(() => {
     const unsubscribe = subscribeToLobbyChat((newMsg) => {
+      if (newMsg.type === 'retract') {
+        if (newMsg.scope === 'private') {
+          setPmThreads((prev) => {
+            const next = {};
+            Object.entries(prev).forEach(([k, list]) => {
+              next[k] = list.filter((m) => m.id !== newMsg.id);
+            });
+            return next;
+          });
+        } else {
+          setMessages((prev) => prev.filter((m) => m.id !== newMsg.id));
+        }
+        return;
+      }
       if (newMsg.type === 'private') {
         const myNorm = currentDisplayName.toLowerCase();
         const isMine = newMsg.senderName?.toLowerCase() === myNorm;
@@ -195,16 +210,17 @@ export default function LobbyChatDrawer({
 
   // Filter messages by tab
   const filteredMessages = useMemo(() => {
+    const publicOnly = messages.filter((m) => m.type !== 'private' && !m.targetUsername);
     if (activeTab === 'recruit') {
-      return messages.filter(
+      return publicOnly.filter(
         (m) => m.type === 'mabar_invite' || Boolean(m.roomCode) || extractRoomCodeFromMessage(m.message)
       );
     }
-    return messages;
+    return publicOnly;
   }, [messages, activeTab]);
 
   // Latest message preview for bottom ticker
-  const latestMessage = messages[messages.length - 1];
+  const latestMessage = messages.filter((m) => m.type !== 'private' && !m.targetUsername).slice(-1)[0];
 
   // Send a message (Global or Private DM)
   const handleSendMessage = async (customText = null) => {
@@ -236,6 +252,18 @@ export default function LobbyChatDrawer({
     } finally {
       setIsSending(false);
     }
+  };
+
+  // Batal kirim pesan milik sendiri
+  const handleRetractMessage = async (msg, scope) => {
+    if (!msg?.id) return;
+    if (!window.confirm('Batalkan pengiriman pesan ini untuk semua orang?')) return;
+    await retractChatMessage({
+      id: msg.id,
+      scope,
+      senderName: currentDisplayName,
+      targetUsername: scope === 'private' ? msg.targetUsername || activeDmPartner?.name : null,
+    });
   };
 
   // Helper to start direct chat with any user
@@ -588,7 +616,17 @@ export default function LobbyChatDrawer({
                                     </span>
                                   )}
                                   <span className="chat-msg-time">{timeString}</span>
-                                </div>
+                                  {isMe && (
+                                    <button
+                                      type="button"
+                                      className="chat-retract-btn"
+                                      title="Batal kirim"
+                                      onClick={() => handleRetractMessage(msg, 'private')}
+                                    >
+                                      <Trash2 size={10} /> Batal
+                                    </button>
+                                  )}
+                                  </div>
                                 <div className="chat-msg-bubble">
                                   <span>{msg.message}</span>
                                   {detectedCode && onJoinRoomFromChat && (
@@ -858,6 +896,16 @@ export default function LobbyChatDrawer({
                               </button>
                             )}
                             <span className="chat-msg-time">{timeString}</span>
+                            {isMe && !isSystem && (
+                              <button
+                                type="button"
+                                className="chat-retract-btn"
+                                title="Batal kirim"
+                                onClick={() => handleRetractMessage(msg, 'public')}
+                              >
+                                <Trash2 size={10} /> Batal
+                              </button>
+                            )}
                           </div>
 
                           <div className="chat-msg-bubble">

@@ -815,3 +815,25 @@
   background: rgba(168, 85, 247, 0.35);
   color: #ffffff;
 }
+
+/* Tombol Batal Kirim pada pesan milik sendiri */
+.chat-retract-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 999px;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.chat-retract-btn:hover {
+  opacity: 1;
+  background: rgba(239, 68, 68, 0.22);
+}
