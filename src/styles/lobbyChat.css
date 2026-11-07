@@ -403,6 +403,26 @@
   word-break: break-word;
 }
 
+/* Pesan kita di sisi KANAN, pesan orang lain di KIRI (seperti aplikasi chat umumnya) */
+.chat-msg-row.is-me {
+  flex-direction: row-reverse;
+}
+
+.chat-msg-row.is-me .chat-msg-body {
+  align-items: flex-end;
+}
+
+.chat-msg-row.is-me .chat-msg-meta {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
+.chat-msg-row.is-me .chat-msg-bubble {
+  border-top-left-radius: 12px;
+  border-top-right-radius: 4px;
+  text-align: left;
+}
+
 .chat-msg-row.is-me .chat-msg-bubble {
   background: rgba(14, 165, 233, 0.22);
   border-color: rgba(56, 189, 248, 0.45);
