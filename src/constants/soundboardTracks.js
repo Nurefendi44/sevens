@@ -114,6 +114,16 @@ export const SOUNDBOARD_TRACKS = [
     color: '#dc2626',
     glow: 'rgba(220, 38, 38, 0.35)',
   },
+  {
+    id: 'bigmo-izin',
+    title: 'Izin!',
+    subtitle: 'Bigmo Numpang Lewat',
+    file: '/soundboard/bigmo-izin_TNP8kAO.mp3',
+    icon: '🙋',
+    category: 'Meme',
+    color: '#a855f7',
+    glow: 'rgba(168, 85, 247, 0.35)',
+  },
 ];
 
 export const SOUNDBOARD_CATEGORIES = ['Semua', 'Meme', 'Ketawa', 'Efek'];
