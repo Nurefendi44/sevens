@@ -2741,6 +2741,22 @@ export default function App() {
             }
             setActiveGameType(chosenGame);
 
+            // Permainan baru dari menu utama (vs Bot / Lokal) selalu mulai dengan skor sesi kosong
+            if (mode === 'single' || mode === 'local') {
+              const freshKey = `${chosenGame}_${mode}`;
+              setScoreboardData((prev) => {
+                const next = { ...prev, [freshKey]: {} };
+                try {
+                  localStorage.setItem('poker_scoreboard_data', JSON.stringify(next));
+                } catch (e) {}
+                return next;
+              });
+              try {
+                localStorage.removeItem(`poker_last_recorded_match_${chosenGame}`);
+              } catch (e) {}
+              lastRecordedMatchRef.current[chosenGame] = null;
+            }
+
             if (mode === 'single') {
               const totalCount = playerCount || (options?.botCount ? options.botCount + 1 : 2);
               const roster = createSinglePlayerRoster(totalCount);
