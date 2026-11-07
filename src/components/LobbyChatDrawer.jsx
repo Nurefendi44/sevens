@@ -97,6 +97,7 @@ export default function LobbyChatDrawer({
   // Friends List State
   const [friendsList, setFriendsList] = useState([]);
   const [friendToDelete, setFriendToDelete] = useState(null);
+  const [retractTarget, setRetractTarget] = useState(null); // { msg, scope }
 
   // If opened with initialDmPartner, switch to DM tab with that partner
   useEffect(() => {
@@ -255,9 +256,15 @@ export default function LobbyChatDrawer({
   };
 
   // Batal kirim pesan milik sendiri
-  const handleRetractMessage = async (msg, scope) => {
+  const handleRetractMessage = (msg, scope) => {
     if (!msg?.id) return;
-    if (!window.confirm('Batalkan pengiriman pesan ini untuk semua orang?')) return;
+    setRetractTarget({ msg, scope });
+  };
+
+  const confirmRetractMessage = async () => {
+    if (!retractTarget?.msg?.id) return;
+    const { msg, scope } = retractTarget;
+    setRetractTarget(null);
     await retractChatMessage({
       id: msg.id,
       scope,
@@ -1030,6 +1037,34 @@ export default function LobbyChatDrawer({
                 >
                   Pasang Nickname & PIN
                 </button>
+              </div>
+            )}
+            {/* Modal Konfirmasi Batal Kirim */}
+            {retractTarget && (
+              <div className="friends-confirm-overlay" onClick={() => setRetractTarget(null)}>
+                <div className="friends-confirm-dialog" onClick={(e) => e.stopPropagation()}>
+                  <div className="confirm-icon-box">
+                    <AlertTriangle size={22} className="confirm-warning-icon" />
+                  </div>
+                  <h4 className="confirm-title" style={{ fontSize: '1.05rem', margin: '0 0 0.5rem 0' }}>
+                    Batal Kirim Pesan?
+                  </h4>
+                  <div className="confirm-profile-preview">
+                    <strong style={{ wordBreak: 'break-word' }}>{retractTarget.msg.message}</strong>
+                  </div>
+                  <p className="confirm-desc">
+                    Pesan ini akan ditarik dan hilang untuk semua orang.
+                  </p>
+                  <div className="confirm-btn-row">
+                    <button type="button" className="btn-confirm-cancel" onClick={() => setRetractTarget(null)}>
+                      Tidak
+                    </button>
+                    <button type="button" className="btn-confirm-delete" onClick={confirmRetractMessage}>
+                      <Trash2 size={13} />
+                      <span>Ya, Tarik Pesan</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
             {/* Popup Konfirmasi Hapus Pertemanan */}
