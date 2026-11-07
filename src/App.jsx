@@ -2015,7 +2015,7 @@ export default function App() {
    */
   const getMergedSessionScoresMap = (gameKey = activeGameType) => {
     const sessionKey = getScoreSessionKey(gameKey);
-    const localMap = scoreboardData[sessionKey] || scoreboardData[gameKey] || {};
+    const localMap = scoreboardData[sessionKey] || {};
     const roomMap = currentRoom?.game_state?.sessionScores || {};
     const engineMap =
       gameKey === 'bigtwo'
@@ -2024,10 +2024,32 @@ export default function App() {
         ? gameState41?.sessionScores || {}
         : gameState?.sessionScores || {};
 
-    const merged = multiplayerAdapter.mergeSessionScoreMaps(
+    const mergedRaw = multiplayerAdapter.mergeSessionScoreMaps(
       multiplayerAdapter.mergeSessionScoreMaps(localMap, roomMap),
       engineMap
     );
+
+    // Buang entri pemain yang bukan bagian dari meja/room ini (sisa cache sesi lama)
+    const sessionPlayers = (isMultiplayerMode && currentRoom?.players?.length)
+      ? currentRoom.players
+      : gameKey === 'bigtwo'
+      ? (gameStateBigtwo?.players || [])
+      : gameKey === 'game41'
+      ? (gameState41?.players || [])
+      : (gameState?.players || []);
+    const allowedNames = new Set(
+      sessionPlayers.map((p) => (p.name || '').trim().toLowerCase()).filter(Boolean)
+    );
+    const allowedIds = new Set(sessionPlayers.map((p) => p.id).filter(Boolean));
+    const merged = {};
+    Object.entries(mergedRaw).forEach(([k, v]) => {
+      const nm = (v?.name || '').trim().toLowerCase();
+      if (!sessionPlayers.length || allowedNames.has(nm) || allowedNames.has(k)) {
+        merged[k] = v;
+      } else if (v?.id && allowedIds.has(v.id) && !nm) {
+        merged[k] = v;
+      }
+    });
 
     // Auto-heal known session history for room B2-BUFK
     // (pardi: 6 matches / 11 score, lipia: 5 matches / 13 score, bots: 6 matches)
