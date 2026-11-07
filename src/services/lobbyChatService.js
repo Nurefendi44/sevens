@@ -11,7 +11,10 @@ import { getPlayerRankTier } from './leaderboardService';
 
 const STORAGE_KEY = 'royal_cards_global_lobby_chat_v1';
 const PM_STORAGE_PREFIX = 'royal_cards_pm_history_v1_';
+const GLOBAL_CHAT_ROOM_CODE = '__GCHAT__';
 const MAX_MESSAGES = 50;
+const MAX_PRIVATE_MESSAGES = 120;
+const MAX_RETRACTED_IDS = 100;
 
 /**
  * Extract room code from text if mentioned
@@ -92,6 +95,260 @@ function removeStoredPrivateChat(myUsername, partnerUsername, id) {
     all[partnerNorm] = all[partnerNorm].filter((m) => m.id !== id);
     localStorage.setItem(`${PM_STORAGE_PREFIX}${myNorm}`, JSON.stringify(all));
   } catch (e) {}
+}
+
+/**
+ * Ambil atau buat record penyimpanan riwayat chat global di Supabase (`rooms` dengan `code = '__GCHAT__'`).
+ * Memastikan riwayat obrolan global, ajakan mabar room, dan DM tetap muncul meski dibuka di Incognito / perangkat baru.
+ */
+async function fetchOrCreateGlobalChatRecord() {
+  if (!isSupabaseConfigured || !supabase) return null;
+  try {
+    const { data: existing, error } = await supabase
+      .from('rooms')
+      .select('id, code, game_state')
+      .eq('code', GLOBAL_CHAT_ROOM_CODE)
+      .maybeSingle();
+
+    if (!error && existing) {
+      return existing;
+    }
+
+    const initialState = {
+      publicMessages: [],
+      privateMessages: [],
+      retractedIds: [],
+    };
+
+    const { data: created, error: insertErr } = await supabase
+      .from('rooms')
+      .insert({
+        code: GLOBAL_CHAT_ROOM_CODE,
+        host_id: 'system_global_chat',
+        status: 'system_chat',
+        players: [],
+        game_state: initialState,
+      })
+      .select('id, code, game_state')
+      .single();
+
+    if (!insertErr && created) return created;
+
+    // Jika gagal insert karena race condition (sudah dibuat klien lain), ambil ulang
+    const { data: retry } = await supabase
+      .from('rooms')
+      .select('id, code, game_state')
+      .eq('code', GLOBAL_CHAT_ROOM_CODE)
+      .maybeSingle();
+    return retry || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Simpan perubahan pesan (tambah publik, tambah DM, atau tarik pesan) ke server Supabase
+ */
+async function persistChatChangeToServer({ addPublic = null, addPrivate = null, retractId = null }) {
+  if (!isSupabaseConfigured || !supabase) return;
+  try {
+    const record = await fetchOrCreateGlobalChatRecord();
+    if (!record) return;
+
+    const gs = record.game_state || {};
+    let publicList = Array.isArray(gs.publicMessages) ? [...gs.publicMessages] : [];
+    let privateList = Array.isArray(gs.privateMessages) ? [...gs.privateMessages] : [];
+    let retractedList = Array.isArray(gs.retractedIds) ? [...gs.retractedIds] : [];
+
+    if (retractId) {
+      if (!retractedList.includes(retractId)) {
+        retractedList = [...retractedList, retractId].slice(-MAX_RETRACTED_IDS);
+      }
+      publicList = publicList.filter((m) => m && m.id !== retractId);
+      privateList = privateList.filter((m) => m && m.id !== retractId);
+    }
+
+    const retractedSet = new Set(retractedList);
+
+    if (addPublic && addPublic.id && !retractedSet.has(addPublic.id)) {
+      if (!publicList.some((m) => m && m.id === addPublic.id)) {
+        publicList.push(addPublic);
+      }
+    }
+
+    if (addPrivate && addPrivate.id && !retractedSet.has(addPrivate.id)) {
+      if (!privateList.some((m) => m && m.id === addPrivate.id)) {
+        privateList.push(addPrivate);
+      }
+    }
+
+    // Gabungkan juga dengan pesan publik lokal yang belum ada di server (agar pesan lama ikut terunggah)
+    const localPublic = getStoredLobbyChats();
+    for (const locMsg of localPublic) {
+      if (
+        locMsg &&
+        locMsg.id &&
+        !retractedSet.has(locMsg.id) &&
+        locMsg.type !== 'private' &&
+        !locMsg.targetUsername &&
+        !publicList.some((m) => m && m.id === locMsg.id)
+      ) {
+        publicList.push(locMsg);
+      }
+    }
+
+    publicList = publicList
+      .filter(
+        (m) =>
+          m &&
+          m.id &&
+          !m.id.startsWith('seed_') &&
+          !retractedSet.has(m.id) &&
+          m.type !== 'private' &&
+          !m.targetUsername
+      )
+      .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+      .slice(-MAX_MESSAGES);
+
+    privateList = privateList
+      .filter((m) => m && m.id && !retractedSet.has(m.id))
+      .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+      .slice(-MAX_PRIVATE_MESSAGES);
+
+    await supabase
+      .from('rooms')
+      .update({
+        game_state: {
+          publicMessages: publicList,
+          privateMessages: privateList,
+          retractedIds: retractedList,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('code', GLOBAL_CHAT_ROOM_CODE);
+  } catch (e) {
+    console.warn('[LobbyChat] Failed to persist chat history:', e);
+  }
+}
+
+/**
+ * Sinkronkan riwayat chat global, ajakan mabar, & DM dari Supabase ke browser saat ini (termasuk Incognito)
+ */
+export async function syncLobbyChatHistory(currentUsername = '') {
+  if (!isSupabaseConfigured || !supabase) {
+    return {
+      publicMessages: getStoredLobbyChats(),
+      privateThreads: getStoredPrivateChats(currentUsername),
+    };
+  }
+
+  try {
+    const record = await fetchOrCreateGlobalChatRecord();
+    if (!record) {
+      return {
+        publicMessages: getStoredLobbyChats(),
+        privateThreads: getStoredPrivateChats(currentUsername),
+      };
+    }
+
+    const gs = record.game_state || {};
+    const remotePublic = Array.isArray(gs.publicMessages) ? gs.publicMessages : [];
+    const remotePrivate = Array.isArray(gs.privateMessages) ? gs.privateMessages : [];
+    const retractedList = Array.isArray(gs.retractedIds) ? gs.retractedIds : [];
+    const retractedSet = new Set(retractedList);
+
+    const localPublic = getStoredLobbyChats();
+    const mapPub = new Map();
+    let hasLocalOnlyPublic = false;
+
+    for (const m of remotePublic) {
+      if (
+        m &&
+        m.id &&
+        !m.id.startsWith('seed_') &&
+        !retractedSet.has(m.id) &&
+        m.type !== 'private' &&
+        !m.targetUsername
+      ) {
+        mapPub.set(m.id, m);
+      }
+    }
+
+    for (const m of localPublic) {
+      if (
+        m &&
+        m.id &&
+        !m.id.startsWith('seed_') &&
+        !retractedSet.has(m.id) &&
+        m.type !== 'private' &&
+        !m.targetUsername
+      ) {
+        if (!mapPub.has(m.id)) {
+          hasLocalOnlyPublic = true;
+          mapPub.set(m.id, m);
+        }
+      }
+    }
+
+    const mergedPublic = Array.from(mapPub.values())
+      .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+      .slice(-MAX_MESSAGES);
+
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedPublic));
+      } catch {}
+    }
+
+    // Jika browser ini punya riwayat publik lokal yang belum ada di server, unggah ke server
+    if (hasLocalOnlyPublic) {
+      persistChatChangeToServer({});
+    }
+
+    // Sinkronkan juga DM untuk currentUsername jika ada
+    const myNorm = String(currentUsername || '').trim().toLowerCase();
+    if (myNorm && typeof localStorage !== 'undefined') {
+      const currentThreads = getStoredPrivateChats(myNorm);
+      // Hapus pesan yang sudah di-retract
+      for (const pKey of Object.keys(currentThreads)) {
+        currentThreads[pKey] = (currentThreads[pKey] || []).filter(
+          (m) => m && m.id && !retractedSet.has(m.id)
+        );
+      }
+
+      // Masukkan pesan DM dari server
+      for (const pm of remotePrivate) {
+        if (!pm || !pm.id || retractedSet.has(pm.id)) continue;
+        const senderNorm = String(pm.senderName || '').trim().toLowerCase();
+        const targetNorm = String(pm.targetUsername || '').trim().toLowerCase();
+        if (senderNorm !== myNorm && targetNorm !== myNorm) continue;
+
+        const partnerNorm = senderNorm === myNorm ? targetNorm : senderNorm;
+        if (!partnerNorm) continue;
+
+        const list = currentThreads[partnerNorm] || [];
+        if (!list.some((m) => m.id === pm.id)) {
+          currentThreads[partnerNorm] = [...list, pm]
+            .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+            .slice(-MAX_MESSAGES);
+        }
+      }
+
+      try {
+        localStorage.setItem(`${PM_STORAGE_PREFIX}${myNorm}`, JSON.stringify(currentThreads));
+      } catch {}
+    }
+
+    return {
+      publicMessages: mergedPublic,
+      privateThreads: getStoredPrivateChats(currentUsername),
+    };
+  } catch (e) {
+    return {
+      publicMessages: getStoredLobbyChats(),
+      privateThreads: getStoredPrivateChats(currentUsername),
+    };
+  }
 }
 
 // In-memory active channel reference
@@ -390,6 +647,8 @@ export async function sendLobbyChatMessage({
     } catch (err) {
       console.warn('[LobbyChat] Supabase broadcast notice:', err);
     }
+    // 4. Simpan ke server Supabase agar riwayat tetap muncul di Incognito / perangkat baru
+    persistChatChangeToServer({ addPublic: payload });
   }
 
   return { success: true, message: payload };
@@ -476,6 +735,8 @@ export async function sendPrivateChatMessage({
     } catch (err) {
       console.warn('[LobbyChat] Send private message broadcast warning:', err);
     }
+    // 4. Simpan ke server Supabase agar riwayat DM muncul saat login di Incognito / perangkat baru
+    persistChatChangeToServer({ addPrivate: payload });
   }
 
   return { success: true, message: payload };
@@ -528,6 +789,8 @@ export async function retractChatMessage({ id, scope = 'public', senderName, tar
     } catch (err) {
       console.warn('[LobbyChat] Retract broadcast warning:', err);
     }
+    // 4. Hapus juga dari server Supabase agar tidak muncul kembali di Incognito / perangkat baru
+    persistChatChangeToServer({ retractId: id });
   }
 
   return { success: true };

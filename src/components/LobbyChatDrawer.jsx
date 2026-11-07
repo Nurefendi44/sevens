@@ -27,6 +27,7 @@ import {
   getStoredPrivateChats,
   searchRegisteredPlayers,
   extractRoomCodeFromMessage,
+  syncLobbyChatHistory,
 } from '../services/lobbyChatService';
 import {
   getFriendsList,
@@ -87,19 +88,35 @@ export default function LobbyChatDrawer({
 
   const currentDisplayName = String(myProfile.name || '').trim() || guestName;
 
-  // Load private chat history & sync friends with Top Global on mount & user change
+  // Load chat history (Global, Mabar Invites, DM) from Supabase & sync friends on mount / open
   useEffect(() => {
+    let active = true;
     if (currentDisplayName) {
       setPmThreads(getStoredPrivateChats(currentDisplayName));
       setFriendsList(getFriendsList(currentDisplayName));
-      if (isOpen) {
-        syncFriendsWithLeaderboard(currentDisplayName)
-          .then((res) => {
-            if (res?.friends) setFriendsList(res.friends);
-          })
-          .catch(() => {});
-      }
     }
+    syncLobbyChatHistory(currentDisplayName)
+      .then((res) => {
+        if (!active) return;
+        if (Array.isArray(res?.publicMessages)) {
+          setMessages(res.publicMessages);
+        }
+        if (res?.privateThreads) {
+          setPmThreads(res.privateThreads);
+        }
+      })
+      .catch(() => {});
+
+    if (isOpen && currentDisplayName) {
+      syncFriendsWithLeaderboard(currentDisplayName)
+        .then((res) => {
+          if (active && res?.friends) setFriendsList(res.friends);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      active = false;
+    };
   }, [currentDisplayName, isOpen]);
 
   // Friends List State
