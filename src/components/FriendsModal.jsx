@@ -37,6 +37,7 @@ import {
   lookupPlayerByUsername,
   subscribeToFriendEvents,
   getFriendshipStatus,
+  syncFriendsWithLeaderboard,
 } from '../services/friendService';
 import { fetchGlobalLeaderboard } from '../services/leaderboardService';
 import '../styles/friendsModal.css';
@@ -83,12 +84,19 @@ export default function FriendsModal({
     }, 3200);
   };
 
-  // Reload local lists
+  // Reload local lists & sync stats with Top Global Leaderboard
   const reloadFriendsData = () => {
     if (!currentDisplayName) return;
     setFriendsList(getFriendsList(currentDisplayName));
     setIncomingRequests(getIncomingFriendRequests(currentDisplayName));
     setSentRequests(getSentFriendRequests(currentDisplayName));
+    syncFriendsWithLeaderboard(currentDisplayName)
+      .then((res) => {
+        if (res?.friends) setFriendsList(res.friends);
+        if (res?.incomingRequests) setIncomingRequests(res.incomingRequests);
+        if (res?.sentRequests) setSentRequests(res.sentRequests);
+      })
+      .catch(() => {});
   };
 
   // Sync data on open or username change

@@ -33,6 +33,7 @@ import {
   removeFriend,
   addFriend,
   isFriend,
+  syncFriendsWithLeaderboard,
 } from '../services/friendService';
 import '../styles/lobbyChat.css';
 
@@ -86,11 +87,18 @@ export default function LobbyChatDrawer({
 
   const currentDisplayName = String(myProfile.name || '').trim() || guestName;
 
-  // Load private chat history for current user on mount & user change
+  // Load private chat history & sync friends with Top Global on mount & user change
   useEffect(() => {
     if (currentDisplayName) {
       setPmThreads(getStoredPrivateChats(currentDisplayName));
       setFriendsList(getFriendsList(currentDisplayName));
+      if (isOpen) {
+        syncFriendsWithLeaderboard(currentDisplayName)
+          .then((res) => {
+            if (res?.friends) setFriendsList(res.friends);
+          })
+          .catch(() => {});
+      }
     }
   }, [currentDisplayName, isOpen]);
 

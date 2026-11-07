@@ -4,7 +4,7 @@
  * pencarian profil pemain, sinkronisasi realtime, dan notifikasi mabar.
  */
 
-import { normalizeUsernameKey, getPlayerRankTier } from './leaderboardService';
+import { normalizeUsernameKey, getPlayerRankTier, fetchGlobalLeaderboard } from './leaderboardService';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { audio } from './audioService';
 
@@ -12,6 +12,62 @@ const FRIENDS_PREFIX = 'royal_cards_friends_v1_';
 const REQ_IN_PREFIX = 'royal_cards_friend_reqs_in_v1_';
 const REQ_OUT_PREFIX = 'royal_cards_friend_reqs_out_v1_';
 const RESPECT_PREFIX = 'royal_cards_friend_respect_v1_';
+const GLOBAL_CACHE_KEY = 'poker_global_leaderboard_cache';
+
+/**
+ * Ambil map statistik pemain dari cache Top Global lokal (jika tersedia)
+ * agar tampilan daftar teman selalu sinkron dengan Top Global secara instan.
+ */
+function getCachedGlobalStatsMap() {
+  const map = new Map();
+  if (typeof localStorage === 'undefined') return map;
+  try {
+    const raw = localStorage.getItem(GLOBAL_CACHE_KEY);
+    if (!raw) return map;
+    const parsed = JSON.parse(raw);
+    const allList = parsed?.all?.data;
+    if (Array.isArray(allList)) {
+      allList.forEach((row) => {
+        const key = normalizeUsernameKey(row?.player_name || row?.name);
+        if (!key) return;
+        const score = Math.max(0, Number(row.score || 0));
+        const wins = Math.max(0, Number(row.wins || 0));
+        map.set(key, {
+          score,
+          wins,
+          games_played: Math.max(0, Number(row.games_played || 0)),
+          avatar: row.avatar || null,
+          tier: getPlayerRankTier(score, wins),
+        });
+      });
+    }
+  } catch (e) {}
+  return map;
+}
+
+function enrichUserEntryWithMap(entry, statsMap) {
+  if (!entry || !entry.name) return entry;
+  const key = normalizeUsernameKey(entry.name);
+  const g = statsMap?.get(key);
+  if (!g) {
+    const fallbackScore = Math.max(0, Number(entry.score || 0));
+    const fallbackWins = Math.max(0, Number(entry.wins || 0));
+    return {
+      ...entry,
+      score: fallbackScore,
+      wins: fallbackWins,
+      tier: getPlayerRankTier(fallbackScore, fallbackWins) || entry.tier,
+    };
+  }
+  return {
+    ...entry,
+    avatar: g.avatar || entry.avatar || '👤',
+    score: g.score,
+    wins: g.wins,
+    games_played: g.games_played,
+    tier: g.tier || entry.tier,
+  };
+}
 
 let socialChannel = null;
 let broadcastChannel = null;
@@ -60,7 +116,7 @@ function handleIncomingSocialEvent(eventPayload) {
 }
 
 /**
- * Ambil daftar teman yang sudah di-accept
+ * Ambil daftar teman yang sudah di-accept (otomatis disinkronkan dengan cache Top Global)
  */
 export function getFriendsList(username) {
   if (typeof localStorage === 'undefined' || !username) return [];
@@ -72,15 +128,17 @@ export function getFriendsList(username) {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      // Deduplikasi berdasarkan nama
+      const statsMap = getCachedGlobalStatsMap();
       const seen = new Set();
-      return parsed.filter((f) => {
-        if (!f || !f.name) return false;
-        const k = normalizeUsernameKey(f.name);
-        if (seen.has(k)) return false;
-        seen.add(k);
-        return true;
-      });
+      return parsed
+        .filter((f) => {
+          if (!f || !f.name) return false;
+          const k = normalizeUsernameKey(f.name);
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        })
+        .map((f) => enrichUserEntryWithMap(f, statsMap));
     }
   } catch (e) {
     // Ignore error
@@ -111,18 +169,21 @@ export function getIncomingFriendRequests(username) {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
+      const statsMap = getCachedGlobalStatsMap();
       const friends = getFriendsList(username);
       const friendKeys = new Set(friends.map((f) => normalizeUsernameKey(f.name)));
       const seen = new Set();
-      return parsed.filter((r) => {
-        if (!r || !r.name) return false;
-        const k = normalizeUsernameKey(r.name);
-        // Jika sudah berteman, otomatis jangan tampilkan di permintaan
-        if (friendKeys.has(k)) return false;
-        if (seen.has(k)) return false;
-        seen.add(k);
-        return true;
-      });
+      return parsed
+        .filter((r) => {
+          if (!r || !r.name) return false;
+          const k = normalizeUsernameKey(r.name);
+          // Jika sudah berteman, otomatis jangan tampilkan di permintaan
+          if (friendKeys.has(k)) return false;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        })
+        .map((r) => enrichUserEntryWithMap(r, statsMap));
     }
   } catch (e) {
     // Ignore error
@@ -143,23 +204,104 @@ export function getSentFriendRequests(username) {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
+      const statsMap = getCachedGlobalStatsMap();
       const friends = getFriendsList(username);
       const friendKeys = new Set(friends.map((f) => normalizeUsernameKey(f.name)));
       const seen = new Set();
-      return parsed.filter((r) => {
-        if (!r || !r.name) return false;
-        const k = normalizeUsernameKey(r.name);
-        // Jika sudah berteman, otomatis jangan tampilkan di pending outgoing
-        if (friendKeys.has(k)) return false;
-        if (seen.has(k)) return false;
-        seen.add(k);
-        return true;
-      });
+      return parsed
+        .filter((r) => {
+          if (!r || !r.name) return false;
+          const k = normalizeUsernameKey(r.name);
+          // Jika sudah berteman, otomatis jangan tampilkan di pending outgoing
+          if (friendKeys.has(k)) return false;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        })
+        .map((r) => enrichUserEntryWithMap(r, statsMap));
     }
   } catch (e) {
     // Ignore error
   }
   return [];
+}
+
+/**
+ * Sinkronkan statistik (Skor, Juara 1, Tier, Avatar) daftar teman & permintaan pertemanan
+ * langsung dari Top Global Leaderboard di Supabase dan simpan ke localStorage.
+ */
+export async function syncFriendsWithLeaderboard(username) {
+  const norm = normalizeUsernameKey(username);
+  if (!norm) {
+    return { friends: [], incomingRequests: [], sentRequests: [] };
+  }
+
+  try {
+    await fetchGlobalLeaderboard('all', 200);
+  } catch (e) {
+    // Ignore network error, fallback to cache
+  }
+
+  const statsMap = getCachedGlobalStatsMap();
+  const friends = getFriendsList(username);
+  const incomingRequests = getIncomingFriendRequests(username);
+  const sentRequests = getSentFriendRequests(username);
+
+  // Jika ada teman yang belum masuk di cache Top Global, query langsung ke tabel leaderboard
+  const allEntries = [...friends, ...incomingRequests, ...sentRequests];
+  const missingNames = allEntries
+    .map((item) => item?.name)
+    .filter((name) => name && !statsMap.has(normalizeUsernameKey(name)));
+
+  if (missingNames.length > 0 && isSupabaseConfigured && supabase) {
+    try {
+      for (const targetName of missingNames) {
+        const sanitized = String(targetName).trim().replace(/[\\%_]/g, (c) => '\\' + c);
+        const { data } = await supabase
+          .from('leaderboard')
+          .select('player_name, avatar, score, wins, games_played')
+          .ilike('player_name', sanitized);
+
+        if (Array.isArray(data) && data.length > 0) {
+          let totalScore = 0;
+          let totalWins = 0;
+          let totalGames = 0;
+          let latestAvatar = null;
+          data.forEach((row) => {
+            totalScore += Math.max(0, Number(row.score || 0));
+            totalWins += Math.max(0, Number(row.wins || 0));
+            totalGames += Math.max(0, Number(row.games_played || 0));
+            if (row.avatar) latestAvatar = row.avatar;
+          });
+          statsMap.set(normalizeUsernameKey(targetName), {
+            score: totalScore,
+            wins: totalWins,
+            games_played: totalGames,
+            avatar: latestAvatar,
+            tier: getPlayerRankTier(totalScore, totalWins),
+          });
+        }
+      }
+    } catch (e) {}
+  }
+
+  const syncedFriends = friends.map((f) => enrichUserEntryWithMap(f, statsMap));
+  const syncedIncoming = incomingRequests.map((r) => enrichUserEntryWithMap(r, statsMap));
+  const syncedSent = sentRequests.map((r) => enrichUserEntryWithMap(r, statsMap));
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(`${FRIENDS_PREFIX}${norm}`, JSON.stringify(syncedFriends));
+      localStorage.setItem(`${REQ_IN_PREFIX}${norm}`, JSON.stringify(syncedIncoming));
+      localStorage.setItem(`${REQ_OUT_PREFIX}${norm}`, JSON.stringify(syncedSent));
+    }
+  } catch (e) {}
+
+  return {
+    friends: syncedFriends,
+    incomingRequests: syncedIncoming,
+    sentRequests: syncedSent,
+  };
 }
 
 /**

@@ -1698,7 +1698,11 @@ export default function ModeSelectionScreen({
             if (onClearDmPartner) onClearDmPartner();
           }
         }}
-        myProfile={profile}
+        myProfile={{
+          ...profile,
+          score: myGlobalStats?.score || 0,
+          wins: myGlobalStats?.wins || 0,
+        }}
         myRankTier={myRankTier}
         initialDmPartner={directChatPartner}
         onJoinRoomFromChat={(code) => {
@@ -1719,7 +1723,11 @@ export default function ModeSelectionScreen({
       <FriendsModal
         isOpen={isFriendsModalOpen}
         onClose={() => setIsFriendsModalOpen(false)}
-        myProfile={profile}
+        myProfile={{
+          ...profile,
+          score: myGlobalStats?.score || 0,
+          wins: myGlobalStats?.wins || 0,
+        }}
         myRankTier={myRankTier}
         onOpenDirectChat={(friend) => {
           setIsFriendsModalOpen(false);
