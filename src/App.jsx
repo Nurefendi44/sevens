@@ -1299,6 +1299,8 @@ export default function App() {
     setIsVoiceConnected(false);
     setIsVoiceMuted(true);
     setSpeakingPlayers(new Set());
+    setInviteRoomCode(null);
+    clearRoomUrlParams();
 
     if (currentRoom?.code) {
       const activeName = (typeof getLocalPlayerName === 'function' ? getLocalPlayerName() : '') || '';
@@ -2683,7 +2685,24 @@ export default function App() {
 
 
   // Return to Mode Selection Screen (Home)
+  // Hapus ?room= & ?game= dari URL (dipanggil saat keluar room / kembali ke menu utama)
+  const clearRoomUrlParams = () => {
+    if (typeof window === 'undefined') return;
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('room') || url.searchParams.has('game')) {
+        url.searchParams.delete('room');
+        url.searchParams.delete('game');
+        window.history.replaceState(null, '', url.pathname + (url.search || '') + url.hash);
+      }
+    } catch {}
+  };
+
   const handleBackToModeSelect = () => {
+    const __clearUrlOnExit = () => {
+      setInviteRoomCode(null);
+      clearRoomUrlParams();
+    };
     const isGameOver =
       (activeGameType === 'bigtwo' && gameStateBigtwo.gameStatus === 'GAME_OVER') ||
       (activeGameType === 'game41' && (gameState41.gameStatus === 'game_over' || gameState41.gameStatus === 'GAME_OVER')) ||
@@ -2692,6 +2711,7 @@ export default function App() {
     if (isMultiplayerMode && currentRoom) {
       if (isGameOver || confirm('Keluar dari room online dan kembali ke menu pemilihan mode?')) {
         handleLeaveRoom();
+        __clearUrlOnExit();
         if (activeGameType === 'bigtwo') {
           setGameStateBigtwo(initBigTwo({ playerCount: gameStateBigtwo.players?.length || 4 }));
         } else if (activeGameType === 'game41') {
@@ -2702,6 +2722,7 @@ export default function App() {
         setGameMode(null);
       }
     } else {
+      __clearUrlOnExit();
       if (activeGameType === 'bigtwo') {
         const count = gameStateBigtwo.players?.length || 2;
         setGameStateBigtwo(initBigTwo({ playerCount: count }));
