@@ -24,6 +24,7 @@ import {
 } from './services/multiplayerAdapter.js';
 import { isSupabaseConfigured } from './services/supabaseClient.js';
 import { recordMultiplayerGameStats } from './services/leaderboardService.js';
+import { syncLobbyChatHistory } from './services/lobbyChatService.js';
 
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import Board from './components/Board.jsx';
@@ -111,6 +112,12 @@ export default function App() {
   const [isSoundboardOpen, setIsSoundboardOpen] = useState(false);
   const [isSoundboardPlaying, setIsSoundboardPlaying] = useState(false);
   const [activeSoundboardToasts, setActiveSoundboardToasts] = useState([]);
+
+  // Sinkronkan riwayat chat global, ajakan mabar, & DM dengan server saat aplikasi dimuat
+  useEffect(() => {
+    const savedName = getLocalPlayerName() || '';
+    syncLobbyChatHistory(savedName).catch(() => {});
+  }, []);
 
   // Live Voice Chat State
   const [isVoiceConnected, setIsVoiceConnected] = useState(false);

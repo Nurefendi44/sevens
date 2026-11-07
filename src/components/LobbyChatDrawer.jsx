@@ -21,6 +21,7 @@ import {
 import {
   getStoredLobbyChats,
   subscribeToLobbyChat,
+  subscribeToChatHistorySync,
   sendLobbyChatMessage,
   sendPrivateChatMessage,
   retractChatMessage,
@@ -107,6 +108,16 @@ export default function LobbyChatDrawer({
       })
       .catch(() => {});
 
+    const unsubSync = subscribeToChatHistorySync((synced) => {
+      if (!active) return;
+      if (Array.isArray(synced?.publicMessages)) {
+        setMessages(synced.publicMessages);
+      }
+      if (synced?.privateThreads) {
+        setPmThreads(synced.privateThreads);
+      }
+    });
+
     if (isOpen && currentDisplayName) {
       syncFriendsWithLeaderboard(currentDisplayName)
         .then((res) => {
@@ -116,6 +127,7 @@ export default function LobbyChatDrawer({
     }
     return () => {
       active = false;
+      unsubSync();
     };
   }, [currentDisplayName, isOpen]);
 
