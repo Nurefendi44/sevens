@@ -17,6 +17,7 @@ import {
   X,
   AlertTriangle,
 } from 'lucide-react';
+import AvatarDisplay from '../../../components/AvatarDisplay.jsx';
 import '../../../styles/game41.css';
 
 export default function Table41({
@@ -130,10 +131,10 @@ export default function Table41({
               className={`game41-seat-pod ${isOpponentTurn ? 'active-turn' : ''}`}
             >
               <span
-                style={{ fontSize: '1.25rem' }}
+                style={{ fontSize: '1.25rem', display: 'inline-flex', alignItems: 'center' }}
                 className={speakingPlayers?.has?.(p.id) ? 'speaking-avatar-ring' : ''}
               >
-                {p.avatar}
+                <AvatarDisplay avatar={p.avatar} fallback="🤖" size={24} />
               </span>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <strong style={{ fontSize: '0.8rem', color: isOpponentTurn ? '#fbbf24' : '#f8fafc' }}>
@@ -285,10 +286,10 @@ export default function Table41({
         <div className="game41-tray-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <span
-              style={{ fontSize: '1.3rem' }}
+              style={{ fontSize: '1.3rem', display: 'inline-flex', alignItems: 'center' }}
               className={speakingPlayers?.has?.(myPlayer.id) ? 'speaking-avatar-ring' : ''}
             >
-              {myPlayer.avatar}
+              <AvatarDisplay avatar={myPlayer.avatar} fallback="👑" size={26} />
             </span>
             <strong>{myPlayer.name}</strong>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>

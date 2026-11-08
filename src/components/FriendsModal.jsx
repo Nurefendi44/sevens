@@ -40,6 +40,7 @@ import {
   syncFriendsWithLeaderboard,
 } from '../services/friendService';
 import { fetchGlobalLeaderboard } from '../services/leaderboardService';
+import AvatarDisplay from './AvatarDisplay';
 import '../styles/friendsModal.css';
 
 export default function FriendsModal({
@@ -399,7 +400,11 @@ export default function FriendsModal({
                     <div key={friend.name} className="friend-card-row">
                       {/* Avatar & Online Dot */}
                       <div className="friend-card-avatar-wrap">
-                        <span className="friend-card-avatar">{friend.avatar || '👤'}</span>
+                        <AvatarDisplay
+                          avatar={friend.avatar}
+                          fallback="👤"
+                          className="friend-card-avatar"
+                        />
                         <span className="friend-online-dot" title="Online di game" />
                       </div>
 
@@ -511,7 +516,11 @@ export default function FriendsModal({
                     {incomingRequests.map((req) => (
                       <div key={req.name} className="friend-request-row">
                         <div className="friend-card-avatar-wrap">
-                          <span className="friend-card-avatar">{req.avatar || '👤'}</span>
+                          <AvatarDisplay
+                            avatar={req.avatar}
+                            fallback="👤"
+                            className="friend-card-avatar"
+                          />
                         </div>
 
                         <div className="friend-card-info">
@@ -574,7 +583,11 @@ export default function FriendsModal({
                     {sentRequests.map((req) => (
                       <div key={req.name} className="friend-request-row is-pending-out">
                         <div className="friend-card-avatar-wrap">
-                          <span className="friend-card-avatar">{req.avatar || '👤'}</span>
+                          <AvatarDisplay
+                            avatar={req.avatar}
+                            fallback="👤"
+                            className="friend-card-avatar"
+                          />
                         </div>
 
                         <div className="friend-card-info">
@@ -668,7 +681,11 @@ export default function FriendsModal({
                         return (
                           <div key={player.name} className="friend-showcase-card">
                             <div className="showcase-avatar-box">
-                              <span className="showcase-avatar">{player.avatar || '👤'}</span>
+                              <AvatarDisplay
+                                avatar={player.avatar}
+                                fallback="👤"
+                                className="showcase-avatar"
+                              />
                             </div>
 
                             <div className="showcase-details">
@@ -770,7 +787,12 @@ export default function FriendsModal({
 
                       return (
                         <div key={player.player_name} className="friend-rec-chip">
-                          <span className="friend-rec-avatar">{player.avatar || '👤'}</span>
+                          <AvatarDisplay
+                            avatar={player.avatar}
+                            fallback="👤"
+                            size={24}
+                            className="friend-rec-avatar"
+                          />
                           <div className="friend-rec-info">
                             <span className="friend-rec-name">{player.player_name}</span>
                             <span className="friend-rec-score">★ {player.score} Skor</span>
@@ -829,7 +851,12 @@ export default function FriendsModal({
               <h3 className="confirm-title">Hapus Pertemanan?</h3>
 
               <div className="confirm-profile-preview">
-                <span className="confirm-avatar">{friendToDelete.avatar || '👤'}</span>
+                <AvatarDisplay
+                  avatar={friendToDelete.avatar}
+                  fallback="👤"
+                  size={28}
+                  className="confirm-avatar"
+                />
                 <strong>{friendToDelete.name}</strong>
               </div>
 

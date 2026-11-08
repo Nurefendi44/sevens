@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { RotateCcw, Home, Award, Sparkles, X } from 'lucide-react';
 import Card from '../../../components/CardView.jsx';
+import AvatarDisplay from '../../../components/AvatarDisplay.jsx';
 import '../../../styles/animations.css';
 
 export default function GameOverBigTwoModal({
@@ -77,7 +78,7 @@ export default function GameOverBigTwoModal({
               <div className="mlbb-mvp-left">
                 <div className="mlbb-mvp-avatar-wrap">
                   <span className="mlbb-mvp-crown">👑</span>
-                  <span>{winner.avatar || '🧙‍♂️'}</span>
+                  <AvatarDisplay avatar={winner.avatar} fallback="🧙‍♂️" size={44} />
                   <span className="mlbb-mvp-ribbon">MVP • JUARA 1</span>
                 </div>
                 <div className="mlbb-mvp-info">
@@ -163,9 +164,10 @@ export default function GameOverBigTwoModal({
                           display: 'inline-flex',
                           alignItems: 'center',
                           justifyContent: 'center',
+                          overflow: 'hidden',
                         }}
                       >
-                        {player.avatar || '🤖'}
+                        <AvatarDisplay avatar={player.avatar} fallback="🤖" />
                       </span>
                       <div>
                         <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '0.95rem' }}>

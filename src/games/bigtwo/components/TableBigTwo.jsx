@@ -13,6 +13,7 @@ import {
   X,
   Sparkles,
 } from 'lucide-react';
+import AvatarDisplay from '../../../components/AvatarDisplay.jsx';
 import '../../../styles/bigtwo.css';
 
 function formatTime(seconds) {
@@ -223,7 +224,7 @@ export default function TableBigTwo({
             >
               <div className="bigtwo-opp-header">
                 <span className={`opp-avatar ${speakingPlayers?.has?.(p.id) ? 'speaking-avatar-ring' : ''}`}>
-                  {p.avatar || '🤖'}
+                  <AvatarDisplay avatar={p.avatar} fallback="🤖" size={22} />
                 </span>
                 <span className="opp-name">
                   {p.name} : <strong>{finishedEntry ? 'HABIS' : oppCardCount}</strong>
@@ -363,7 +364,7 @@ export default function TableBigTwo({
         <div className="bigtwo-tray-header">
           <div className="tray-hand-info">
             <span className={`tray-avatar ${speakingPlayers?.has?.(myPlayer.id) ? 'speaking-avatar-ring' : ''}`}>
-              {myPlayer.avatar || '👑'}
+              <AvatarDisplay avatar={myPlayer.avatar} fallback="👑" size={24} />
             </span>
             <span className="tray-label">
               Kartu Anda (<strong>{myHand.length}</strong>)

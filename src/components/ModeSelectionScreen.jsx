@@ -25,6 +25,9 @@ import {
   MessageSquare,
   Lock,
   Users,
+  Camera,
+  Upload,
+  Trash2,
 } from 'lucide-react';
 import {
   fetchGlobalLeaderboard,
@@ -33,6 +36,7 @@ import {
   getSupremeTitle,
   getLocalPlayerProfile,
   verifyAndSaveProfileWithPin,
+  updatePlayerAvatarEverywhere,
   extractPinHashFromItem,
   hashProfilePin,
   PROFILE_AVATARS,
@@ -44,6 +48,7 @@ import {
 } from '../services/friendService';
 import LobbyChatDrawer from './LobbyChatDrawer';
 import FriendsModal from './FriendsModal';
+import AvatarDisplay, { isImageAvatar, compressProfileImage } from './AvatarDisplay';
 import '../styles/modeSelection.css';
 
 const BOT_PREVIEWS = [
@@ -153,7 +158,10 @@ export default function ModeSelectionScreen({
   const [editAvatarInput, setEditAvatarInput] = useState(() => getLocalPlayerProfile().avatar || '👑');
   const [editPinInput, setEditPinInput] = useState(() => getLocalPlayerProfile().pin || '');
   const [profileError, setProfileError] = useState('');
+  const [photoSuccessMsg, setPhotoSuccessMsg] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const photoFileInputRef = useRef(null);
 
   // Live Top Global Preview State on Homepage
   const [previewCategory, setPreviewCategory] = useState('all');
@@ -209,21 +217,23 @@ export default function ModeSelectionScreen({
     loadHomepageLeaderboard(previewCategory);
   }, [previewCategory]);
 
-  // Keep profile synced with localStorage on mount & window focus
+  // Keep profile synced with localStorage on mount, window focus, and avatar updates
   useEffect(() => {
     const syncProfile = () => {
       const latest = getLocalPlayerProfile();
-      if (latest.name) {
-        setProfile((prev) =>
-          prev.name !== latest.name || prev.avatar !== latest.avatar || prev.pin !== latest.pin
-            ? latest
-            : prev
-        );
-      }
+      setProfile((prev) =>
+        prev.name !== latest.name || prev.avatar !== latest.avatar || prev.pin !== latest.pin
+          ? latest
+          : prev
+      );
     };
     syncProfile();
     window.addEventListener('focus', syncProfile);
-    return () => window.removeEventListener('focus', syncProfile);
+    window.addEventListener('profile_avatar_updated', syncProfile);
+    return () => {
+      window.removeEventListener('focus', syncProfile);
+      window.removeEventListener('profile_avatar_updated', syncProfile);
+    };
   }, []);
 
   // Identify current player's global standing for Top-Left Profile Bar & Dock Footer
@@ -294,12 +304,54 @@ export default function ModeSelectionScreen({
     [previewModalStats]
   );
 
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setProfileError('');
+    setPhotoSuccessMsg('');
+    setIsProcessingPhoto(true);
+    try {
+      const compressedDataUrl = await compressProfileImage(file);
+      setEditAvatarInput(compressedDataUrl);
+      // Immediately persist locally & to Supabase if registered so user never loses their uploaded photo
+      await updatePlayerAvatarEverywhere(compressedDataUrl);
+      setProfile((prev) => ({ ...prev, avatar: compressedDataUrl }));
+      setPhotoSuccessMsg('✨ Foto profil berhasil diperbarui!');
+      loadHomepageLeaderboard(previewCategory);
+    } catch (err) {
+      setProfileError(err?.message || 'Gagal memproses foto profil.');
+    } finally {
+      setIsProcessingPhoto(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleRemoveCustomPhoto = async () => {
+    const fallbackEmoji = '👑';
+    setEditAvatarInput(fallbackEmoji);
+    setPhotoSuccessMsg('');
+    await updatePlayerAvatarEverywhere(fallbackEmoji);
+    setProfile((prev) => ({ ...prev, avatar: fallbackEmoji }));
+    loadHomepageLeaderboard(previewCategory);
+  };
+
   const handleSaveProfile = async (e) => {
     if (e) e.preventDefault();
     setProfileError('');
+    setPhotoSuccessMsg('');
     const cleanedName = editNameInput.trim();
     const cleanedPin = editPinInput.trim();
     const chosenAvatar = editAvatarInput || '👑';
+
+    // If user only updated photo/avatar without setting Nickname & PIN yet, allow saving avatar directly
+    if (!cleanedName && !cleanedPin) {
+      setIsSavingProfile(true);
+      await updatePlayerAvatarEverywhere(chosenAvatar);
+      setIsSavingProfile(false);
+      setProfile((prev) => ({ ...prev, avatar: chosenAvatar }));
+      setIsProfileModalOpen(false);
+      return;
+    }
 
     if (!cleanedName) {
       setProfileError('Silakan masukkan Nickname terlebih dahulu!');
@@ -323,7 +375,8 @@ export default function ModeSelectionScreen({
       return;
     }
 
-    setProfile({ name: cleanedName, avatar: chosenAvatar, pin: cleanedPin });
+    const finalAvatar = res.avatar || chosenAvatar;
+    setProfile({ name: cleanedName, avatar: finalAvatar, pin: cleanedPin });
     setIsProfileModalOpen(false);
     loadHomepageLeaderboard(previewCategory);
   };
@@ -554,12 +607,17 @@ export default function ModeSelectionScreen({
               setEditAvatarInput(profile.avatar || '👑');
               setEditPinInput(profile.pin || '');
               setProfileError('');
+              setPhotoSuccessMsg('');
               setIsProfileModalOpen(true);
             }}
-            title="Klik untuk mengganti Nickname & Avatar Profil Top Global"
+            title="Klik untuk mengganti Foto Profil, Nickname & PIN Top Global"
           >
             <div className={`mlbb-avatar-hex tier-border-${myRankTier.id}`}>
-              <span className="mlbb-avatar-icon">{profile.avatar || '👑'}</span>
+              <AvatarDisplay
+                avatar={profile.avatar}
+                fallback="👑"
+                className="mlbb-avatar-icon"
+              />
               <span className="mlbb-avatar-tier-mini">{myRankTier.icon}</span>
             </div>
 
@@ -718,10 +776,11 @@ export default function ModeSelectionScreen({
                   setEditAvatarInput(profile.avatar || '👑');
                   setEditPinInput(profile.pin || '');
                   setProfileError('');
+                  setPhotoSuccessMsg('');
                   setIsProfileModalOpen(true);
                 }}
               >
-                <span>{profile.avatar || '👑'}</span>
+                <AvatarDisplay avatar={profile.avatar} fallback="👑" size={20} />
                 <span>
                   {profile.name ? `Profil: ${profile.name}` : 'Pasang Nickname Top Global'}
                 </span>
@@ -794,7 +853,7 @@ export default function ModeSelectionScreen({
                       </div>
 
                       <div className={`dock-player-avatar tier-border-${tier.id}`}>
-                        <span>{player.avatar || '👑'}</span>
+                        <AvatarDisplay avatar={player.avatar} fallback="👑" />
                       </div>
 
                       <div className="dock-player-info">
@@ -1047,8 +1106,32 @@ export default function ModeSelectionScreen({
               <div className="mlbb-profile-modal-body">
                 {/* Current Rank Banner (Live Preview as User Types or Picks) */}
                 <div className="mlbb-profile-rank-showcase">
-                  <div className={`showcase-avatar tier-border-${(previewModalStats ? previewModalTier : myRankTier).id}`}>
-                    <span>{editAvatarInput || '👑'}</span>
+                  <div
+                    className={`showcase-avatar tier-border-${(previewModalStats ? previewModalTier : myRankTier).id}`}
+                    style={{ position: 'relative', cursor: 'pointer' }}
+                    onClick={() => photoFileInputRef.current?.click()}
+                    title="Klik untuk unggah Foto Profil dari perangkat"
+                  >
+                    <AvatarDisplay avatar={editAvatarInput} fallback="👑" />
+                    <span
+                      style={{
+                        position: 'absolute',
+                        bottom: -5,
+                        right: -5,
+                        width: 22,
+                        height: 22,
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)',
+                        border: '1.5px solid #090d16',
+                        color: '#090d16',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.6)',
+                      }}
+                    >
+                      <Camera size={12} />
+                    </span>
                   </div>
                   <div className="showcase-details">
                     <div className="showcase-tier-line">
@@ -1181,14 +1264,138 @@ export default function ModeSelectionScreen({
               )}
 
               <div className="mlbb-form-label">
-                <span>Pilih Avatar Commander</span>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <span>Foto Profil & Avatar Commander</span>
+                  {isImageAvatar(editAvatarInput) && (
+                    <span
+                      style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 800,
+                        padding: '0.12rem 0.5rem',
+                        borderRadius: '999px',
+                        background: 'rgba(16, 185, 129, 0.16)',
+                        border: '1px solid rgba(16, 185, 129, 0.45)',
+                        color: '#6ee7b7',
+                      }}
+                    >
+                      📸 Foto Kustom Aktif
+                    </span>
+                  )}
+                </div>
+
+                <input
+                  ref={photoFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  style={{ display: 'none' }}
+                />
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    flexWrap: 'wrap',
+                    marginBottom: '0.35rem',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => photoFileInputRef.current?.click()}
+                    disabled={isProcessingPhoto}
+                    style={{
+                      flex: 1,
+                      minWidth: '175px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.45rem',
+                      padding: '0.55rem 0.85rem',
+                      borderRadius: '10px',
+                      background:
+                        'linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(217, 119, 6, 0.28) 100%)',
+                      border: '1.5px solid rgba(251, 191, 36, 0.6)',
+                      color: '#fef08a',
+                      fontSize: '0.78rem',
+                      fontWeight: 800,
+                      cursor: isProcessingPhoto ? 'wait' : 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <Upload size={14} />
+                    <span>
+                      {isProcessingPhoto
+                        ? 'Memproses Foto...'
+                        : isImageAvatar(editAvatarInput)
+                        ? 'Ganti Foto Profil'
+                        : 'Upload Foto dari Galeri / HP'}
+                    </span>
+                  </button>
+
+                  {isImageAvatar(editAvatarInput) && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveCustomPhoto}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        padding: '0.55rem 0.75rem',
+                        borderRadius: '10px',
+                        background: 'rgba(239, 68, 68, 0.15)',
+                        border: '1px solid rgba(239, 68, 68, 0.4)',
+                        color: '#fca5a5',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                      title="Hapus foto kustom dan gunakan ikon karakter"
+                    >
+                      <Trash2 size={13} />
+                      <span>Hapus Foto</span>
+                    </button>
+                  )}
+                </div>
+
+                {photoSuccessMsg && (
+                  <div
+                    style={{
+                      padding: '0.45rem 0.7rem',
+                      borderRadius: '8px',
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      border: '1px solid rgba(16, 185, 129, 0.4)',
+                      color: '#6ee7b7',
+                      fontSize: '0.74rem',
+                      fontWeight: 700,
+                      marginBottom: '0.25rem',
+                    }}
+                  >
+                    {photoSuccessMsg}
+                  </div>
+                )}
+
+                <span style={{ fontSize: '0.71rem', color: '#94a3b8' }}>
+                  Atau pilih ikon karakter Commander:
+                </span>
                 <div className="mlbb-avatar-picker-grid">
                   {PROFILE_AVATARS.map((av) => (
                     <button
                       key={av}
                       type="button"
                       className={`mlbb-avatar-option ${editAvatarInput === av ? 'selected' : ''}`}
-                      onClick={() => setEditAvatarInput(av)}
+                      onClick={() => {
+                        setEditAvatarInput(av);
+                        setPhotoSuccessMsg('');
+                      }}
                     >
                       <span>{av}</span>
                     </button>

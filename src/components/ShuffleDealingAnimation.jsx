@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { audio } from '../services/audioService.js';
 import { FastForward, Sparkles } from 'lucide-react';
+import AvatarDisplay from './AvatarDisplay.jsx';
 import '../styles/dealingAnimation.css';
 
 const SUIT_COLORS = {
@@ -264,10 +265,12 @@ export default function ShuffleDealingAnimation({
       {/* TOP: Seat Pod */}
       {(seats.top || (seats.topPlayers && seats.topPlayers.length > 0)) ? (
         <div className="dealing-seat-pod seat-pod-top">
-          <div className="seat-pod-avatar">
+          <div className="seat-pod-avatar" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
             {seats.topPlayers && seats.topPlayers.length > 1
-              ? seats.topPlayers.map((p) => p.avatar).join(' ')
-              : seats.top?.avatar || '👤'}
+              ? seats.topPlayers.map((p, idx) => (
+                  <AvatarDisplay key={p.id || idx} avatar={p.avatar} fallback="👤" size={22} />
+                ))
+              : <AvatarDisplay avatar={seats.top?.avatar} fallback="👤" size={24} />}
           </div>
           <div className="seat-pod-meta">
             <span className="seat-pod-name">
@@ -289,7 +292,9 @@ export default function ShuffleDealingAnimation({
         {/* LEFT: Seat Pod */}
         {seats.left ? (
           <div className="dealing-seat-pod seat-pod-left">
-            <div className="seat-pod-avatar">{seats.left?.avatar || '👤'}</div>
+            <div className="seat-pod-avatar">
+              <AvatarDisplay avatar={seats.left?.avatar} fallback="👤" size={24} />
+            </div>
             <div className="seat-pod-meta">
               <span className="seat-pod-name">{seats.left?.name || 'Pemain Kiri'}</span>
               <span className="seat-pod-count">
@@ -417,7 +422,9 @@ export default function ShuffleDealingAnimation({
         {/* RIGHT: Seat Pod */}
         {seats.right ? (
           <div className="dealing-seat-pod seat-pod-right">
-            <div className="seat-pod-avatar">{seats.right?.avatar || '👤'}</div>
+            <div className="seat-pod-avatar">
+              <AvatarDisplay avatar={seats.right?.avatar} fallback="👤" size={24} />
+            </div>
             <div className="seat-pod-meta">
               <span className="seat-pod-name">{seats.right?.name || 'Pemain Kanan'}</span>
               <span className="seat-pod-count">

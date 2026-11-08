@@ -36,6 +36,7 @@ import {
   removeFriend,
   subscribeToFriendEvents,
 } from '../services/friendService';
+import AvatarDisplay from './AvatarDisplay';
 import '../styles/scoreboardModal.css';
 
 const GAME_TABS = [
@@ -272,7 +273,11 @@ export default function ScoreboardModal({
 
         {/* Avatar with Rank Frame */}
         <div className={`podium-avatar-frame tier-ring-${tier.id}`}>
-          <span className="podium-avatar-emoji">{player.avatar || '👑'}</span>
+          <AvatarDisplay
+            avatar={player.avatar}
+            fallback="👑"
+            className="podium-avatar-emoji"
+          />
           <span className="podium-tier-corner" title={tier.name}>
             {tier.icon}
           </span>
@@ -572,7 +577,7 @@ export default function ScoreboardModal({
                             <td className="col-player">
                               <div className="mlbb-player-cell">
                                 <div className={`mlbb-row-avatar tier-ring-${tier.id}`}>
-                                  <span>{item.avatar || '👤'}</span>
+                                  <AvatarDisplay avatar={item.avatar} fallback="👤" />
                                 </div>
                                 <div className="mlbb-player-meta">
                                   <div className="mlbb-player-name-line">
@@ -708,7 +713,10 @@ export default function ScoreboardModal({
                     </div>
 
                     <div className={`standing-avatar tier-ring-${myTier.id}`}>
-                      <span>{myStanding.avatar || localProfile.avatar || '👑'}</span>
+                      <AvatarDisplay
+                        avatar={localProfile.avatar || myStanding.avatar}
+                        fallback="👑"
+                      />
                     </div>
 
                     <div className="standing-identity">
@@ -764,7 +772,7 @@ export default function ScoreboardModal({
                       <strong className="standing-rank-num">UNRANKED</strong>
                     </div>
                     <div className="standing-avatar">
-                      <span>{localProfile.avatar || '👑'}</span>
+                      <AvatarDisplay avatar={localProfile.avatar} fallback="👑" />
                     </div>
                     <div className="standing-identity">
                       <div className="standing-name-row">
@@ -824,7 +832,7 @@ export default function ScoreboardModal({
                           <td className="col-player">
                             <div className="mlbb-player-cell">
                               <div className={`mlbb-row-avatar tier-ring-${tier.id}`}>
-                                <span>{item.avatar || '👤'}</span>
+                                <AvatarDisplay avatar={item.avatar} fallback="👤" />
                               </div>
                               <div className="mlbb-player-meta">
                                 <div className="mlbb-player-name-line">
@@ -931,7 +939,7 @@ export default function ScoreboardModal({
               </h3>
 
               <div className="confirm-profile-preview">
-                <span>{friendToDelete.avatar || '👤'}</span>
+                <AvatarDisplay avatar={friendToDelete.avatar} fallback="👤" size={28} />
                 <strong>{friendToDelete.name}</strong>
               </div>
 

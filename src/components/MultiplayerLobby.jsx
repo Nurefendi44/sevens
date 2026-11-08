@@ -28,15 +28,18 @@ import {
   Zap,
   Hourglass,
   MessageSquare,
+  Camera,
 } from 'lucide-react';
 import '../styles/multiplayer.css';
 import { getLocalPlayerName, MATCHMAKING_MIN_PLAYERS } from '../services/multiplayerAdapter.js';
 import {
   getLocalPlayerProfile,
   verifyAndSaveProfileWithPin,
+  updatePlayerAvatarEverywhere,
 } from '../services/leaderboardService.js';
 import { sendLobbyChatMessage } from '../services/lobbyChatService.js';
 import MatchmakingScreen from './MatchmakingScreen.jsx';
+import AvatarDisplay, { isImageAvatar, compressProfileImage } from './AvatarDisplay.jsx';
 
 
 /**
@@ -155,11 +158,27 @@ export default function MultiplayerLobby({
   const [sentChatInvite, setSentChatInvite] = useState(false);
   const [usernameInput, setUsernameInput] = useState(() => getLocalPlayerName() || '');
   const [pinInput, setPinInput] = useState(() => getLocalPlayerProfile().pin || '');
+  const [avatarInput, setAvatarInput] = useState(() => getLocalPlayerProfile().avatar || '👑');
+  const lobbyPhotoInputRef = useRef(null);
   const [roomCodeInput, setRoomCodeInput] = useState(() =>
     extractCleanRoomCode(effectiveInviteCode || '')
   );
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const handleLobbyPhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressProfileImage(file);
+      setAvatarInput(compressed);
+      await updatePlayerAvatarEverywhere(compressed);
+    } catch (err) {
+      setErrorMsg(err?.message || 'Gagal memproses foto profil.');
+    } finally {
+      if (e.target) e.target.value = '';
+    }
+  };
 
   // ---------------------------------------------------------------------------
   // MATCHMAKING LOBBY STATE (dynamic table 4-6 players):
@@ -332,15 +351,19 @@ export default function MultiplayerLobby({
       setErrorMsg('Masukkan 4 digit PIN keamanan akun Anda (contoh: 1234) agar Nickname Top Global tidak bisa dibajak pemain lain.');
       return false;
     }
-    const currentAvatar = getLocalPlayerProfile().avatar || '👑';
+    const currentAvatar = avatarInput || getLocalPlayerProfile().avatar || '👑';
     const check = await verifyAndSaveProfileWithPin({
       name: cleanName,
       avatar: currentAvatar,
       pin: cleanPin,
+      preserveRemoteAvatar: !isImageAvatar(currentAvatar),
     });
     if (!check.success) {
       setErrorMsg(check.error || 'PIN tidak cocok dengan pemilik Nickname ini.');
       return false;
+    }
+    if (check.avatar) {
+      setAvatarInput(check.avatar);
     }
     return true;
   };
@@ -618,9 +641,70 @@ export default function MultiplayerLobby({
               </div>
             )}
 
-            {/* Step 1: Input Nama Pemain & PIN Keamanan 4 Digit */}
+            {/* Step 1: Foto Profil, Input Nama Pemain & PIN Keamanan 4 Digit */}
             <div className="mp-field-group">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px', gap: '0.65rem' }}>
+              <input
+                ref={lobbyPhotoInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleLobbyPhotoUpload}
+                style={{ display: 'none' }}
+              />
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '56px 1fr 118px',
+                  gap: '0.6rem',
+                  alignItems: 'end',
+                }}
+              >
+                <div>
+                  <label className="mp-label" style={{ justifyContent: 'center' }}>
+                    <span>Foto</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => lobbyPhotoInputRef.current?.click()}
+                    title="Klik untuk unggah atau ganti Foto Profil"
+                    style={{
+                      position: 'relative',
+                      width: '50px',
+                      height: '44px',
+                      borderRadius: '11px',
+                      background: 'rgba(15, 23, 42, 0.92)',
+                      border: '1.5px solid rgba(251, 191, 36, 0.55)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '1.35rem',
+                      cursor: 'pointer',
+                      padding: 0,
+                      color: '#fff',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
+                    }}
+                  >
+                    <AvatarDisplay avatar={avatarInput} fallback="👑" />
+                    <span
+                      style={{
+                        position: 'absolute',
+                        bottom: -4,
+                        right: -4,
+                        width: 18,
+                        height: 18,
+                        borderRadius: '50%',
+                        background: '#fbbf24',
+                        color: '#090d16',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '1.5px solid #090d16',
+                      }}
+                    >
+                      <Camera size={10} />
+                    </span>
+                  </button>
+                </div>
+
                 <div>
                   <label htmlFor="username-input" className="mp-label">
                     <User size={14} />
@@ -1340,9 +1424,11 @@ export default function MultiplayerLobby({
                     } ${isBot ? 'seat-is-bot' : ''} ${slotPlayer.isReady || slotPlayer.isHost ? 'seat-is-ready' : ''}`}
                   >
                     <div className="seat-avatar-wrap">
-                      <span className="seat-avatar-emoji">
-                        {slotPlayer.avatar || (isBot ? '🤖' : '🃏')}
-                      </span>
+                      <AvatarDisplay
+                        avatar={slotPlayer.avatar || (isBot ? '🤖' : '🃏')}
+                        fallback="🃏"
+                        className="seat-avatar-emoji"
+                      />
                       {slotPlayer.isHost && (
                         <span className="seat-crown-badge" title="Host Room">
                           👑

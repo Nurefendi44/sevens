@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import AvatarDisplay from './AvatarDisplay.jsx';
 
 export default function ActionAnnouncementPopup({ action, onDismiss }) {
   useEffect(() => {
@@ -49,8 +50,12 @@ export default function ActionAnnouncementPopup({ action, onDismiss }) {
         whiteSpace: 'nowrap',
       }}
     >
-      <span style={{ fontSize: '0.82rem', lineHeight: 1 }}>
-        {action.avatar || (isPass ? '⏭️' : '⚡')}
+      <span style={{ fontSize: '0.82rem', lineHeight: 1, display: 'inline-flex', alignItems: 'center' }}>
+        <AvatarDisplay
+          avatar={action.avatar}
+          fallback={isPass ? '⏭️' : '⚡'}
+          size={16}
+        />
       </span>
 
       <strong

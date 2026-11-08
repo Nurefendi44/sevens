@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { Sparkles, RotateCcw, Play, X, Crown, Volume2 } from 'lucide-react';
 import { audio } from '../../../services/audioService.js';
+import AvatarDisplay, { isImageAvatar } from '../../../components/AvatarDisplay.jsx';
 import '../../../styles/wheelPicker.css';
 
 const SLICE_COLORS = [
@@ -287,16 +288,35 @@ export default function BigTwoFirstTurnWheel({
                     />
                     {/* Player Info text and avatar */}
                     <g transform={`translate(${tx}, ${ty}) rotate(${midA})`}>
-                      <text
-                        textAnchor="middle"
-                        dominantBaseline="central"
-                        fill="#ffffff"
-                        fontSize="15"
-                        fontWeight="800"
-                        style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}
-                      >
-                        {player.avatar}
-                      </text>
+                      {isImageAvatar(player.avatar) ? (
+                        <>
+                          <defs>
+                            <clipPath id={`wheel-av-${idx}`}>
+                              <circle cx="0" cy="-2" r="11" />
+                            </clipPath>
+                          </defs>
+                          <image
+                            href={player.avatar}
+                            x="-11"
+                            y="-13"
+                            width="22"
+                            height="22"
+                            preserveAspectRatio="xMidYMid slice"
+                            clipPath={`url(#wheel-av-${idx})`}
+                          />
+                        </>
+                      ) : (
+                        <text
+                          textAnchor="middle"
+                          dominantBaseline="central"
+                          fill="#ffffff"
+                          fontSize="15"
+                          fontWeight="800"
+                          style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}
+                        >
+                          {player.avatar}
+                        </text>
+                      )}
                       <text
                         y="15"
                         textAnchor="middle"
@@ -342,7 +362,12 @@ export default function BigTwoFirstTurnWheel({
             <div className="wheel-winner-card animate-pop">
               <div className="winner-badge-crown">👑 TERPILIH JALAN PERTAMA</div>
               <div className="winner-player-info">
-                <span className="winner-avatar">{winnerPlayer.avatar}</span>
+                <AvatarDisplay
+                  avatar={winnerPlayer.avatar}
+                  fallback="👑"
+                  size={28}
+                  className="winner-avatar"
+                />
                 <span className="winner-name">{winnerPlayer.name}</span>
               </div>
               <p className="winner-instruction">

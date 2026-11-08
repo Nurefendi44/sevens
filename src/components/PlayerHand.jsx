@@ -3,6 +3,7 @@ import CardView from './CardView.jsx';
 import { cardEquals } from '../engine/deck.js';
 import { ArrowUpDown, Lock, ChevronDown, ChevronUp, Eye, LayoutGrid, Layers } from 'lucide-react';
 import { getCardBasePenalty } from '../engine/scoring.js';
+import AvatarDisplay from './AvatarDisplay.jsx';
 
 export default function PlayerHand({
   player,
@@ -53,7 +54,12 @@ export default function PlayerHand({
       <div className="tray-header">
         <div className="tray-title-group">
           <div className="tray-player-badge">
-            <span style={{ fontSize: '1.25rem' }}>{player.avatar}</span>
+            <AvatarDisplay
+              avatar={player.avatar}
+              fallback="👑"
+              size={24}
+              style={{ fontSize: '1.25rem' }}
+            />
             <span>{player.name}</span>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
               ({hand.length} kartu di tangan)

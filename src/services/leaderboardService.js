@@ -132,9 +132,45 @@ export function saveLocalPlayerProfile({ name, avatar, pin }) {
   }
   if (avatar) {
     localStorage.setItem(STORAGE_PLAYER_AVATAR, avatar);
+    try {
+      const localId = localStorage.getItem('sevens_player_id') || '';
+      const cachedRoomRaw = localStorage.getItem('sevens_cached_room');
+      if (cachedRoomRaw && localId) {
+        const parsedRoom = JSON.parse(cachedRoomRaw);
+        let changed = false;
+        if (Array.isArray(parsedRoom?.players)) {
+          parsedRoom.players = parsedRoom.players.map((p) => {
+            if (p.id === localId && !p.isBot) {
+              changed = true;
+              return { ...p, avatar };
+            }
+            return p;
+          });
+        }
+        if (changed) {
+          localStorage.setItem('sevens_cached_room', JSON.stringify(parsedRoom));
+        }
+      }
+    } catch {
+      // ignore
+    }
   }
   if (typeof pin === 'string' && /^\d{4}$/.test(pin.trim())) {
     localStorage.setItem(STORAGE_PLAYER_PIN, pin.trim());
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(
+        new CustomEvent('profile_avatar_updated', {
+          detail: {
+            name: typeof name === 'string' ? name.trim() : localStorage.getItem(STORAGE_PLAYER_NAME) || '',
+            avatar: avatar || localStorage.getItem(STORAGE_PLAYER_AVATAR) || '👑',
+          },
+        })
+      );
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -142,12 +178,17 @@ export function saveLocalPlayerProfile({ name, avatar, pin }) {
  * Verifies or binds a 4-digit PIN for a Nickname against the Global Leaderboard in Supabase.
  * - If the Nickname already has a PIN in Supabase, verifies that `pin` matches before allowing save.
  * - If the Nickname exists in Supabase WITHOUT a PIN yet (legacy account like `pardi`), binds the new PIN to all its rows!
- * - If the Nickname is brand new, saves the profile + PIN locally so future matches lock it with this PIN.
+ * - If the Nickname is brand new, saves the profile + PIN locally and registers it in Supabase.
  */
-export async function verifyAndSaveProfileWithPin({ name, avatar, pin }) {
+export async function verifyAndSaveProfileWithPin({
+  name,
+  avatar,
+  pin,
+  preserveRemoteAvatar = false,
+}) {
   const cleanName = String(name || '').trim();
   const cleanPin = String(pin || '').trim();
-  const chosenAvatar = avatar || '👑';
+  let chosenAvatar = avatar || '👑';
 
   if (!cleanName) {
     return { success: false, error: 'Masukkan Nickname terlebih dahulu!' };
@@ -164,7 +205,7 @@ export async function verifyAndSaveProfileWithPin({ name, avatar, pin }) {
     try {
       const { data: rows, error } = await supabase
         .from('leaderboard')
-        .select('id, player_id, player_name, game_type')
+        .select('id, player_id, player_name, avatar, game_type')
         .ilike('player_name', cleanName.replace(/[\\%_]/g, (c) => '\\' + c));
 
       if (!error && Array.isArray(rows) && rows.length > 0) {
@@ -177,6 +218,17 @@ export async function verifyAndSaveProfileWithPin({ name, avatar, pin }) {
             success: false,
             error: `🔒 Nickname "${cleanName}" sudah dilindungi PIN pemiliknya! Masukkan 4 digit PIN yang benar jika ini akun Anda, atau gunakan Nickname lain.`,
           };
+        }
+
+        // If logging in from a new device without explicitly picking a new avatar, restore existing remote photo/avatar
+        if (preserveRemoteAvatar) {
+          const remotePhoto = rows.find(
+            (r) => typeof r.avatar === 'string' && r.avatar.startsWith('data:image/')
+          )?.avatar;
+          const remoteAny = rows.find((r) => r.avatar)?.avatar;
+          if (remotePhoto || (remoteAny && (!avatar || avatar === '👑'))) {
+            chosenAvatar = remotePhoto || remoteAny || chosenAvatar;
+          }
         }
 
         // Either PIN matched OR legacy account didn't have a PIN yet -> lock all rows with `lockedPlayerId` & update avatar
@@ -194,8 +246,24 @@ export async function verifyAndSaveProfileWithPin({ name, avatar, pin }) {
         saveLocalPlayerProfile({ name: cleanName, avatar: chosenAvatar, pin: cleanPin });
         return {
           success: true,
+          avatar: chosenAvatar,
           status: existingHash ? 'verified' : 'locked_existing',
         };
+      } else if (!error && Array.isArray(rows) && rows.length === 0) {
+        // Brand-new account: register initial row so avatar & PIN lock are stored in Supabase immediately
+        await supabase.from('leaderboard').upsert(
+          {
+            player_id: lockedPlayerId,
+            player_name: cleanName,
+            avatar: chosenAvatar,
+            game_type: 'sevens',
+            wins: 0,
+            games_played: 0,
+            score: 0,
+            last_played_at: new Date().toISOString(),
+          },
+          { onConflict: 'player_id, game_type' }
+        );
       }
     } catch (e) {
       console.warn('[Leaderboard] PIN verification check warning:', e);
@@ -203,7 +271,49 @@ export async function verifyAndSaveProfileWithPin({ name, avatar, pin }) {
   }
 
   saveLocalPlayerProfile({ name: cleanName, avatar: chosenAvatar, pin: cleanPin });
-  return { success: true, status: 'saved_new' };
+  return { success: true, avatar: chosenAvatar, status: 'saved_new' };
+}
+
+/**
+ * Updates the current player's avatar/profile photo locally and in Supabase leaderboard (if registered).
+ */
+export async function updatePlayerAvatarEverywhere(newAvatar) {
+  const chosenAvatar = newAvatar || '👑';
+  const current = getLocalPlayerProfile();
+  saveLocalPlayerProfile({
+    name: current.name,
+    avatar: chosenAvatar,
+    pin: current.pin,
+  });
+
+  if (current.name && isSupabaseConfigured && supabase) {
+    try {
+      const cleanName = current.name.trim();
+      const { data: rows } = await supabase
+        .from('leaderboard')
+        .select('id, player_id, player_name')
+        .ilike('player_name', cleanName.replace(/[\\%_]/g, (c) => '\\' + c));
+
+      if (Array.isArray(rows) && rows.length > 0) {
+        const existingHash = extractPinHashFromItem({
+          player_ids: rows.map((r) => r.player_id),
+        });
+        const myHash = current.pin ? hashProfilePin(cleanName, current.pin) : '';
+        if (!existingHash || existingHash === myHash) {
+          for (const r of rows) {
+            await supabase
+              .from('leaderboard')
+              .update({ avatar: chosenAvatar })
+              .eq('id', r.id);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Leaderboard] Failed to sync new avatar to server:', e);
+    }
+  }
+
+  return { success: true, avatar: chosenAvatar };
 }
 
 /**
@@ -426,13 +536,25 @@ function aggregateRowsByUsername(rows = [], gameType = 'all') {
       if (row.player_id && !existing.player_ids.includes(row.player_id)) {
         existing.player_ids.push(row.player_id);
       }
+      if (typeof row.avatar === 'string' && row.avatar.startsWith('data:image/')) {
+        existing.avatar = row.avatar;
+      }
       if (
         row.last_played_at &&
         (!existing.last_played_at || new Date(row.last_played_at) >= new Date(existing.last_played_at))
       ) {
         existing.player_id = row.player_id || existing.player_id;
         existing.player_name = cleanName || existing.player_name;
-        existing.avatar = row.avatar || existing.avatar;
+        if (
+          row.avatar &&
+          !(
+            typeof existing.avatar === 'string' &&
+            existing.avatar.startsWith('data:image/') &&
+            !String(row.avatar).startsWith('data:image/')
+          )
+        ) {
+          existing.avatar = row.avatar;
+        }
         existing.last_played_at = row.last_played_at;
       }
     }

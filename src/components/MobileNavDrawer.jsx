@@ -27,6 +27,7 @@ import {
   MicOff,
   Radio,
 } from 'lucide-react';
+import AvatarDisplay from './AvatarDisplay.jsx';
 
 export default function MobileNavDrawer({
   isOpen,
@@ -155,8 +156,9 @@ export default function MobileNavDrawer({
           {currentTurnPlayer && (
             <div className="drawer-status-row">
               <span className="drawer-label">Giliran Aktif:</span>
-              <span className="drawer-value highlight">
-                {currentTurnPlayer.avatar} {currentTurnPlayer.name}
+              <span className="drawer-value highlight" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <AvatarDisplay avatar={currentTurnPlayer.avatar} fallback="👤" size={18} />
+                <span>{currentTurnPlayer.name}</span>
               </span>
             </div>
           )}

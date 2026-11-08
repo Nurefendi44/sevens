@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Crown, LogOut, Bot, Hourglass, Swords, Radar, Play, Sparkles, X, Mic, MicOff } from 'lucide-react';
+import AvatarDisplay from './AvatarDisplay.jsx';
 import '../styles/matchmaking.css';
 
 const SUIT_PARTICLES = ['♠', '♥', '♦', '♣', '♠', '♥', '♦', '♣', '♠', '♥'];
@@ -213,7 +214,10 @@ export default function MatchmakingScreen({
                   </button>
                 )}
                 <div className={`mmx-slot-avatar ${isSpeaking ? 'speaking-avatar-ring' : ''}`}>
-                  <span>{p.avatar || (p.isBot ? '🤖' : '🃏')}</span>
+                  <AvatarDisplay
+                    avatar={p.avatar || (p.isBot ? '🤖' : '🃏')}
+                    fallback="🃏"
+                  />
                 </div>
                 <span className="mmx-slot-name">{p.name}</span>
                 <span className="mmx-slot-tag">

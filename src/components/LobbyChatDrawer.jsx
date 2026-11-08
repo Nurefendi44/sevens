@@ -37,6 +37,7 @@ import {
   isFriend,
   syncFriendsWithLeaderboard,
 } from '../services/friendService';
+import AvatarDisplay from './AvatarDisplay';
 import '../styles/lobbyChat.css';
 
 const QUICK_PRESETS = [
@@ -502,7 +503,7 @@ export default function LobbyChatDrawer({
                       <div key={friend.name} className="pm-thread-card" style={{ cursor: 'default' }}>
                         <div className="pm-user-left">
                           <div className="chat-msg-avatar" style={{ width: 34, height: 34 }}>
-                            <span>{friend.avatar || '👤'}</span>
+                            <AvatarDisplay avatar={friend.avatar} fallback="👤" />
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -583,7 +584,7 @@ export default function LobbyChatDrawer({
                           <span>Daftar DM</span>
                         </button>
                         <div className="chat-msg-avatar" style={{ width: 28, height: 28, fontSize: '0.9rem' }}>
-                          <span>{activeDmPartner.avatar || '👤'}</span>
+                          <AvatarDisplay avatar={activeDmPartner.avatar} fallback="👤" />
                         </div>
                         <strong style={{ fontSize: '0.82rem', color: '#f8fafc' }}>
                           {activeDmPartner.name}
@@ -643,7 +644,10 @@ export default function LobbyChatDrawer({
                           return (
                             <div key={msg.id} className={`chat-msg-row ${isMe ? 'is-me' : ''}`}>
                               <div className="chat-msg-avatar">
-                                <span>{msg.avatar || '👤'}</span>
+                                <AvatarDisplay
+                                  avatar={isMe ? myProfile?.avatar || msg.avatar : msg.avatar}
+                                  fallback="👤"
+                                />
                               </div>
                               <div className="chat-msg-body">
                                 <div className="chat-msg-meta">
@@ -748,7 +752,7 @@ export default function LobbyChatDrawer({
                               >
                                 <div className="pm-user-left">
                                   <div className="chat-msg-avatar" style={{ width: 28, height: 28, fontSize: '0.9rem' }}>
-                                    <span>{user.avatar || '👤'}</span>
+                                    <AvatarDisplay avatar={user.avatar} fallback="👤" />
                                   </div>
                                   <div>
                                     <strong style={{ fontSize: '0.8rem', color: '#f8fafc', display: 'block' }}>
@@ -805,7 +809,7 @@ export default function LobbyChatDrawer({
                             >
                               <div className="pm-user-left">
                                 <div className="chat-msg-avatar" style={{ width: 34, height: 34 }}>
-                                  <span>{partnerAvatar}</span>
+                                  <AvatarDisplay avatar={partnerAvatar} fallback="👤" />
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -886,7 +890,10 @@ export default function LobbyChatDrawer({
                           }}
                           title={!isMe && !isSystem ? `Klik untuk Chat Pribadi dengan ${msg.senderName}` : ''}
                         >
-                          <span>{msg.avatar || '👑'}</span>
+                          <AvatarDisplay
+                            avatar={isMe ? myProfile?.avatar || msg.avatar : msg.avatar}
+                            fallback="👑"
+                          />
                         </div>
 
                         <div className="chat-msg-body">
@@ -1121,7 +1128,7 @@ export default function LobbyChatDrawer({
                     Hapus Pertemanan?
                   </h4>
                   <div className="confirm-profile-preview">
-                    <span>{friendToDelete.avatar || '👤'}</span>
+                    <AvatarDisplay avatar={friendToDelete.avatar} fallback="👤" size={28} />
                     <strong>{friendToDelete.name}</strong>
                   </div>
                   <p className="confirm-desc">

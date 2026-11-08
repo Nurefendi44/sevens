@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Sparkles } from 'lucide-react';
+import AvatarDisplay from './AvatarDisplay.jsx';
 import '../styles/livechat.css';
 
 export const QUICK_CHAT_PRESETS = [
@@ -74,7 +75,7 @@ export default function LiveChatOverlay({
                 }`}
               >
                 <div className="bubble-avatar">
-                  {msg.senderAvatar || '🃏'}
+                  <AvatarDisplay avatar={msg.senderAvatar} fallback="🃏" size={24} />
                 </div>
                 <div className="bubble-content">
                   <span className={`bubble-sender ${isMe ? 'sender-me' : ''}`}>

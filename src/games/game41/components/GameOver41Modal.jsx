@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 import { RotateCcw, Home, Award, Sparkles, X } from 'lucide-react';
 import { SUIT_SYMBOLS, SUIT_NAMES as SUIT_NAMES_ID } from '../../../engine/constants.js';
 import Card from '../../../components/CardView.jsx';
+import AvatarDisplay from '../../../components/AvatarDisplay.jsx';
 import '../../../styles/animations.css';
 
 export default function GameOver41Modal({
@@ -72,7 +73,7 @@ export default function GameOver41Modal({
               <div className="mlbb-mvp-left">
                 <div className="mlbb-mvp-avatar-wrap">
                   <span className="mlbb-mvp-crown">👑</span>
-                  <span>{winner.avatar || '🃏'}</span>
+                  <AvatarDisplay avatar={winner.avatar} fallback="🃏" size={44} />
                   <span className="mlbb-mvp-ribbon">MVP • JUARA 1</span>
                 </div>
                 <div className="mlbb-mvp-info">
@@ -126,9 +127,10 @@ export default function GameOver41Modal({
                           display: 'inline-flex',
                           alignItems: 'center',
                           justifyContent: 'center',
+                          overflow: 'hidden',
                         }}
                       >
-                        {player.avatar || '🤖'}
+                        <AvatarDisplay avatar={player.avatar} fallback="🤖" />
                       </span>
                       <div>
                         <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '0.95rem' }}>
