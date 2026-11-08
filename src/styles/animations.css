@@ -515,4 +515,94 @@
   color: #ffffff;
 }
 
+/* ===================================================
+   VICTORY / GAME OVER FRIEND BUTTON & TOAST
+   =================================================== */
+
+.victory-friend-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.16rem 0.52rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  line-height: 1.1;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  background: rgba(245, 158, 11, 0.15);
+  color: #fde047;
+  white-space: nowrap;
+}
+
+.victory-friend-btn:hover {
+  background: rgba(245, 158, 11, 0.3);
+  border-color: #fbbf24;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.victory-friend-btn.status-friend {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #6ee7b7;
+}
+
+.victory-friend-btn.status-friend:hover {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.victory-friend-btn.status-pending_outgoing {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+}
+
+.victory-friend-btn.status-pending_incoming {
+  background: rgba(6, 182, 212, 0.2);
+  border-color: rgba(34, 211, 238, 0.45);
+  color: #67e8f9;
+}
+
+.victory-friend-btn.size-sm {
+  font-size: 0.62rem;
+  padding: 0.12rem 0.42rem;
+}
+
+.victory-friend-toast {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 1.1rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(251, 191, 36, 0.6);
+  color: #fde047;
+  font-size: 0.8rem;
+  font-weight: 700;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), 0 0 16px rgba(251, 191, 36, 0.25);
+  animation: slideDownToast 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+@keyframes slideDownToast {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+
 

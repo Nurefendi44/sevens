@@ -1,10 +1,13 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import confetti from 'canvas-confetti';
 import { RotateCcw, Home, Award, Sparkles, X } from 'lucide-react';
 import Card from '../../../components/CardView.jsx';
 import AvatarDisplay from '../../../components/AvatarDisplay.jsx';
-import { resolvePlayerAvatar } from '../../../services/leaderboardService.js';
+import { resolvePlayerAvatar, getLocalPlayerProfile } from '../../../services/leaderboardService.js';
+import { removeFriend } from '../../../services/friendService.js';
+import FriendActionButton, { FriendUnfriendModal } from '../../../components/FriendActionButton.jsx';
 import '../../../styles/animations.css';
+import '../../../styles/friendsModal.css';
 
 export default function GameOverBigTwoModal({
   gameState,
@@ -15,7 +18,36 @@ export default function GameOverBigTwoModal({
   onOpenScoreboard,
   isHost = true,
   isMultiplayer = false,
+  myPlayerId = null,
+  myPlayerName = null,
 }) {
+  const localProfile = useMemo(() => getLocalPlayerProfile(), []);
+  const effectiveMyName = myPlayerName || localProfile?.name || '';
+  const [friendToDelete, setFriendToDelete] = useState(null);
+  const [friendToast, setFriendToast] = useState(null);
+
+  const showToast = (msg) => {
+    setFriendToast(msg);
+    setTimeout(() => setFriendToast(null), 3000);
+  };
+
+  const isPlayerMe = (p) => {
+    if (!p) return false;
+    if (myPlayerId && p.id && p.id === myPlayerId) return true;
+    if (!isMultiplayer && (p.isHuman || p.isLocalPlayer)) return true;
+    const pName = String(p.name || '').trim().toLowerCase();
+    const myName = String(effectiveMyName || '').trim().toLowerCase();
+    return Boolean(pName && myName && pName === myName);
+  };
+
+  const isPlayerBot = (p) => {
+    if (!p) return false;
+    if (p.isBot) return true;
+    const pInState = (activeState?.players || []).find((pl) => pl.id === p.id);
+    if (pInState?.isBot) return true;
+    const name = String(p.name || '').trim().toLowerCase();
+    return name.startsWith('bot') || name.startsWith('ai_') || name.startsWith('ai ');
+  };
   useEffect(() => {
     try {
       confetti({
@@ -89,8 +121,18 @@ export default function GameOverBigTwoModal({
                 </div>
                 <div className="mlbb-mvp-info">
                   <span className="mlbb-mvp-tag">ROYAL KING • BIG TWO</span>
-                  <div className="mlbb-mvp-name">
+                  <div className="mlbb-mvp-name" style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
                     <span>{winner.name}</span>
+                    {!isPlayerMe(winner) && !isPlayerBot(winner) && (
+                      <FriendActionButton
+                        targetPlayer={winner}
+                        myUsername={effectiveMyName}
+                        myProfile={localProfile}
+                        onStatusChange={showToast}
+                        onRequestUnfriend={setFriendToDelete}
+                        size="sm"
+                      />
+                    )}
                   </div>
                   <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
                     Berhasil meraih Juara 1 di meja Capsa Banting!
@@ -180,8 +222,25 @@ export default function GameOverBigTwoModal({
                         />
                       </span>
                       <div>
-                        <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '0.95rem' }}>
-                          {player.name}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 800, color: '#f8fafc', fontSize: '0.95rem' }}>
+                            {player.name}
+                          </span>
+                          {isPlayerMe(player) && (
+                            <span className="mlbb-you-chip" style={{ fontSize: '0.58rem', padding: '0.06rem 0.35rem' }}>
+                              KAMU
+                            </span>
+                          )}
+                          {!isPlayerMe(player) && !isPlayerBot(player) && (
+                            <FriendActionButton
+                              targetPlayer={player}
+                              myUsername={effectiveMyName}
+                              myProfile={localProfile}
+                              onStatusChange={showToast}
+                              onRequestUnfriend={setFriendToDelete}
+                              size="sm"
+                            />
+                          )}
                         </div>
                         <span
                           style={{
@@ -313,6 +372,27 @@ export default function GameOverBigTwoModal({
             </span>
           )}
         </div>
+
+        {/* Friend Action Toast */}
+        {friendToast && (
+          <div className="victory-friend-toast">
+            <Sparkles size={13} color="#fde047" />
+            <span>{friendToast}</span>
+          </div>
+        )}
+
+        {/* Modal Konfirmasi Hapus Pertemanan */}
+        {friendToDelete && (
+          <FriendUnfriendModal
+            friendToDelete={friendToDelete}
+            onClose={() => setFriendToDelete(null)}
+            onConfirm={async () => {
+              await removeFriend(effectiveMyName, friendToDelete.name);
+              setFriendToDelete(null);
+              showToast(`Pertemanan dengan ${friendToDelete.name} telah dihapus.`);
+            }}
+          />
+        )}
       </div>
     </div>
   );

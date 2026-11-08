@@ -33,6 +33,7 @@ import {
   isFriend,
   getFriendshipStatus,
   sendFriendRequest,
+  acceptFriendRequest,
   removeFriend,
   subscribeToFriendEvents,
 } from '../services/friendService';
@@ -101,6 +102,19 @@ export default function ScoreboardModal({
         name: targetName,
         avatar: targetPlayer.avatar,
       });
+    } else if (currentStatus === 'pending_incoming') {
+      const res = await acceptFriendRequest(effectiveMyName, localProfile, {
+        name: targetName,
+        avatar: targetPlayer.avatar,
+        tier: tier || targetPlayer.tier,
+        score: targetPlayer.score,
+        wins: targetPlayer.wins,
+      });
+      if (res.success) {
+        setFriendActionNotice(`Sekarang kamu berteman dengan ${targetName}!`);
+        setTimeout(() => setFriendActionNotice(null), 3000);
+      }
+      refreshFriends();
     } else if (currentStatus === 'none') {
       // Kirim permintaan pertemanan (harus di-ACC)
       const res = await sendFriendRequest(
@@ -822,6 +836,7 @@ export default function ScoreboardModal({
                     sortedLocalScores.map((item, index) => {
                       const rankNumber = index + 1;
                       const isMe = isPlayerMe(item) || item.isLocalPlayer;
+                      const isBot = Boolean(item.isBot || String(item.name || '').toLowerCase().startsWith('bot'));
                       const wins = Number(item.wins || 0);
                       const score = Number(item.score || 0);
                       const games = Number(item.games || 0);
@@ -857,6 +872,68 @@ export default function ScoreboardModal({
                                 <div className="mlbb-player-name-line">
                                   <span className="mlbb-player-name">{item.name}</span>
                                   {isMe && <span className="mlbb-you-chip">KAMU</span>}
+                                  {!isMe && !isBot && (
+                                    <div className="mlbb-row-actions">
+                                      {onOpenPrivateChat && (
+                                        <button
+                                          type="button"
+                                          className="btn-row-dm"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onOpenPrivateChat(item.name);
+                                          }}
+                                          title={`Kirim Pesan Pribadi ke ${item.name}`}
+                                        >
+                                          <MessageCircle size={10} />
+                                          <span>DM</span>
+                                        </button>
+                                      )}
+                                      {(() => {
+                                        const fStatus = getFriendshipStatus(effectiveMyName, item.name);
+                                        return (
+                                          <button
+                                            type="button"
+                                            className={`btn-row-friend ${fStatus === 'friend' ? 'is-friend' : ''} ${fStatus === 'pending_outgoing' ? 'is-pending' : ''} ${fStatus === 'pending_incoming' ? 'is-incoming' : ''}`}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleToggleFriend(item, tier);
+                                            }}
+                                            title={
+                                              fStatus === 'friend'
+                                                ? 'Sudah Berteman (Klik untuk Hapus)'
+                                                : fStatus === 'pending_outgoing'
+                                                ? 'Menunggu Konfirmasi'
+                                                : fStatus === 'pending_incoming'
+                                                ? 'Terima Permintaan Pertemanan'
+                                                : 'Kirim Permintaan Teman'
+                                            }
+                                          >
+                                            {fStatus === 'friend' ? (
+                                              <>
+                                                <UserCheck size={10} />
+                                                <span>Teman</span>
+                                              </>
+                                            ) : fStatus === 'pending_outgoing' ? (
+                                              <>
+                                                <Clock size={10} />
+                                                <span>Pending</span>
+                                              </>
+                                            ) : fStatus === 'pending_incoming' ? (
+                                              <>
+                                                <UserPlus size={10} />
+                                                <span>Terima</span>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <UserPlus size={10} />
+                                                <span>+ Teman</span>
+                                              </>
+                                            )}
+                                          </button>
+                                        );
+                                      })()}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>

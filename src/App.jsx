@@ -3891,11 +3891,17 @@ export default function App() {
       {activeGameType === 'sevens' && gameState?.gameStatus === GAME_STATUS.GAME_OVER && (
         <GameOverModal
           gameState={gameState}
+          results={gameState}
           onRestart={() => handleRestart()}
           onBackToMenu={handleBackToModeSelect}
           onOpenScoreboard={() => setShowScoreboardModal(true)}
           isMultiplayer={isMultiplayerMode}
           isHost={isHost}
+          myPlayerId={myPlayerId}
+          myPlayerName={
+            (currentRoom?.players || []).find((p) => p.id === myPlayerId)?.name ||
+            getLocalPlayerName()
+          }
         />
       )}
 
@@ -3903,12 +3909,18 @@ export default function App() {
       {activeGameType === 'game41' && (gameState41?.gameStatus === 'game_over' || gameState41?.gameStatus === 'GAME_OVER') && (
         <GameOver41Modal
           gameState={gameState41}
+          results={gameState41}
           onRestart={handleRestart41}
           onPlayAgain={handleRestart41}
           onBackToMenu={handleBackToModeSelect}
           onOpenScoreboard={() => setShowScoreboardModal(true)}
           isMultiplayer={isMultiplayerMode}
           isHost={isHost}
+          myPlayerId={myPlayerId}
+          myPlayerName={
+            (currentRoom?.players || []).find((p) => p.id === myPlayerId)?.name ||
+            getLocalPlayerName()
+          }
         />
       )}
 
@@ -3919,6 +3931,7 @@ export default function App() {
           Boolean(gameStateBigtwo?.winner && gameStateBigtwo?.rankings?.length > 0)) && (
         <GameOverBigTwoModal
           gameState={gameStateBigtwo}
+          results={gameStateBigtwo}
           onRestart={handleRestartBigTwo}
           onPlayAgain={handleRestartBigTwo}
           onBackToMenu={handleBackToModeSelect}
@@ -3926,6 +3939,11 @@ export default function App() {
           isMultiplayer={isMultiplayerMode}
           isHost={isHost}
           currentRoomCode={isMultiplayerMode ? currentRoom?.code : null}
+          myPlayerId={myPlayerId}
+          myPlayerName={
+            (currentRoom?.players || []).find((p) => p.id === myPlayerId)?.name ||
+            getLocalPlayerName()
+          }
         />
       )}
 
