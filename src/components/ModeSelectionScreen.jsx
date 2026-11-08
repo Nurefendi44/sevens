@@ -617,6 +617,13 @@ export default function ModeSelectionScreen({
                 avatar={profile.avatar}
                 fallback="👑"
                 className="mlbb-avatar-icon"
+                playerName={profile.name}
+                editable={true}
+                onAvatarChange={(newAv) => {
+                  setEditAvatarInput(newAv);
+                  setProfile((prev) => ({ ...prev, avatar: newAv }));
+                  loadHomepageLeaderboard(previewCategory);
+                }}
               />
               <span className="mlbb-avatar-tier-mini">{myRankTier.icon}</span>
             </div>
@@ -853,7 +860,11 @@ export default function ModeSelectionScreen({
                       </div>
 
                       <div className={`dock-player-avatar tier-border-${tier.id}`}>
-                        <AvatarDisplay avatar={player.avatar} fallback="👑" />
+                        <AvatarDisplay
+                          avatar={player.avatar}
+                          fallback="👑"
+                          playerName={player.player_name}
+                        />
                       </div>
 
                       <div className="dock-player-info">
@@ -1109,11 +1120,30 @@ export default function ModeSelectionScreen({
                   <div
                     className={`showcase-avatar tier-border-${(previewModalStats ? previewModalTier : myRankTier).id}`}
                     style={{ position: 'relative', cursor: 'pointer' }}
-                    onClick={() => photoFileInputRef.current?.click()}
-                    title="Klik untuk unggah Foto Profil dari perangkat"
+                    onClick={() => {
+                      if (!isImageAvatar(editAvatarInput)) {
+                        photoFileInputRef.current?.click();
+                      }
+                    }}
+                    title="Klik untuk melihat atau ganti Foto Profil"
                   >
-                    <AvatarDisplay avatar={editAvatarInput} fallback="👑" />
+                    <AvatarDisplay
+                      avatar={editAvatarInput}
+                      fallback="👑"
+                      playerName={editNameInput || profile.name}
+                      editable={true}
+                      onAvatarChange={(newAv) => {
+                        setEditAvatarInput(newAv);
+                        setProfile((prev) => ({ ...prev, avatar: newAv }));
+                        loadHomepageLeaderboard(previewCategory);
+                      }}
+                    />
                     <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        photoFileInputRef.current?.click();
+                      }}
+                      title="Ganti Foto Profil dari Perangkat"
                       style={{
                         position: 'absolute',
                         bottom: -5,
@@ -1128,6 +1158,7 @@ export default function ModeSelectionScreen({
                         alignItems: 'center',
                         justifyContent: 'center',
                         boxShadow: '0 2px 8px rgba(0,0,0,0.6)',
+                        cursor: 'pointer',
                       }}
                     >
                       <Camera size={12} />

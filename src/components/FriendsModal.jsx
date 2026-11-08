@@ -404,6 +404,7 @@ export default function FriendsModal({
                           avatar={friend.avatar}
                           fallback="👤"
                           className="friend-card-avatar"
+                          playerName={friend.name}
                         />
                         <span className="friend-online-dot" title="Online di game" />
                       </div>
@@ -520,6 +521,7 @@ export default function FriendsModal({
                             avatar={req.avatar}
                             fallback="👤"
                             className="friend-card-avatar"
+                            playerName={req.name}
                           />
                         </div>
 
@@ -587,6 +589,7 @@ export default function FriendsModal({
                             avatar={req.avatar}
                             fallback="👤"
                             className="friend-card-avatar"
+                            playerName={req.name}
                           />
                         </div>
 
@@ -685,6 +688,7 @@ export default function FriendsModal({
                                 avatar={player.avatar}
                                 fallback="👤"
                                 className="showcase-avatar"
+                                playerName={player.name}
                               />
                             </div>
 

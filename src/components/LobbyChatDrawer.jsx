@@ -503,7 +503,11 @@ export default function LobbyChatDrawer({
                       <div key={friend.name} className="pm-thread-card" style={{ cursor: 'default' }}>
                         <div className="pm-user-left">
                           <div className="chat-msg-avatar" style={{ width: 34, height: 34 }}>
-                            <AvatarDisplay avatar={friend.avatar} fallback="👤" />
+                            <AvatarDisplay
+                              avatar={friend.avatar}
+                              fallback="👤"
+                              playerName={friend.name}
+                            />
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -584,7 +588,11 @@ export default function LobbyChatDrawer({
                           <span>Daftar DM</span>
                         </button>
                         <div className="chat-msg-avatar" style={{ width: 28, height: 28, fontSize: '0.9rem' }}>
-                          <AvatarDisplay avatar={activeDmPartner.avatar} fallback="👤" />
+                          <AvatarDisplay
+                            avatar={activeDmPartner.avatar}
+                            fallback="👤"
+                            playerName={activeDmPartner.name}
+                          />
                         </div>
                         <strong style={{ fontSize: '0.82rem', color: '#f8fafc' }}>
                           {activeDmPartner.name}
@@ -647,6 +655,8 @@ export default function LobbyChatDrawer({
                                 <AvatarDisplay
                                   avatar={isMe ? myProfile?.avatar || msg.avatar : msg.avatar}
                                   fallback="👤"
+                                  playerName={msg.senderName}
+                                  editable={isMe}
                                 />
                               </div>
                               <div className="chat-msg-body">
@@ -882,17 +892,14 @@ export default function LobbyChatDrawer({
                       >
                         <div
                           className="chat-msg-avatar"
-                          style={{ cursor: !isMe && !isSystem ? 'pointer' : 'default' }}
-                          onClick={() => {
-                            if (!isMe && !isSystem) {
-                              startDirectChatWith(msg.senderName, msg.avatar, msg.tier);
-                            }
-                          }}
-                          title={!isMe && !isSystem ? `Klik untuk Chat Pribadi dengan ${msg.senderName}` : ''}
+                          style={{ cursor: 'pointer' }}
+                          title={`Klik untuk melihat Foto Profil ${msg.senderName}`}
                         >
                           <AvatarDisplay
                             avatar={isMe ? myProfile?.avatar || msg.avatar : msg.avatar}
                             fallback="👑"
+                            playerName={msg.senderName}
+                            editable={isMe}
                           />
                         </div>
 

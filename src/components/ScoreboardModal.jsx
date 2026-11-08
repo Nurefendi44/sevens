@@ -277,6 +277,8 @@ export default function ScoreboardModal({
             avatar={player.avatar}
             fallback="👑"
             className="podium-avatar-emoji"
+            playerName={player.player_name}
+            editable={isMe}
           />
           <span className="podium-tier-corner" title={tier.name}>
             {tier.icon}
@@ -577,7 +579,12 @@ export default function ScoreboardModal({
                             <td className="col-player">
                               <div className="mlbb-player-cell">
                                 <div className={`mlbb-row-avatar tier-ring-${tier.id}`}>
-                                  <AvatarDisplay avatar={item.avatar} fallback="👤" />
+                                  <AvatarDisplay
+                                    avatar={item.avatar}
+                                    fallback="👤"
+                                    playerName={item.player_name}
+                                    editable={isMe}
+                                  />
                                 </div>
                                 <div className="mlbb-player-meta">
                                   <div className="mlbb-player-name-line">
@@ -716,6 +723,8 @@ export default function ScoreboardModal({
                       <AvatarDisplay
                         avatar={localProfile.avatar || myStanding.avatar}
                         fallback="👑"
+                        playerName={myStanding.player_name}
+                        editable={true}
                       />
                     </div>
 
@@ -772,7 +781,12 @@ export default function ScoreboardModal({
                       <strong className="standing-rank-num">UNRANKED</strong>
                     </div>
                     <div className="standing-avatar">
-                      <AvatarDisplay avatar={localProfile.avatar} fallback="👑" />
+                      <AvatarDisplay
+                        avatar={localProfile.avatar}
+                        fallback="👑"
+                        playerName={effectiveMyName}
+                        editable={true}
+                      />
                     </div>
                     <div className="standing-identity">
                       <div className="standing-name-row">
@@ -832,7 +846,12 @@ export default function ScoreboardModal({
                           <td className="col-player">
                             <div className="mlbb-player-cell">
                               <div className={`mlbb-row-avatar tier-ring-${tier.id}`}>
-                                <AvatarDisplay avatar={item.avatar} fallback="👤" />
+                                <AvatarDisplay
+                                  avatar={item.avatar}
+                                  fallback="👤"
+                                  playerName={item.name}
+                                  editable={isMe}
+                                />
                               </div>
                               <div className="mlbb-player-meta">
                                 <div className="mlbb-player-name-line">

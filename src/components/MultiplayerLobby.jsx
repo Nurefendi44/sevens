@@ -662,10 +662,13 @@ export default function MultiplayerLobby({
                   <label className="mp-label" style={{ justifyContent: 'center' }}>
                     <span>Foto</span>
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => lobbyPhotoInputRef.current?.click()}
-                    title="Klik untuk unggah atau ganti Foto Profil"
+                  <div
+                    onClick={() => {
+                      if (!isImageAvatar(avatarInput)) {
+                        lobbyPhotoInputRef.current?.click();
+                      }
+                    }}
+                    title="Klik untuk melihat atau unggah Foto Profil"
                     style={{
                       position: 'relative',
                       width: '50px',
@@ -683,8 +686,19 @@ export default function MultiplayerLobby({
                       boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
                     }}
                   >
-                    <AvatarDisplay avatar={avatarInput} fallback="👑" />
+                    <AvatarDisplay
+                      avatar={avatarInput}
+                      fallback="👑"
+                      playerName={usernameInput}
+                      editable={true}
+                      onAvatarChange={(newAv) => setAvatarInput(newAv)}
+                    />
                     <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        lobbyPhotoInputRef.current?.click();
+                      }}
+                      title="Upload Foto Profil"
                       style={{
                         position: 'absolute',
                         bottom: -4,
@@ -698,11 +712,12 @@ export default function MultiplayerLobby({
                         alignItems: 'center',
                         justifyContent: 'center',
                         border: '1.5px solid #090d16',
+                        cursor: 'pointer',
                       }}
                     >
                       <Camera size={10} />
                     </span>
-                  </button>
+                  </div>
                 </div>
 
                 <div>
@@ -1428,6 +1443,8 @@ export default function MultiplayerLobby({
                         avatar={slotPlayer.avatar || (isBot ? '🤖' : '🃏')}
                         fallback="🃏"
                         className="seat-avatar-emoji"
+                        playerName={slotPlayer.name}
+                        editable={isMe}
                       />
                       {slotPlayer.isHost && (
                         <span className="seat-crown-badge" title="Host Room">

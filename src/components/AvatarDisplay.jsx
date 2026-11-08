@@ -1,4 +1,10 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { X, Camera, Trash2, ZoomIn } from 'lucide-react';
+import {
+  getLocalPlayerProfile,
+  updatePlayerAvatarEverywhere,
+} from '../services/leaderboardService';
 
 /**
  * Checks whether an avatar value is an uploaded photo / image URL rather than an emoji/text.
@@ -15,11 +21,11 @@ export function isImageAvatar(avatar) {
 }
 
 /**
- * Compresses & center-crops an image File into a lightweight square data URL (~4–12 KB)
- * suitable for localStorage, Supabase leaderboard, room state, and Realtime broadcasts.
+ * Compresses & center-crops an image File into a crisp square data URL (~6–18 KB)
+ * suitable for localStorage, Supabase leaderboard, room state, Realtime broadcasts, and lightbox zoom.
  */
 export function compressProfileImage(file, options = {}) {
-  const { maxDimension = 144, quality = 0.82 } = options;
+  const { maxDimension = 260, quality = 0.82 } = options;
 
   return new Promise((resolve, reject) => {
     if (!file || !file.type || !file.type.startsWith('image/')) {
@@ -67,12 +73,11 @@ export function compressProfileImage(file, options = {}) {
           };
 
           let result = renderSquare(maxDimension, quality, 'image/webp');
-          // If WebP wasn't supported or file is still > 16KB, try JPEG / smaller dimension
-          if (result.length > 16000) {
-            result = renderSquare(128, 0.76, 'image/jpeg');
+          if (result.length > 22000) {
+            result = renderSquare(192, 0.78, 'image/jpeg');
           }
-          if (result.length > 16000) {
-            result = renderSquare(108, 0.7, 'image/jpeg');
+          if (result.length > 18000) {
+            result = renderSquare(144, 0.74, 'image/jpeg');
           }
 
           resolve(result);
@@ -87,10 +92,10 @@ export function compressProfileImage(file, options = {}) {
 }
 
 /**
- * Universal Avatar renderer:
+ * Universal Avatar renderer with built-in Click-to-Preview Lightbox & Quick Photo Update:
  * - When `avatar` is an uploaded photo / image URL, renders an `<img>`.
  * - When `avatar` is an emoji/string, renders a `<span>`.
- * - Pass `size` (e.g. `size={26}` or `size="1.4em"`) when used inline outside a fixed avatar frame.
+ * - Clicking the avatar opens a full-size Foto Profil preview modal (unless `clickable={false}`).
  */
 export default function AvatarDisplay({
   avatar,
@@ -98,11 +103,280 @@ export default function AvatarDisplay({
   size = null,
   className = '',
   style = undefined,
-  alt = 'Avatar',
+  alt = 'Foto Profil',
+  playerName = '',
+  clickable = true,
+  editable = false,
+  onAvatarChange = null,
 }) {
-  const val = avatar || fallback;
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [previewVal, setPreviewVal] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const fileInputRef = useRef(null);
 
-  if (isImageAvatar(val)) {
+  const val = previewVal || avatar || fallback;
+  const isImg = isImageAvatar(val);
+
+  const handleOpenLightbox = (e) => {
+    if (!clickable) return;
+    e.stopPropagation();
+    e.preventDefault();
+    setPreviewVal(null);
+    setUploadError('');
+    setIsLightboxOpen(true);
+  };
+
+  const localProfile = getLocalPlayerProfile();
+  const isMyOwnAvatar =
+    editable ||
+    (playerName &&
+      localProfile.name &&
+      playerName.trim().toLowerCase() === localProfile.name.trim().toLowerCase()) ||
+    (!playerName && val === (localProfile.avatar || '👑'));
+
+  const handleQuickUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError('');
+    setIsUploading(true);
+    try {
+      const compressed = await compressProfileImage(file);
+      setPreviewVal(compressed);
+      await updatePlayerAvatarEverywhere(compressed);
+      if (onAvatarChange) onAvatarChange(compressed);
+    } catch (err) {
+      setUploadError(err?.message || 'Gagal mengunggah foto profil.');
+    } finally {
+      setIsUploading(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    const defaultEmoji = '👑';
+    setPreviewVal(defaultEmoji);
+    await updatePlayerAvatarEverywhere(defaultEmoji);
+    if (onAvatarChange) onAvatarChange(defaultEmoji);
+  };
+
+  const lightboxModal =
+    isLightboxOpen && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsLightboxOpen(false);
+            }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 99999,
+              background: 'rgba(5, 9, 18, 0.86)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '1.25rem',
+              animation: 'fadeIn 0.18s ease-out',
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: '100%',
+                maxWidth: '340px',
+                background: 'linear-gradient(165deg, #0f172a 0%, #090d16 100%)',
+                border: '1.5px solid rgba(251, 191, 36, 0.55)',
+                borderRadius: '22px',
+                padding: '1.25rem',
+                boxShadow: '0 25px 60px rgba(0, 0, 0, 0.85), 0 0 30px rgba(245, 158, 11, 0.2)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '0.95rem',
+                position: 'relative',
+                color: '#f8fafc',
+              }}
+            >
+              {/* Close button */}
+              <button
+                type="button"
+                onClick={() => setIsLightboxOpen(false)}
+                aria-label="Tutup Foto Profil"
+                style={{
+                  position: 'absolute',
+                  top: '0.85rem',
+                  right: '0.85rem',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.18)',
+                  color: '#cbd5e1',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
+              >
+                <X size={16} />
+              </button>
+
+              <div style={{ textAlign: 'center' }}>
+                <span
+                  style={{
+                    fontSize: '0.68rem',
+                    fontWeight: 900,
+                    letterSpacing: '0.12em',
+                    color: '#fbbf24',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  FOTO PROFIL PEMAIN
+                </span>
+                {(playerName || (isMyOwnAvatar && localProfile.name)) && (
+                  <h4
+                    style={{
+                      margin: '0.2rem 0 0',
+                      fontSize: '1.05rem',
+                      fontWeight: 900,
+                      color: '#ffffff',
+                    }}
+                  >
+                    {playerName || localProfile.name}
+                  </h4>
+                )}
+              </div>
+
+              {/* Enlarged Avatar Frame */}
+              <div
+                style={{
+                  width: '220px',
+                  height: '220px',
+                  borderRadius: '24px',
+                  background: 'radial-gradient(circle at 50% 35%, #1e293b 0%, #090d16 100%)',
+                  border: '3px solid #fbbf24',
+                  boxShadow: '0 12px 32px rgba(0, 0, 0, 0.65), 0 0 20px rgba(251, 191, 36, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  fontSize: '5.5rem',
+                  position: 'relative',
+                }}
+              >
+                {isImageAvatar(val) ? (
+                  <img
+                    src={val}
+                    alt={playerName || alt}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      display: 'block',
+                    }}
+                  />
+                ) : (
+                  <span>{val}</span>
+                )}
+              </div>
+
+              {uploadError && (
+                <div
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem 0.7rem',
+                    borderRadius: '8px',
+                    background: 'rgba(239, 68, 68, 0.16)',
+                    border: '1px solid rgba(239, 68, 68, 0.45)',
+                    color: '#fca5a5',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    textAlign: 'center',
+                  }}
+                >
+                  ⚠️ {uploadError}
+                </div>
+              )}
+
+              {isMyOwnAvatar && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleQuickUpload}
+                    style={{ display: 'none' }}
+                  />
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '0.5rem',
+                      width: '100%',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      style={{
+                        flex: 1,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.45rem',
+                        padding: '0.6rem 0.9rem',
+                        borderRadius: '10px',
+                        background: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)',
+                        border: '1px solid #fef08a',
+                        color: '#090d16',
+                        fontSize: '0.8rem',
+                        fontWeight: 900,
+                        cursor: isUploading ? 'wait' : 'pointer',
+                      }}
+                    >
+                      <Camera size={15} />
+                      <span>
+                        {isUploading
+                          ? 'Memproses...'
+                          : isImageAvatar(val)
+                          ? 'Ganti Foto Profil'
+                          : 'Upload Foto Profil'}
+                      </span>
+                    </button>
+
+                    {isImageAvatar(val) && (
+                      <button
+                        type="button"
+                        onClick={handleRemovePhoto}
+                        title="Hapus Foto"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '0.6rem 0.75rem',
+                          borderRadius: '10px',
+                          background: 'rgba(239, 68, 68, 0.16)',
+                          border: '1px solid rgba(239, 68, 68, 0.45)',
+                          color: '#fca5a5',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
+
+  if (isImg) {
     const imgStyle = size
       ? {
           width: size,
@@ -114,6 +388,7 @@ export default function AvatarDisplay({
           display: 'inline-block',
           verticalAlign: 'middle',
           flexShrink: 0,
+          cursor: clickable ? 'zoom-in' : undefined,
           ...style,
         }
       : {
@@ -123,24 +398,40 @@ export default function AvatarDisplay({
           borderRadius: 'inherit',
           display: 'block',
           flexShrink: 0,
+          cursor: clickable ? 'zoom-in' : undefined,
           ...style,
         };
 
     return (
-      <img
-        src={val}
-        alt={alt}
-        className={`avatar-display-img ${className}`.trim()}
-        style={imgStyle}
-        draggable={false}
-      />
+      <>
+        <img
+          src={val}
+          alt={alt}
+          className={`avatar-display-img ${className}`.trim()}
+          style={imgStyle}
+          draggable={false}
+          onClick={clickable ? handleOpenLightbox : undefined}
+          title={clickable ? 'Klik untuk melihat Foto Profil' : undefined}
+        />
+        {lightboxModal}
+      </>
     );
   }
 
   return (
-    <span className={className || undefined} style={style}>
-      {val}
-    </span>
+    <>
+      <span
+        className={className || undefined}
+        style={{
+          cursor: clickable ? 'pointer' : undefined,
+          ...style,
+        }}
+        onClick={clickable ? handleOpenLightbox : undefined}
+        title={clickable ? 'Klik untuk melihat / ganti Foto Profil' : undefined}
+      >
+        {val}
+      </span>
+      {lightboxModal}
+    </>
   );
 }
-
