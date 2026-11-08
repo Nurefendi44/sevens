@@ -17,19 +17,16 @@ const MAX_PRIVATE_MESSAGES = 120;
 const MAX_RETRACTED_IDS = 100;
 
 /**
- * Extract room code from text if mentioned
- * e.g. "Ayo mabar B2-EG7W", "Room: SV-9988", "3C5RZP"
+ * Extract room code from text if explicitly mentioned with prefixes
+ * e.g. "B2-EG7W", "Room: SV-9988", "Kode: 3C5RZP"
  */
 export function extractRoomCodeFromMessage(text) {
   if (!text || typeof text !== 'string') return null;
   const prefixMatch = text.match(/\b(B2-[A-Za-z0-9]{3,6}|R41-[A-Za-z0-9]{3,6}|SV-[A-Za-z0-9]{3,6})\b/i);
   if (prefixMatch) return prefixMatch[1].toUpperCase();
 
-  const roomWordMatch = text.match(/(?:room|kode)\s*[:#-]?\s*([A-Za-z0-9_-]{4,8})/i);
+  const roomWordMatch = text.match(/(?:room|kode\s*room)\s*[:#-]?\s*([A-Za-z0-9_-]{4,8})/i);
   if (roomWordMatch) return roomWordMatch[1].toUpperCase();
-
-  const standaloneMatch = text.match(/\b([A-Za-z0-9]{6})\b/);
-  if (standaloneMatch) return standaloneMatch[1].toUpperCase();
 
   return null;
 }
@@ -689,6 +686,7 @@ export async function sendLobbyChatMessage({
   message,
   gameType = null,
   roomCode = null,
+  isRoomInvite = false,
 }) {
   const cleanMsg = String(message || '').trim();
   const cleanSender = String(senderName || '').trim() || 'Player';
@@ -697,8 +695,9 @@ export async function sendLobbyChatMessage({
     return { success: false, error: 'Pesan tidak boleh kosong.' };
   }
 
-  const detectedCode = roomCode || extractRoomCodeFromMessage(cleanMsg);
-  const isInvite = Boolean(detectedCode || cleanMsg.toLowerCase().includes('mabar') || cleanMsg.toLowerCase().includes('room'));
+  // Pesan biasa dari input chat TIDAK boleh otomatis jadi kartu undangan mabar.
+  // Hanya undangan eksplisit (tombol ajak mabar di lobby) yang memiliki isRoomInvite & roomCode.
+  const isInvite = Boolean(isRoomInvite && roomCode);
 
   const payload = {
     id: `lchat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -714,8 +713,8 @@ export async function sendLobbyChatMessage({
     },
     message: cleanMsg,
     type: isInvite ? 'mabar_invite' : 'chat',
-    gameType: gameType || null,
-    roomCode: detectedCode || null,
+    gameType: isInvite ? gameType : null,
+    roomCode: isInvite ? roomCode : null,
     timestamp: Date.now(),
   };
 
@@ -770,6 +769,7 @@ export async function sendPrivateChatMessage({
   tier = null,
   message,
   roomCode = null,
+  isRoomInvite = false,
 }) {
   const cleanMsg = String(message || '').trim();
   const cleanSender = String(senderName || '').trim() || 'Player';
@@ -782,7 +782,7 @@ export async function sendPrivateChatMessage({
     return { success: false, error: 'Tujuan penerima pesan tidak ditemukan.' };
   }
 
-  const detectedCode = roomCode || extractRoomCodeFromMessage(cleanMsg);
+  const isInvite = Boolean(isRoomInvite && roomCode);
 
   const payload = {
     id: `pm_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -799,7 +799,7 @@ export async function sendPrivateChatMessage({
     },
     message: cleanMsg,
     type: 'private',
-    roomCode: detectedCode || null,
+    roomCode: isInvite ? roomCode : null,
     timestamp: Date.now(),
   };
 

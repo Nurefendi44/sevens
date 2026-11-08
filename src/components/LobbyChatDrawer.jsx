@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   MessageSquare,
   Send,
@@ -279,7 +279,7 @@ export default function LobbyChatDrawer({
     const publicOnly = messages.filter((m) => m.type !== 'private' && !m.targetUsername);
     if (activeTab === 'recruit') {
       return publicOnly.filter(
-        (m) => m.type === 'mabar_invite' || Boolean(m.roomCode) || extractRoomCodeFromMessage(m.message)
+        (m) => m.type === 'mabar_invite' && Boolean(m.roomCode)
       );
     }
     return publicOnly;
@@ -670,8 +670,7 @@ export default function LobbyChatDrawer({
                           const isMe =
                             Boolean(currentDisplayName) &&
                             msg.senderName?.toLowerCase() === currentDisplayName.toLowerCase();
-                          const detectedCode =
-                            msg.roomCode || extractRoomCodeFromMessage(msg.message);
+                          const isMabarInvite = msg.type === 'mabar_invite' && Boolean(msg.roomCode);
                           const timeString = new Date(msg.timestamp || Date.now()).toLocaleTimeString(
                             [],
                             { hour: '2-digit', minute: '2-digit' }
@@ -715,17 +714,17 @@ export default function LobbyChatDrawer({
                                   </div>
                                 <div className="chat-msg-bubble">
                                   <span>{msg.message}</span>
-                                  {detectedCode && onJoinRoomFromChat && (
+                                  {isMabarInvite && onJoinRoomFromChat && (
                                     <div className="chat-room-action-box">
                                       <div className="room-action-info">
                                         <span className="room-code-title">ROOM UNDANGAN MABAR</span>
-                                        <span className="room-code-tag">{detectedCode}</span>
+                                        <span className="room-code-tag">{msg.roomCode}</span>
                                       </div>
                                       <button
                                         type="button"
                                         className="btn-join-from-chat"
                                         onClick={() => {
-                                          onJoinRoomFromChat(detectedCode);
+                                          onJoinRoomFromChat(msg.roomCode);
                                           onToggleOpen();
                                         }}
                                       >
@@ -905,7 +904,7 @@ export default function LobbyChatDrawer({
                       Boolean(currentDisplayName) &&
                       msg.senderName?.toLowerCase() === currentDisplayName.toLowerCase();
                     const isSystem = msg.type === 'system';
-                    const detectedCode = msg.roomCode || extractRoomCodeFromMessage(msg.message);
+                    const isMabarInvite = msg.type === 'mabar_invite' && Boolean(msg.roomCode);
                     const timeString = new Date(msg.timestamp || Date.now()).toLocaleTimeString(
                       [],
                       { hour: '2-digit', minute: '2-digit' }
@@ -997,18 +996,18 @@ export default function LobbyChatDrawer({
                           <div className="chat-msg-bubble">
                             <span>{msg.message}</span>
 
-                            {/* Interactive Join Room Card */}
-                            {detectedCode && onJoinRoomFromChat && (
+                            {/* Interactive Join Room Card (Hanya untuk undangan room eksplisit) */}
+                            {isMabarInvite && onJoinRoomFromChat && (
                               <div className="chat-room-action-box">
                                 <div className="room-action-info">
                                   <span className="room-code-title">ROOM MABAR ONLINE</span>
-                                  <span className="room-code-tag">{detectedCode}</span>
+                                  <span className="room-code-tag">{msg.roomCode}</span>
                                 </div>
                                 <button
                                   type="button"
                                   className="btn-join-from-chat"
                                   onClick={() => {
-                                    onJoinRoomFromChat(detectedCode);
+                                    onJoinRoomFromChat(msg.roomCode);
                                     onToggleOpen();
                                   }}
                                 >

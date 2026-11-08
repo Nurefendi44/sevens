@@ -339,6 +339,7 @@ export default function MultiplayerLobby({
         message: inviteMsg,
         gameType: activeGameType,
         roomCode: room.code,
+        isRoomInvite: true,
       });
       setSentChatInvite(true);
       setTimeout(() => setSentChatInvite(false), 3000);
