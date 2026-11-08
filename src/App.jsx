@@ -3964,6 +3964,10 @@ export default function App() {
           getLocalPlayerName()
         }
         mode="session"
+        onStartDirectChat={(player) => {
+          setShowScoreboardModal(false);
+          setDirectChatPartner(player);
+        }}
       />
 
       {/* Rules Guide Modals */}

@@ -58,8 +58,10 @@ export default function ScoreboardModal({
   currentMyName = '',
   mode = 'global', // 'global' (Menu Utama) | 'session' (Di dalam meja permainan)
   onStartDirectChat = null,
+  onOpenPrivateChat = null,
 }) {
   const isGlobalMode = mode === 'global';
+  const handleDirectChat = onStartDirectChat || onOpenPrivateChat;
   const [globalCategory, setGlobalCategory] = useState(activeGameType || 'all');
   const [globalList, setGlobalList] = useState([]);
   const [isLoadingGlobal, setIsLoadingGlobal] = useState(false);
@@ -874,13 +876,17 @@ export default function ScoreboardModal({
                                   {isMe && <span className="mlbb-you-chip">KAMU</span>}
                                   {!isMe && !isBot && (
                                     <div className="mlbb-row-actions">
-                                      {onOpenPrivateChat && (
+                                      {handleDirectChat && (
                                         <button
                                           type="button"
                                           className="btn-row-dm"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            onOpenPrivateChat(item.name);
+                                            handleDirectChat({
+                                              name: item.name,
+                                              avatar: item.avatar,
+                                              tier: tier,
+                                            });
                                           }}
                                           title={`Kirim Pesan Pribadi ke ${item.name}`}
                                         >
