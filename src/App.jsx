@@ -859,13 +859,37 @@ export default function App() {
   // ---------------------------------------------------------------------------
   // 2. SUPABASE REALTIME SUBSCRIPTION
   // ---------------------------------------------------------------------------
+  const shouldApplyIncomingBigTwoState = (prev, next) => {
+    if (!next || !next.players || !next.hands) return false;
+    if (!prev || !prev.players || !prev.hands) return true;
+    // Якщо ID match berbeda atau game baru di-restart dari GAME_OVER
+    if (next.matchId && prev.matchId && next.matchId !== prev.matchId) return true;
+    if (prev.gameStatus === 'GAME_OVER' && next.gameStatus === 'PLAYING') return true;
+    if ((next.history?.length || 0) === 1 && (prev.history?.length || 0) > 2) return true;
+
+    const prevVersion = Number(prev.stateVersion || prev.history?.length || 0);
+    const nextVersion = Number(next.stateVersion || next.history?.length || 0);
+    if (nextVersion > 0 && prevVersion > 0 && nextVersion < prevVersion) {
+      // Abaikan paket lama (out-of-order) agar kartu di tangan tidak pernah mundur / bertambah kembali
+      return false;
+    }
+    return true;
+  };
+
   useEffect(() => {
     if (gameMode !== 'multiplayer' || !currentRoom?.code) return;
 
     const unsubscribe = multiplayerAdapter.subscribeToRoom(
       currentRoom.code,
       (updatedRoom) => {
-        setCurrentRoom(updatedRoom);
+        setCurrentRoom((prevRoom) => {
+          if (!prevRoom || prevRoom.code !== updatedRoom.code) return updatedRoom;
+          return {
+            ...prevRoom,
+            ...updatedRoom,
+            players: updatedRoom.players || prevRoom.players,
+          };
+        });
 
         if (updatedRoom.status === 'lobby') {
           // Reset local in-game state when returning to lobby
@@ -883,7 +907,7 @@ export default function App() {
           getGameTypeFromRoomCode(updatedRoom.code) ||
           activeGameType;
 
-        if (nextState?.firstTurnWheel?.isOpen) {
+        if (nextState?.firstTurnWheel?.isOpen && (nextState?.history?.length || 0) <= 1) {
           const wheelKey = `${nextState.firstTurnWheel.targetPlayerId}_${nextState.gameType || detectedType}`;
           if (completedWheelKeyRef.current !== wheelKey) {
             setPendingBigTwoWheel(nextState.firstTurnWheel);
@@ -904,7 +928,9 @@ export default function App() {
                 const rType = fullState.gameType || detectedType;
                 if (rType === 'bigtwo') {
                   setActiveGameType('bigtwo');
-                  setGameStateBigtwo(fullState);
+                  setGameStateBigtwo((prev) =>
+                    shouldApplyIncomingBigTwoState(prev, fullState) ? fullState : prev
+                  );
                   if (fullState.gameStatus === 'GAME_OVER') audio.victorySound();
                 } else if (rType === 'game41') {
                   setActiveGameType('game41');
@@ -927,21 +953,30 @@ export default function App() {
           if (detectedType === 'bigtwo') {
             setActiveGameType('bigtwo');
             if (nextState.players && nextState.hands) {
-              setGameStateBigtwo(nextState);
-              if (nextState.lastAction) {
-                setRecentActionPopup(nextState.lastAction);
-                if (nextState.lastAction.type === 'PLAY_COMBO') audio.playCardSound();
-                else if (nextState.lastAction.type === 'PASS') audio.closeCardSound();
-              }
-              if (nextState.gameStatus === 'GAME_OVER') {
-                audio.victorySound();
-              }
-              setCurrentRoom(updatedRoom);
+              setGameStateBigtwo((prev) => {
+                if (!shouldApplyIncomingBigTwoState(prev, nextState)) return prev;
+                if (nextState.lastAction) {
+                  setRecentActionPopup(nextState.lastAction);
+                  if (nextState.lastAction.type === 'PLAY_COMBO') audio.playCardSound();
+                  else if (nextState.lastAction.type === 'PASS') audio.closeCardSound();
+                }
+                if (nextState.gameStatus === 'GAME_OVER') {
+                  audio.victorySound();
+                }
+                return nextState;
+              });
+              setCurrentRoom((prevRoom) => ({
+                ...(prevRoom || {}),
+                ...updatedRoom,
+                players: updatedRoom.players || prevRoom?.players || nextState.players,
+              }));
             } else if (updatedRoom.status === 'playing' || updatedRoom.status === 'game_over') {
               // Realtime payload might be compact/truncated; fetch full record immediately
               multiplayerAdapter.getRoom(currentRoom.code).then(({ room }) => {
                 if (room?.game_state?.players && room?.game_state?.hands) {
-                  setGameStateBigtwo(room.game_state);
+                  setGameStateBigtwo((prev) =>
+                    shouldApplyIncomingBigTwoState(prev, room.game_state) ? room.game_state : prev
+                  );
                   if (room.game_state.gameStatus === 'GAME_OVER') {
                     audio.victorySound();
                   }
@@ -1086,13 +1121,13 @@ export default function App() {
     if (res.success) {
       setCurrentRoom(res.room);
       setMyPlayerId(res.player.id);
-      // Clean reset game engine states for fresh waiting room
+      // Clean reset game engine states for fresh waiting room (jangan buat kartu lokal palsu saat di lobby)
       if (gameType === 'bigtwo') {
         setActiveGameType('bigtwo');
-        setGameStateBigtwo(initBigTwo({ playerCount: maxPlayers, deckMode: options?.deckMode || 'single' }));
+        setGameStateBigtwo({});
       } else if (gameType === 'game41') {
         setActiveGameType('game41');
-        setGameState41(initGame41({ playerCount: maxPlayers }));
+        setGameState41({});
       } else {
         setActiveGameType('sevens');
         setGameState(initGame({ ...gameConfig, playerCount: maxPlayers }));
@@ -1154,12 +1189,12 @@ export default function App() {
         setGameState(res.room.game_state);
       }
     } else {
-      // Room still in lobby: initialize fresh engine state with clean roster
+      // Room still in lobby: biarkan state meja kosong sampai Host benar-benar memulai permainan
       const capacity = res.room.game_state?.config?.playerCount || 4;
       if (roomGame === 'bigtwo') {
-        setGameStateBigtwo(initBigTwo({ playerCount: capacity, deckMode: res.room.game_state?.config?.deckMode || 'single' }));
+        setGameStateBigtwo({});
       } else if (roomGame === 'game41') {
-        setGameState41(initGame41({ playerCount: capacity }));
+        setGameState41({});
       } else {
         setGameState(initGame({ ...gameConfig, playerCount: capacity }));
       }
@@ -1916,14 +1951,21 @@ export default function App() {
 
   // AFK & Turn Timer tracking (120 seconds = 2 minutes -> auto-switch to Bot AI like Mobile Legends for all games)
   useEffect(() => {
+    const isPreGameOverlay =
+      isDealingAnimationActive ||
+      Boolean(pendingBigTwoWheel) ||
+      Boolean(bigTwoWheelPicker?.isOpen) ||
+      (isMultiplayerMode && currentRoom?.status !== 'playing');
+
     const isGameOver =
       activeGameType === 'bigtwo'
-        ? gameStateBigtwo?.gameStatus === 'GAME_OVER' || bigTwoWheelPicker?.isOpen
+        ? gameStateBigtwo?.gameStatus === 'GAME_OVER'
         : activeGameType === 'game41'
         ? gameState41?.gameStatus === 'GAME_OVER' || gameState41?.gameStatus === 'game_over'
         : gameState?.gameStatus === GAME_STATUS.GAME_OVER;
 
-    if (isGameOver) {
+    if (isPreGameOverlay || isGameOver) {
+      turnStartTimeRef.current = Date.now();
       setTurnElapsed(0);
       return;
     }
@@ -1935,21 +1977,23 @@ export default function App() {
         ? gameState41?.currentPlayer
         : gameState?.currentPlayer;
 
-    const currentTurnStartedAt =
+    const turnStep =
       activeGameType === 'bigtwo'
-        ? gameStateBigtwo?.turnStartedAt
+        ? gameStateBigtwo?.stateVersion || gameStateBigtwo?.history?.length || 0
         : activeGameType === 'game41'
-        ? gameState41?.turnStartedAt
-        : gameState?.turnStartedAt;
+        ? `${gameState41?.turnNumber || 0}_${gameState41?.turnPhase || ''}`
+        : gameState?.turnNumber || 0;
 
-    if (prevTurnPlayerIdRef.current !== currentId) {
-      prevTurnPlayerIdRef.current = currentId;
-      turnStartTimeRef.current = currentTurnStartedAt || Date.now();
+    // Gunakan tanda tangan giliran + jam lokal perangkat ini (mencegah bug selisih jam antar HP/PC yang memicu Bot AFK instan)
+    const turnSignature = `${activeGameType}_${currentId}_${turnStep}`;
+    if (prevTurnPlayerIdRef.current !== turnSignature) {
+      prevTurnPlayerIdRef.current = turnSignature;
+      turnStartTimeRef.current = Date.now();
       setTurnElapsed(0);
     }
 
     const interval = setInterval(() => {
-      const startTime = currentTurnStartedAt || turnStartTimeRef.current;
+      const startTime = turnStartTimeRef.current;
       const elapsed = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
       setTurnElapsed(elapsed);
 
@@ -1963,22 +2007,21 @@ export default function App() {
       const currentPlayerObj = currentPlayers?.find((p) => p.id === currentId);
       const isHumanTurn = currentPlayerObj && !currentPlayerObj.isBot && !currentPlayerObj.isBotTakeover;
 
-      if (isHumanTurn && elapsed >= 120) {
-        const turnKey = `${activeGameType}_${currentId}_${startTime}`;
-        if (!afkTriggeredTurnRef.current.has(turnKey)) {
-          afkTriggeredTurnRef.current.add(turnKey);
+      const isMyActiveTurn = isMultiplayerMode
+        ? currentId === myPlayerId
+        : isSingleMode
+        ? currentId === SINGLE_HUMAN_ID
+        : true;
 
-          // Determine who should trigger takeover:
-          // 1. Viewer is the active player (myPlayerId in MP, or SINGLE_HUMAN_ID in single, or local mode)
-          // 2. OR Host in multiplayer (safety net if guest closed tab or is unresponsive)
-          const isMyActiveTurn = isMultiplayerMode
-            ? currentId === myPlayerId
-            : isSingleMode
-            ? currentId === SINGLE_HUMAN_ID
-            : true;
+      // Pemain aktif memicu pada 120s; Host memicu pada 125s sebagai jaring pengaman jika tab pemain tertutup
+      const threshold = isMyActiveTurn ? 120 : 125;
+
+      if (isHumanTurn && elapsed >= threshold) {
+        if (!afkTriggeredTurnRef.current.has(turnSignature)) {
+          afkTriggeredTurnRef.current.add(turnSignature);
 
           if (isMyActiveTurn || (isHost && isMultiplayerMode)) {
-            console.log(`[AFK AUTO-TAKEOVER] [${activeGameType}] Pemain ${currentPlayerObj?.name || currentId} (${currentId}) AFK > 120s. Langsung dialihkan ke Bot AI.`);
+            console.log(`[AFK AUTO-TAKEOVER] [${activeGameType}] Pemain ${currentPlayerObj?.name || currentId} (${currentId}) AFK > ${threshold}s. Langsung dialihkan ke Bot AI.`);
             handleSetBotTakeover(currentId, true);
           }
         }
@@ -1988,16 +2031,21 @@ export default function App() {
     return () => clearInterval(interval);
   }, [
     activeGameType,
+    isDealingAnimationActive,
+    pendingBigTwoWheel,
+    bigTwoWheelPicker?.isOpen,
+    currentRoom?.status,
     gameState?.currentPlayer,
-    gameState?.turnStartedAt,
+    gameState?.turnNumber,
     gameState?.gameStatus,
     gameState41?.currentPlayer,
-    gameState41?.turnStartedAt,
+    gameState41?.turnNumber,
+    gameState41?.turnPhase,
     gameState41?.gameStatus,
     gameStateBigtwo?.currentPlayer,
-    gameStateBigtwo?.turnStartedAt,
+    gameStateBigtwo?.stateVersion,
+    gameStateBigtwo?.history?.length,
     gameStateBigtwo?.gameStatus,
-    bigTwoWheelPicker?.isOpen,
     myPlayerId,
     isHost,
     isMultiplayerMode,
@@ -2315,43 +2363,74 @@ export default function App() {
       completedWheelKeyRef.current = `${wheelData.targetPlayerId}_${targetGame}`;
     }
 
+    // Reset waktu giliran lokal setelah roda selesai berputar
+    turnStartTimeRef.current = Date.now();
+    setTurnElapsed(0);
+    afkTriggeredTurnRef.current.clear();
+
     if (targetGame === 'bigtwo') {
-      const chosenPlayer = gameStateBigtwo.players?.find((p) => p.id === selectedPlayerId);
+      const latestBigtwo = gameStateBigtwoRef.current || gameStateBigtwo;
+      const chosenPlayer = latestBigtwo.players?.find((p) => p.id === selectedPlayerId);
       showToast(`🎯 Giliran Pertama: ${chosenPlayer?.name || 'Pemain'} (Meja Bebas)!`);
-      const updatedState = {
-        ...gameStateBigtwo,
-        currentPlayer: selectedPlayerId,
-        trickLeaderId: selectedPlayerId,
-        currentTrick: { cards: [], combo: null, playedBy: null, playedByName: null },
-        passedPlayers: [],
-        firstTurnWheel: null,
-      };
+      // Hanya atur giliran awal jika belum ada kartu yang dimainkan
+      const hasMovesPlayed = (latestBigtwo.history?.length || 0) > 1;
+      const updatedState = hasMovesPlayed
+        ? {
+            ...latestBigtwo,
+            firstTurnWheel: null,
+          }
+        : {
+            ...latestBigtwo,
+            stateVersion: (latestBigtwo.stateVersion || 1) + 1,
+            currentPlayer: selectedPlayerId,
+            trickLeaderId: selectedPlayerId,
+            currentTrick: { cards: [], combo: null, playedBy: null, playedByName: null },
+            passedPlayers: [],
+            turnStartedAt: Date.now(),
+            firstTurnWheel: null,
+          };
       setGameStateBigtwo(updatedState);
-      if (isMultiplayerMode && currentRoom?.code && isHost) {
+      if (isMultiplayerMode && currentRoom?.code && isHost && !hasMovesPlayed) {
         await multiplayerAdapter.syncGameState(currentRoom.code, updatedState);
       }
     } else if (targetGame === 'game41') {
-      const chosenPlayer = gameState41.players?.find((p) => p.id === selectedPlayerId);
+      const latest41 = gameState41Ref.current || gameState41;
+      const chosenPlayer = latest41.players?.find((p) => p.id === selectedPlayerId);
       showToast(`🎯 Giliran Pertama: ${chosenPlayer?.name || 'Pemain'} (Ambil Kartu Pertama)!`);
-      const updatedState = {
-        ...gameState41,
-        currentPlayer: selectedPlayerId,
-        firstTurnWheel: null,
-      };
+      const hasMovesPlayed = (latest41.turnNumber || 1) > 1;
+      const updatedState = hasMovesPlayed
+        ? {
+            ...latest41,
+            firstTurnWheel: null,
+          }
+        : {
+            ...latest41,
+            currentPlayer: selectedPlayerId,
+            turnStartedAt: Date.now(),
+            firstTurnWheel: null,
+          };
       setGameState41(updatedState);
-      if (isMultiplayerMode && currentRoom?.code && isHost) {
+      if (isMultiplayerMode && currentRoom?.code && isHost && !hasMovesPlayed) {
         await multiplayerAdapter.syncGameState(currentRoom.code, updatedState);
       }
     } else {
-      const chosenPlayer = gameState.players?.find((p) => p.id === selectedPlayerId);
+      const latestSevens = gameStateRef.current || gameState;
+      const chosenPlayer = latestSevens.players?.find((p) => p.id === selectedPlayerId);
       showToast(`🎯 Giliran Pertama: ${chosenPlayer?.name || 'Pemain'}!`);
-      const updatedState = {
-        ...gameState,
-        currentPlayer: selectedPlayerId,
-        firstTurnWheel: null,
-      };
+      const hasMovesPlayed = Boolean(latestSevens.firstMoveMade || (latestSevens.turnNumber || 1) > 1);
+      const updatedState = hasMovesPlayed
+        ? {
+            ...latestSevens,
+            firstTurnWheel: null,
+          }
+        : {
+            ...latestSevens,
+            currentPlayer: selectedPlayerId,
+            turnStartedAt: Date.now(),
+            firstTurnWheel: null,
+          };
       setGameState(updatedState);
-      if (isMultiplayerMode && currentRoom?.code && isHost) {
+      if (isMultiplayerMode && currentRoom?.code && isHost && !hasMovesPlayed) {
         await multiplayerAdapter.syncGameState(currentRoom.code, updatedState);
       }
     }
@@ -2466,8 +2545,12 @@ export default function App() {
       currentRoom?.host_id === myPlayerId &&
       currentRoom?.status === 'playing';
     const canDriveBots = isSingleMode || isMultiplayerHost || gameMode === 'local';
+    const isPreGameOverlay =
+      isDealingAnimationActive ||
+      Boolean(pendingBigTwoWheel) ||
+      Boolean(bigTwoWheelPicker?.isOpen);
 
-    if (!canDriveBots) {
+    if (!canDriveBots || isPreGameOverlay) {
       setBotThinking(null);
       if (botTimerRef.current) {
         clearTimeout(botTimerRef.current);
@@ -2613,9 +2696,12 @@ export default function App() {
     gameStateBigtwo?.currentTrick,
     gameStateBigtwo?.players?.find((p) => p.id === gameStateBigtwo?.currentPlayer)?.isBotTakeover,
     bigTwoWheelPicker?.isOpen,
+    isDealingAnimationActive,
+    pendingBigTwoWheel,
     isMultiplayerMode,
     isSingleMode,
     currentRoom?.host_id,
+    currentRoom?.status,
     myPlayerId,
   ]);
 
@@ -3876,6 +3962,8 @@ export default function App() {
           onComplete={handleBigTwoWheelComplete}
           onClose={() => setBigTwoWheelPicker(null)}
           onRespin={handleBigTwoRespin}
+          isMultiplayer={isMultiplayerMode}
+          isHost={isHost}
           gameType={bigTwoWheelPicker.gameType || activeGameType}
         />
       )}

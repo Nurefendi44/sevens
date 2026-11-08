@@ -152,6 +152,8 @@ export function initBigTwo(configOverrides = {}, customPlayers = null) {
 
   const initialState = {
     gameType: 'bigtwo',
+    matchId: `b2_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    stateVersion: 1,
     deckMode: config.deckMode,
     config,
     players,
@@ -393,6 +395,8 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
 
       const finishedState = {
         ...gameState,
+        stateVersion: (gameState.stateVersion || 1) + 1,
+        firstTurnWheel: null,
         hands: updatedHands,
         currentTrick: {
           cards: selectedCards,
@@ -518,6 +522,8 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
 
       const finalState = {
         ...gameState,
+        stateVersion: (gameState.stateVersion || 1) + 1,
+        firstTurnWheel: null,
         hands: updatedHands,
         currentTrick: {
           cards: selectedCards,
@@ -575,6 +581,8 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
 
     const nextGameState = {
       ...gameState,
+      stateVersion: (gameState.stateVersion || 1) + 1,
+      firstTurnWheel: null,
       hands: updatedHands,
       finishedPlayers: nextFinishedPlayers,
       currentTrick: clearedTable
@@ -620,6 +628,8 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
 
     const clearedNextState = {
       ...gameState,
+      stateVersion: (gameState.stateVersion || 1) + 1,
+      firstTurnWheel: null,
       hands: updatedHands,
       currentTrick: {
         cards: [],
@@ -660,6 +670,8 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
 
   const nextState = {
     ...gameState,
+    stateVersion: (gameState.stateVersion || 1) + 1,
+    firstTurnWheel: null,
     hands: updatedHands,
     currentTrick: {
       cards: selectedCards,
@@ -734,6 +746,8 @@ export function passTurnBigTwo(gameState, playerId) {
 
     const clearedState = {
       ...gameState,
+      stateVersion: (gameState.stateVersion || 1) + 1,
+      firstTurnWheel: null,
       currentTrick: {
         cards: [],
         combo: null,
@@ -770,6 +784,8 @@ export function passTurnBigTwo(gameState, playerId) {
 
   const nextState = {
     ...gameState,
+    stateVersion: (gameState.stateVersion || 1) + 1,
+    firstTurnWheel: null,
     passedPlayers: updatedPassed,
     consecutivePassCount: (gameState.consecutivePassCount || 0) + 1,
     currentPlayer: nextPlayer.id,
@@ -817,6 +833,7 @@ export function setBotTakeoverBigTwo(gameState, playerId, isTakeover = true) {
 
   return {
     ...gameState,
+    stateVersion: (gameState.stateVersion || 1) + 1,
     players: updatedPlayers,
     turnStartedAt: Date.now(),
     history: [

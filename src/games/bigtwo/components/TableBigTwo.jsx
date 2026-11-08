@@ -70,7 +70,8 @@ export default function TableBigTwo({
     gameState.players &&
     Array.isArray(gameState.players) &&
     gameState.players.length > 0 &&
-    gameState.hands
+    gameState.hands &&
+    (!isMultiplayer || !myPlayerId || gameState.players.some((p) => p.id === myPlayerId))
   );
 
   if (!isGameReady) {

@@ -934,7 +934,25 @@ export const multiplayerAdapter = {
       return { success: false, error: 'Room sedang berubah, coba mulai lagi.' };
     }
 
+    this.broadcastRoomState(code, startedRows[0]);
     return { success: true, room: startedRows[0], gameState };
+  },
+
+  /**
+   * Broadcasts full room state directly over WebSocket channel (bypasses Postgres >8KB TOAST truncation for 104-card Double Deck)
+   */
+  async broadcastRoomState(roomCode, roomRecord) {
+    if (!supabase || !roomCode || !roomRecord) return;
+    const code = roomCode.trim().toUpperCase();
+    const ch = this.activeChannels[code];
+    if (!ch) return;
+    try {
+      await ch.send({
+        type: 'broadcast',
+        event: 'room_state_sync',
+        payload: roomRecord,
+      });
+    } catch {}
   },
 
   /**
@@ -948,6 +966,14 @@ export const multiplayerAdapter = {
       nextGameState.gameStatus === 'GAME_OVER' ||
       nextGameState.gameStatus === 'game_over';
     const nextStatus = isOver ? 'game_over' : 'playing';
+
+    // Broadcast immediately via WebSocket so 104-card Double Deck state arrives without TOAST delay
+    this.broadcastRoomState(code, {
+      code,
+      status: nextStatus,
+      game_state: nextGameState,
+      updated_at: new Date().toISOString(),
+    });
 
     const { error } = await supabase
       .from('rooms')
@@ -1056,14 +1082,26 @@ export const multiplayerAdapter = {
       delete nextGameState.config.sessionScores;
     }
 
-    await supabase
+    const { data: restartedRoom } = await supabase
       .from('rooms')
       .update({
         status: 'playing',
         game_state: nextGameState,
         updated_at: new Date().toISOString(),
       })
-      .eq('code', code);
+      .eq('code', code)
+      .select()
+      .maybeSingle();
+
+    this.broadcastRoomState(
+      code,
+      restartedRoom || {
+        code,
+        status: 'playing',
+        game_state: nextGameState,
+        updated_at: new Date().toISOString(),
+      }
+    );
 
     return { success: true, gameState: nextGameState };
   },
@@ -1141,9 +1179,9 @@ export const multiplayerAdapter = {
   },
 
   /**
-   * Sets or clears Bot Takeover for an AFK player
+   * Sets or clears Bot Takeover for an AFK player (with optimistic lock so concurrent card plays are never overwritten)
    */
-  async toggleBotTakeover(roomCode, playerId, isTakeover = true) {
+  async toggleBotTakeover(roomCode, playerId, isTakeover = true, _attempt = 0) {
     if (!supabase) return { success: false, error: 'Supabase offline' };
     const { room, error } = await this.getRoom(roomCode);
     if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
@@ -1166,12 +1204,13 @@ export const multiplayerAdapter = {
       });
       updatedGameState = {
         ...updatedGameState,
+        stateVersion: (updatedGameState.stateVersion || 1) + 1,
         players: gsPlayers,
         turnStartedAt: Date.now(),
       };
     }
 
-    const { data: updatedRoom, error: updateErr } = await supabase
+    const { data: updatedRows, error: updateErr } = await supabase
       .from('rooms')
       .update({
         players: updatedPlayers,
@@ -1179,14 +1218,22 @@ export const multiplayerAdapter = {
         updated_at: new Date().toISOString(),
       })
       .eq('code', code)
-      .select()
-      .single();
+      .eq('updated_at', room.updated_at)
+      .select();
 
     if (updateErr) {
       return { success: false, error: updateErr.message };
     }
 
-    return { success: true, room: updatedRoom };
+    if (!updatedRows || updatedRows.length === 0) {
+      if (_attempt < 4) {
+        return this.toggleBotTakeover(roomCode, playerId, isTakeover, _attempt + 1);
+      }
+      return { success: false, error: 'Status permainan sedang diperbarui, coba lagi.' };
+    }
+
+    this.broadcastRoomState(code, updatedRows[0]);
+    return { success: true, room: updatedRows[0] };
   },
 
   /**
@@ -1499,6 +1546,11 @@ export const multiplayerAdapter = {
           }
         }
       )
+      .on('broadcast', { event: 'room_state_sync' }, ({ payload }) => {
+        if (payload && payload.game_state && onRoomUpdate) {
+          onRoomUpdate(payload);
+        }
+      })
       .on('broadcast', { event: 'room_chat' }, ({ payload }) => {
         if (onChatMessage && payload) {
           onChatMessage(payload);

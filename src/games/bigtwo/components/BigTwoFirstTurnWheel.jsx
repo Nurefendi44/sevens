@@ -34,6 +34,11 @@ export default function BigTwoFirstTurnWheel({
   const lastTickDegRef = useRef(0);
   const animFrameRef = useRef(null);
   const countdownIntervalRef = useRef(null);
+  const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   const playerCount = Math.max(1, players.length);
   const sliceAngle = 360 / playerCount;
@@ -163,7 +168,7 @@ export default function BigTwoFirstTurnWheel({
           count -= 1;
           if (count <= 0) {
             clearInterval(countdownIntervalRef.current);
-            if (onComplete) onComplete(winningP.id);
+            if (onCompleteRef.current) onCompleteRef.current(winningP.id);
           } else {
             setCountdown(count);
           }
