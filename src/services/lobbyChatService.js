@@ -7,7 +7,7 @@
 
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { audio } from './audioService';
-import { getPlayerRankTier } from './leaderboardService';
+import { getPlayerRankTier, cachePlayerAvatar, getCachedPlayerAvatar } from './leaderboardService';
 
 const STORAGE_KEY = 'royal_cards_global_lobby_chat_v1';
 const PM_STORAGE_PREFIX = 'royal_cards_pm_history_v1_';
@@ -271,53 +271,103 @@ function removeStoredPrivateChat(myUsername, partnerUsername, id) {
   } catch (e) {}
 }
 
+let cachedGlobalChatRecord = null;
+let lastGlobalChatFetchAt = 0;
+let inflightGlobalChatFetch = null;
+
+function stripBase64AvatarForWire(msg) {
+  if (!msg || typeof msg !== 'object') return msg;
+  if (typeof msg.avatar === 'string' && msg.avatar.startsWith('data:image/')) {
+    if (msg.senderName) cachePlayerAvatar(msg.senderName, msg.avatar);
+    return { ...msg, avatar: '👑' };
+  }
+  return msg;
+}
+
+function hydrateChatAvatar(msg) {
+  if (!msg || typeof msg !== 'object') return msg;
+  if (typeof msg.avatar === 'string' && msg.avatar.startsWith('data:image/')) {
+    if (msg.senderName) cachePlayerAvatar(msg.senderName, msg.avatar);
+    return msg;
+  }
+  const cached = msg.senderName ? getCachedPlayerAvatar(msg.senderName) : null;
+  if (cached) {
+    return { ...msg, avatar: cached };
+  }
+  return msg;
+}
+
 /**
  * Ambil atau buat record penyimpanan riwayat chat global di Supabase (`rooms` dengan `code = '__GCHAT__'`).
  * Memastikan riwayat obrolan global, ajakan mabar room, dan DM tetap muncul meski dibuka di Incognito / perangkat baru.
  */
-async function fetchOrCreateGlobalChatRecord() {
+async function fetchOrCreateGlobalChatRecord(forceRefresh = false) {
   if (!isSupabaseConfigured || !supabase) return null;
-  try {
-    const { data: existing, error } = await supabase
-      .from('rooms')
-      .select('id, code, game_state')
-      .eq('code', GLOBAL_CHAT_ROOM_CODE)
-      .maybeSingle();
-
-    if (!error && existing) {
-      return existing;
-    }
-
-    const initialState = {
-      publicMessages: [],
-      privateMessages: [],
-      retractedIds: [],
-    };
-
-    const { data: created, error: insertErr } = await supabase
-      .from('rooms')
-      .insert({
-        code: GLOBAL_CHAT_ROOM_CODE,
-        host_id: 'system_global_chat',
-        status: 'system_chat',
-        players: [],
-        game_state: initialState,
-      })
-      .select('id, code, game_state')
-      .single();
-
-    if (!insertErr && created) return created;
-
-    // Jika gagal insert karena race condition (sudah dibuat klien lain), ambil ulang
-    const { data: retry } = await supabase
-      .from('rooms')
-      .select('id, code, game_state')
-      .eq('code', GLOBAL_CHAT_ROOM_CODE)
-      .maybeSingle();
-    return retry || null;
-  } catch (e) {
-    return null;
+  const now = Date.now();
+  if (!forceRefresh && cachedGlobalChatRecord && now - lastGlobalChatFetchAt < 45000) {
+    return cachedGlobalChatRecord;
   }
+  if (!forceRefresh && inflightGlobalChatFetch) {
+    return inflightGlobalChatFetch;
+  }
+
+  inflightGlobalChatFetch = (async () => {
+    try {
+      const { data: existing, error } = await supabase
+        .from('rooms')
+        .select('id, code, game_state')
+        .eq('code', GLOBAL_CHAT_ROOM_CODE)
+        .maybeSingle();
+
+      if (!error && existing) {
+        cachedGlobalChatRecord = existing;
+        lastGlobalChatFetchAt = Date.now();
+        return existing;
+      }
+
+      const initialState = {
+        publicMessages: [],
+        privateMessages: [],
+        retractedIds: [],
+      };
+
+      const { data: created, error: insertErr } = await supabase
+        .from('rooms')
+        .insert({
+          code: GLOBAL_CHAT_ROOM_CODE,
+          host_id: 'system_global_chat',
+          status: 'system_chat',
+          players: [],
+          game_state: initialState,
+        })
+        .select('id, code, game_state')
+        .single();
+
+      if (!insertErr && created) {
+        cachedGlobalChatRecord = created;
+        lastGlobalChatFetchAt = Date.now();
+        return created;
+      }
+
+      // Jika gagal insert karena race condition (sudah dibuat klien lain), ambil ulang
+      const { data: retry } = await supabase
+        .from('rooms')
+        .select('id, code, game_state')
+        .eq('code', GLOBAL_CHAT_ROOM_CODE)
+        .maybeSingle();
+      if (retry) {
+        cachedGlobalChatRecord = retry;
+        lastGlobalChatFetchAt = Date.now();
+      }
+      return retry || null;
+    } catch (e) {
+      return null;
+    } finally {
+      inflightGlobalChatFetch = null;
+    }
+  })();
+
+  return inflightGlobalChatFetch;
 }
 
 // In-memory active channel reference (kept alive across screen transitions)
@@ -345,17 +395,21 @@ function applyRemoteGlobalChatState(gs, usernameOverride = '') {
   // Dekripsi pesan remote dan buang pesan yang lebih lama dari clearedAt
   const remotePublic = rawRemotePublic
     .filter((m) => m && (!clearedAt || (m.timestamp || 0) > clearedAt))
-    .map((m) => ({
-      ...m,
-      message: decryptChatMessage(m.message),
-    }));
+    .map((m) =>
+      hydrateChatAvatar({
+        ...m,
+        message: decryptChatMessage(m.message),
+      })
+    );
 
   const remotePrivate = rawRemotePrivate
     .filter((m) => m && (!clearedAt || (m.timestamp || 0) > clearedAt))
-    .map((m) => ({
-      ...m,
-      message: decryptChatMessage(m.message),
-    }));
+    .map((m) =>
+      hydrateChatAvatar({
+        ...m,
+        message: decryptChatMessage(m.message),
+      })
+    );
 
   const localPublic = getStoredLobbyChats().filter(
     (m) => m && (!clearedAt || (m.timestamp || 0) > clearedAt)
@@ -462,14 +516,14 @@ function applyRemoteGlobalChatState(gs, usernameOverride = '') {
 
 /**
  * Simpan perubahan pesan (tambah publik, tambah DM, atau tarik pesan) ke server Supabase secara berurutan (antrean)
- * Seluruh isi pesan dienkripsi sebelum dikirim dan disimpan ke tabel Supabase.
+ * Seluruh isi pesan dienkripsi sebelum dikirim dan disimpan ke tabel Supabase, dan gambar Base64 dilepas agar tidak membengkakkan Egress.
  */
 function persistChatChangeToServer({ addPublic = null, addPrivate = null, retractId = null } = {}) {
   if (!isSupabaseConfigured || !supabase) return Promise.resolve();
 
   const runPersist = async () => {
     try {
-      const record = await fetchOrCreateGlobalChatRecord();
+      const record = cachedGlobalChatRecord || (await fetchOrCreateGlobalChatRecord());
       if (!record) return;
 
       const gs = record.game_state || {};
@@ -499,7 +553,7 @@ function persistChatChangeToServer({ addPublic = null, addPrivate = null, retrac
       if (addPublic && addPublic.id && !retractedSet.has(addPublic.id)) {
         if (!publicList.some((m) => m && m.id === addPublic.id)) {
           publicList.push({
-            ...addPublic,
+            ...stripBase64AvatarForWire(addPublic),
             message: decryptChatMessage(addPublic.message),
           });
         }
@@ -508,7 +562,7 @@ function persistChatChangeToServer({ addPublic = null, addPrivate = null, retrac
       if (addPrivate && addPrivate.id && !retractedSet.has(addPrivate.id)) {
         if (!privateList.some((m) => m && m.id === addPrivate.id)) {
           privateList.push({
-            ...addPrivate,
+            ...stripBase64AvatarForWire(addPrivate),
             message: decryptChatMessage(addPrivate.message),
           });
         }
@@ -540,32 +594,36 @@ function persistChatChangeToServer({ addPublic = null, addPrivate = null, retrac
         .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
         .slice(-MAX_PRIVATE_MESSAGES);
 
-      // Enkripsi seluruh isi pesan sebelum disimpan ke database Supabase
+      // Enkripsi seluruh isi pesan & lepas avatar Base64 sebelum disimpan ke database Supabase
       const encryptedPublicList = publicList.map((m) => {
-        if (!m || !m.message) return m;
+        if (!m || !m.message) return stripBase64AvatarForWire(m);
         return {
-          ...m,
+          ...stripBase64AvatarForWire(m),
           message: encryptChatMessage(m.message),
         };
       });
 
       const encryptedPrivateList = privateList.map((m) => {
-        if (!m || !m.message) return m;
+        if (!m || !m.message) return stripBase64AvatarForWire(m);
         return {
-          ...m,
+          ...stripBase64AvatarForWire(m),
           message: encryptChatMessage(m.message),
         };
       });
 
+      const nextGs = {
+        publicMessages: encryptedPublicList,
+        privateMessages: encryptedPrivateList,
+        retractedIds: retractedList,
+        clearedAt: gs.clearedAt || null,
+      };
+      cachedGlobalChatRecord = { ...record, game_state: nextGs };
+      lastGlobalChatFetchAt = Date.now();
+
       await supabase
         .from('rooms')
         .update({
-          game_state: {
-            publicMessages: encryptedPublicList,
-            privateMessages: encryptedPrivateList,
-            retractedIds: retractedList,
-            clearedAt: gs.clearedAt || null,
-          },
+          game_state: nextGs,
           updated_at: new Date().toISOString(),
         })
         .eq('code', GLOBAL_CHAT_ROOM_CODE);
@@ -902,7 +960,7 @@ export function appendStoredPrivateChat(myUsername, partnerUsername, messageObj)
 }
 
 /**
- * Pastikan channel `global_lobby_chat` aktif dengan seluruh listener broadcast & postgres_changes (`__GCHAT__`)
+ * Pastikan channel `global_lobby_chat` aktif dengan seluruh listener broadcast (tanpa postgres_changes `__GCHAT__` yang membengkakkan Egress)
  */
 function ensureLobbyChannel() {
   if (!isSupabaseConfigured || !supabase) return Promise.resolve(null);
@@ -929,7 +987,10 @@ function ensureLobbyChannel() {
       })
       .on('broadcast', { event: 'lobby_chat_message' }, ({ payload }) => {
         if (!payload || !payload.id) return;
-        const decrypted = { ...payload, message: decryptChatMessage(payload.message) };
+        const decrypted = hydrateChatAvatar({
+          ...payload,
+          message: decryptChatMessage(payload.message),
+        });
         appendStoredLobbyChat(decrypted);
         try {
           audio.playChatPopSound();
@@ -1005,7 +1066,10 @@ function ensureLobbyChannel() {
         const isForMe = myNameNorm && (targetNorm === myNameNorm || senderNorm === myNameNorm);
         if (!isForMe) return;
 
-        const decrypted = { ...payload, message: decryptChatMessage(payload.message) };
+        const decrypted = hydrateChatAvatar({
+          ...payload,
+          message: decryptChatMessage(payload.message),
+        });
         const partnerName = senderNorm === myNameNorm ? decrypted.targetUsername : decrypted.senderName;
         appendStoredPrivateChat(myNameNorm, partnerName, decrypted);
 
@@ -1021,21 +1085,6 @@ function ensureLobbyChannel() {
           }
         });
       })
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'rooms',
-          filter: `code=eq.${GLOBAL_CHAT_ROOM_CODE}`,
-        },
-        (changePayload) => {
-          const newGs = changePayload?.new?.game_state;
-          if (newGs) {
-            applyRemoteGlobalChatState(newGs, currentSubscribedUsername);
-          }
-        }
-      )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           clearTimeout(timeout);
@@ -1065,6 +1114,13 @@ export function subscribeToLobbyChat(onNewMessage, currentUsername = '') {
 
   return () => {
     activeSubscribers.delete(onNewMessage);
+    if (activeSubscribers.size === 0 && lobbyChannel && supabase) {
+      try {
+        supabase.removeChannel(lobbyChannel);
+      } catch {}
+      lobbyChannel = null;
+      lobbyChannelReadyPromise = null;
+    }
   };
 }
 
@@ -1130,7 +1186,7 @@ export async function sendLobbyChatMessage({
     } catch {}
   }
 
-  // 3. Broadcast to Supabase Realtime channel & persist to server
+  // 3. Broadcast to Supabase Realtime channel (without heavy Base64 avatar) & persist to server
   if (isSupabaseConfigured && supabase) {
     try {
       const ch = await ensureLobbyChannel();
@@ -1138,7 +1194,7 @@ export async function sendLobbyChatMessage({
         await ch.send({
           type: 'broadcast',
           event: 'lobby_chat_message',
-          payload,
+          payload: stripBase64AvatarForWire(payload),
         });
       }
     } catch (err) {
@@ -1215,7 +1271,7 @@ export async function sendPrivateChatMessage({
     } catch {}
   }
 
-  // 3. Broadcast to Supabase Realtime channel & persist to server
+  // 3. Broadcast to Supabase Realtime channel (without heavy Base64 avatar) & persist to server
   if (isSupabaseConfigured && supabase) {
     try {
       const ch = await ensureLobbyChannel();
@@ -1223,7 +1279,7 @@ export async function sendPrivateChatMessage({
         await ch.send({
           type: 'broadcast',
           event: 'lobby_private_message',
-          payload,
+          payload: stripBase64AvatarForWire(payload),
         });
       }
     } catch (err) {

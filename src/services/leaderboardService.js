@@ -267,6 +267,7 @@ export async function verifyAndSaveProfileWithPin({
         }
 
         saveLocalPlayerProfile({ name: cleanName, avatar: chosenAvatar, pin: cleanPin });
+        invalidateLeaderboardCache();
         return {
           success: true,
           avatar: chosenAvatar,
@@ -294,6 +295,7 @@ export async function verifyAndSaveProfileWithPin({
   }
 
   saveLocalPlayerProfile({ name: cleanName, avatar: chosenAvatar, pin: cleanPin });
+  invalidateLeaderboardCache();
   return { success: true, avatar: chosenAvatar, status: 'saved_new' };
 }
 
@@ -351,6 +353,7 @@ export async function updatePlayerAvatarEverywhere(newAvatar) {
           { onConflict: 'player_id, game_type' }
         );
       }
+      invalidateLeaderboardCache();
     } catch (e) {
       console.warn('[Leaderboard] Failed to sync new avatar to server:', e);
     }
@@ -365,6 +368,13 @@ export async function updatePlayerAvatarEverywhere(newAvatar) {
  */
 const SERVER_PROFILE_CACHE = new Map();
 const SERVER_PROFILE_INFLIGHT = new Map();
+const LEADERBOARD_MEM_CACHE = new Map();
+const LEADERBOARD_INFLIGHT = new Map();
+
+export function invalidateLeaderboardCache() {
+  LEADERBOARD_MEM_CACHE.clear();
+  SERVER_PROFILE_CACHE.clear();
+}
 
 export async function syncPlayerProfileFromServer(username, pin = '', forceRefresh = false) {
   const cleanName = String(username || '').trim();
@@ -387,10 +397,16 @@ export async function syncPlayerProfileFromServer(username, pin = '', forceRefre
     try {
       const { data: rows, error } = await supabase
         .from('leaderboard')
-        .select('id, player_id, player_name, avatar, game_type, wins, games_played, score, last_played_at')
-        .ilike('player_name', cleanName.replace(/[\\%_]/g, (c) => '\\' + c));
+        .select('id, player_id, player_name, avatar')
+        .ilike('player_name', cleanName.replace(/[\\%_]/g, (c) => '\\' + c))
+        .limit(10);
 
-      if (error || !Array.isArray(rows) || rows.length === 0) return null;
+      if (error || !Array.isArray(rows) || rows.length === 0) {
+        if (!error) {
+          SERVER_PROFILE_CACHE.set(cacheKey, { timestamp: Date.now(), data: null });
+        }
+        return null;
+      }
 
       const existingHash = extractPinHashFromItem({
         player_ids: rows.map((r) => r.player_id),
@@ -790,7 +806,7 @@ function aggregateRowsByUsername(rows = [], gameType = 'all') {
  * @param {number} limit
  * @returns {Promise<{ success: boolean, data: Array, tableNotFound?: boolean, error?: string }>}
  */
-export async function fetchGlobalLeaderboard(gameType = 'all', limit = 50) {
+export async function fetchGlobalLeaderboard(gameType = 'all', limit = 50, forceRefresh = false) {
   if (!isSupabaseConfigured || !supabase) {
     return {
       success: false,
@@ -800,51 +816,100 @@ export async function fetchGlobalLeaderboard(gameType = 'all', limit = 50) {
     };
   }
 
-  try {
-    // Query table directly so we can aggregate rows by username
-    let query = supabase.from('leaderboard').select('*');
-    if (gameType && gameType !== 'all') {
-      query = query.eq('game_type', gameType);
-    }
-
-    const { data: tableData, error: tableError } = await query;
-
-    if (!tableError && Array.isArray(tableData)) {
-      const aggregated = aggregateRowsByUsername(tableData, gameType).slice(0, limit);
-      cacheLeaderboard(gameType, aggregated);
-      return { success: true, data: aggregated };
-    }
-
-    // Fallback to RPC if direct table select had an issue
-    const { data: rpcData, error: rpcError } = await supabase.rpc('get_global_leaderboard', {
-      p_game_type: gameType,
-      p_limit: limit,
-    });
-
-    if (!rpcError && Array.isArray(rpcData)) {
-      const aggregated = aggregateRowsByUsername(rpcData, gameType).slice(0, limit);
-      cacheLeaderboard(gameType, aggregated);
-      return { success: true, data: aggregated };
-    }
-
-    const errToReport = tableError || rpcError;
-    const isNotFound =
-      errToReport?.code === 'PGRST205' || errToReport?.message?.includes('schema cache');
-
-    return {
-      success: false,
-      tableNotFound: isNotFound,
-      error: errToReport?.message || 'Gagal memuat data Top Global',
-      data: getCachedLeaderboard(gameType),
-    };
-  } catch (err) {
-    console.warn('[Leaderboard] Error fetching leaderboard:', err);
-    return {
-      success: false,
-      error: err.message,
-      data: getCachedLeaderboard(gameType),
-    };
+  const normType = gameType || 'all';
+  const now = Date.now();
+  const cachedEntry = LEADERBOARD_MEM_CACHE.get(normType);
+  if (!forceRefresh && cachedEntry && now - cachedEntry.timestamp < 45000) {
+    return { success: true, data: cachedEntry.data.slice(0, limit) };
   }
+
+  // If raw rows for 'all' were fetched within the last 45s, derive category leaderboard locally without another DB query!
+  const rawAllEntry = LEADERBOARD_MEM_CACHE.get('__raw_all__');
+  if (!forceRefresh && rawAllEntry && now - rawAllEntry.timestamp < 45000) {
+    const filteredRows =
+      normType === 'all'
+        ? rawAllEntry.rows
+        : rawAllEntry.rows.filter((r) => r.game_type === normType);
+    const aggregated = aggregateRowsByUsername(filteredRows, normType);
+    LEADERBOARD_MEM_CACHE.set(normType, { timestamp: rawAllEntry.timestamp, data: aggregated });
+    cacheLeaderboard(normType, aggregated.slice(0, limit));
+    return { success: true, data: aggregated.slice(0, limit) };
+  }
+
+  if (!forceRefresh && LEADERBOARD_INFLIGHT.has(normType)) {
+    const inflightRes = await LEADERBOARD_INFLIGHT.get(normType);
+    return { ...inflightRes, data: (inflightRes.data || []).slice(0, limit) };
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      // Explicit column selection + SQL limit to avoid unbounded full-table scan
+      let query = supabase
+        .from('leaderboard')
+        .select('id, player_id, player_name, avatar, game_type, wins, games_played, score, last_played_at')
+        .order('wins', { ascending: false })
+        .order('score', { ascending: false })
+        .limit(200);
+
+      if (normType !== 'all') {
+        query = query.eq('game_type', normType);
+      }
+
+      const { data: tableData, error: tableError } = await query;
+
+      if (!tableError && Array.isArray(tableData)) {
+        if (normType === 'all') {
+          LEADERBOARD_MEM_CACHE.set('__raw_all__', { timestamp: Date.now(), rows: tableData });
+        }
+        const aggregated = aggregateRowsByUsername(tableData, normType);
+        aggregated.forEach((p) => {
+          if (p.avatar && (p.avatar.startsWith('data:image/') || p.avatar.startsWith('http'))) {
+            cachePlayerAvatar(p.player_name, p.avatar);
+          }
+        });
+        LEADERBOARD_MEM_CACHE.set(normType, { timestamp: Date.now(), data: aggregated });
+        cacheLeaderboard(normType, aggregated.slice(0, limit));
+        return { success: true, data: aggregated };
+      }
+
+      // Fallback to RPC if direct table select had an issue
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_global_leaderboard', {
+        p_game_type: normType,
+        p_limit: Math.min(limit, 200),
+      });
+
+      if (!rpcError && Array.isArray(rpcData)) {
+        const aggregated = aggregateRowsByUsername(rpcData, normType);
+        LEADERBOARD_MEM_CACHE.set(normType, { timestamp: Date.now(), data: aggregated });
+        cacheLeaderboard(normType, aggregated.slice(0, limit));
+        return { success: true, data: aggregated };
+      }
+
+      const errToReport = tableError || rpcError;
+      const isNotFound =
+        errToReport?.code === 'PGRST205' || errToReport?.message?.includes('schema cache');
+
+      return {
+        success: false,
+        tableNotFound: isNotFound,
+        error: errToReport?.message || 'Gagal memuat data Top Global',
+        data: getCachedLeaderboard(normType),
+      };
+    } catch (err) {
+      console.warn('[Leaderboard] Error fetching leaderboard:', err);
+      return {
+        success: false,
+        error: err.message,
+        data: getCachedLeaderboard(normType),
+      };
+    } finally {
+      LEADERBOARD_INFLIGHT.delete(normType);
+    }
+  })();
+
+  LEADERBOARD_INFLIGHT.set(normType, fetchPromise);
+  const finalRes = await fetchPromise;
+  return { ...finalRes, data: (finalRes.data || []).slice(0, limit) };
 }
 
 /**
@@ -1045,6 +1110,7 @@ export async function recordMultiplayerGameStats({
           p_score: safeScore,
         });
       }
+      invalidateLeaderboardCache();
     } catch (e) {
       console.warn('[Leaderboard] Failed to save player result:', player.name, e);
     }

@@ -571,12 +571,17 @@ export default function App() {
     } catch {}
   }, [isMultiplayerMode, currentRoom?.code, activeGameType, inviteRoomCode]);
 
-  // Auto-resync when returning to tab or network comes back online
+  // Auto-resync when returning to tab or network comes back online (throttled to avoid spam)
+  const lastVisibilitySyncRef = useRef(0);
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const handleSyncOnVisible = () => {
       if (document.visibilityState === 'visible' && isMultiplayerMode && currentRoom?.code && isSupabaseConfigured) {
+        const now = Date.now();
+        if (now - lastVisibilitySyncRef.current < 15000) return;
+        lastVisibilitySyncRef.current = now;
+
         // Recover voice chat connection & mic stream if dropped during background
         try {
           voiceChat.resumeFromBackground();
@@ -754,13 +759,19 @@ export default function App() {
     }, 3500);
   }, []);
 
+  const currentRoomRef = useRef(currentRoom);
+  useEffect(() => {
+    currentRoomRef.current = currentRoom;
+  }, [currentRoom]);
+
   const handlePlaySoundboard = useCallback(async (track) => {
     if (!track) return;
     let senderName = getLocalPlayerName() || 'Anda';
     let senderAvatar = '👤';
     let senderId = myPlayerId || 'local_human';
-    if (isMultiplayerMode && currentRoom?.players) {
-      const myPlayer = (currentRoom.players || []).find((p) => p.id === myPlayerId);
+    const activeRoom = currentRoomRef.current;
+    if (isMultiplayerMode && activeRoom?.players) {
+      const myPlayer = (activeRoom.players || []).find((p) => p.id === myPlayerId);
       if (myPlayer) {
         senderName = myPlayer.name || senderName;
         senderAvatar = myPlayer.avatar || senderAvatar;
@@ -780,7 +791,7 @@ export default function App() {
     if (isMultiplayerMode && currentRoom?.code) {
       await multiplayerAdapter.sendRoomSoundboard(currentRoom.code, payload);
     }
-  }, [isMultiplayerMode, currentRoom, myPlayerId, handleIncomingSoundboard]);
+  }, [isMultiplayerMode, currentRoom?.code, myPlayerId, handleIncomingSoundboard]);
 
   // ---------------------------------------------------------------------------
   // LIVE VOICE CHAT (WebRTC P2P) HANDLERS & PERSISTENCE
@@ -791,7 +802,7 @@ export default function App() {
     if (!targetRoomCode || !targetPlayerId) return false;
 
     const myName =
-      (currentRoom?.players || []).find((p) => p.id === targetPlayerId)?.name ||
+      (currentRoomRef.current?.players || []).find((p) => p.id === targetPlayerId)?.name ||
       getLocalPlayerName() ||
       'Player';
 
@@ -828,7 +839,7 @@ export default function App() {
       }
     }
     return success;
-  }, [currentRoom?.code, currentRoom?.players, myPlayerId]);
+  }, [currentRoom?.code, myPlayerId]);
 
   const handleToggleVoice = async () => {
     if (!isVoiceConnected) {
@@ -858,7 +869,6 @@ export default function App() {
     } catch (e) {}
 
     if (wasOnMic) {
-      console.log('🎙️ Auto-reconnecting Live Voice because user was Onmic before refresh...');
       startVoiceChat(currentRoom.code, myPlayerId, true);
     }
   }, [isMultiplayerMode, currentRoom?.code, myPlayerId, isVoiceConnected, startVoiceChat]);
@@ -874,10 +884,10 @@ export default function App() {
   const shouldApplyIncomingBigTwoState = (prev, next) => {
     if (!next || !next.players || !next.hands) return false;
     if (!prev || !prev.players || !prev.hands) return true;
-    // Якщо ID match berbeda atau game baru di-restart dari GAME_OVER
+    // Jika ID match berbeda atau game baru di-restart dari GAME_OVER
     if (next.matchId && prev.matchId && next.matchId !== prev.matchId) return true;
     if (prev.gameStatus === 'GAME_OVER' && next.gameStatus === 'PLAYING') return true;
-    if ((next.history?.length || 0) === 1 && (prev.history?.length || 0) > 2) return true;
+    if ((next.stateVersion || 0) === 1 && (prev.stateVersion || prev.history?.length || 0) > 2) return true;
 
     const prevVersion = Number(prev.stateVersion || prev.history?.length || 0);
     const nextVersion = Number(next.stateVersion || next.history?.length || 0);
@@ -919,45 +929,16 @@ export default function App() {
           getGameTypeFromRoomCode(updatedRoom.code) ||
           activeGameType;
 
-        if (nextState?.firstTurnWheel?.isOpen && (nextState?.history?.length || 0) <= 1) {
+        if (nextState?.firstTurnWheel?.isOpen && (nextState?.stateVersion || nextState?.history?.length || 0) <= 1) {
           const wheelKey = `${nextState.firstTurnWheel.targetPlayerId}_${nextState.gameType || detectedType}`;
           if (completedWheelKeyRef.current !== wheelKey) {
             setPendingBigTwoWheel(nextState.firstTurnWheel);
           }
         }
 
-        // If Realtime payload had its JSONB game_state truncated by Postgres TOAST (>8KB),
-        // immediately fetch the complete room record from Supabase (both during 'playing' and 'game_over'!)
-        if (
-          (updatedRoom.status === 'playing' || updatedRoom.status === 'game_over') &&
-          (!nextState || !nextState.players)
-        ) {
-          multiplayerAdapter
-            .getRoom(currentRoom.code)
-            .then(({ room }) => {
-              if (room?.game_state?.players) {
-                const fullState = room.game_state;
-                const rType = fullState.gameType || detectedType;
-                if (rType === 'bigtwo') {
-                  setActiveGameType('bigtwo');
-                  setGameStateBigtwo((prev) =>
-                    shouldApplyIncomingBigTwoState(prev, fullState) ? fullState : prev
-                  );
-                  if (fullState.gameStatus === 'GAME_OVER') audio.victorySound();
-                } else if (rType === 'game41') {
-                  setActiveGameType('game41');
-                  setGameState41(fullState);
-                  if (fullState.gameStatus === 'GAME_OVER' || fullState.gameStatus === 'game_over') {
-                    audio.victorySound();
-                  }
-                } else {
-                  setActiveGameType('sevens');
-                  setGameState(fullState);
-                }
-              }
-              if (room) setCurrentRoom(room);
-            })
-            .catch(() => {});
+        // Do NOT re-fetch from PostgREST here; multiplayerAdapter.subscribeToRoom already handles
+        // Broadcast delivery (`room_state_sync`) and hydrated `payload.new` directly.
+        if (!nextState || !nextState.players) {
           return;
         }
 
@@ -982,23 +963,6 @@ export default function App() {
                 ...updatedRoom,
                 players: updatedRoom.players || prevRoom?.players || nextState.players,
               }));
-            } else if (updatedRoom.status === 'playing' || updatedRoom.status === 'game_over') {
-              // Realtime payload might be compact/truncated; fetch full record immediately
-              multiplayerAdapter.getRoom(currentRoom.code).then(({ room }) => {
-                if (room?.game_state?.players && room?.game_state?.hands) {
-                  setGameStateBigtwo((prev) =>
-                    shouldApplyIncomingBigTwoState(prev, room.game_state) ? room.game_state : prev
-                  );
-                  if (room.game_state.gameStatus === 'GAME_OVER') {
-                    audio.victorySound();
-                  }
-                }
-                setCurrentRoom(room || updatedRoom);
-              }).catch(() => {
-                setCurrentRoom(updatedRoom);
-              });
-            } else {
-              setCurrentRoom(updatedRoom);
             }
             return;
           }
@@ -2385,7 +2349,7 @@ export default function App() {
       const chosenPlayer = latestBigtwo.players?.find((p) => p.id === selectedPlayerId);
       showToast(`🎯 Giliran Pertama: ${chosenPlayer?.name || 'Pemain'} (Meja Bebas)!`);
       // Hanya atur giliran awal jika belum ada kartu yang dimainkan
-      const hasMovesPlayed = (latestBigtwo.history?.length || 0) > 1;
+      const hasMovesPlayed = (latestBigtwo.stateVersion || latestBigtwo.history?.length || 0) > 1;
       const updatedState = hasMovesPlayed
         ? {
             ...latestBigtwo,
@@ -2705,7 +2669,7 @@ export default function App() {
     gameState41?.players?.find((p) => p.id === gameState41?.currentPlayer)?.isBotTakeover,
     gameStateBigtwo?.currentPlayer,
     gameStateBigtwo?.gameStatus,
-    gameStateBigtwo?.currentTrick,
+    gameStateBigtwo?.stateVersion,
     gameStateBigtwo?.players?.find((p) => p.id === gameStateBigtwo?.currentPlayer)?.isBotTakeover,
     bigTwoWheelPicker?.isOpen,
     isDealingAnimationActive,
@@ -2738,7 +2702,7 @@ export default function App() {
         .map((r) => `${r.id || r.name}:${r.rank}:${r.remainingCards ?? ''}`)
         .join('|');
       const endTs = gameStateBigtwo.lastAction?.timestamp || '';
-      const sig = `bigtwo_${currentRoom?.code || gameMode}_${gameStateBigtwo.history?.length || 0}_${gameStateBigtwo.winner || ''}_${endTs}_${rankSummary}`;
+      const sig = `bigtwo_${currentRoom?.code || gameMode}_${gameStateBigtwo.stateVersion || gameStateBigtwo.history?.length || 0}_${gameStateBigtwo.winner || ''}_${endTs}_${rankSummary}`;
       recordGameEndScore('bigtwo', gameStateBigtwo.rankings, gameStateBigtwo.winner, sig);
     }
   }, [activeGameType, gameStateBigtwo?.gameStatus, gameStateBigtwo?.rankings]);

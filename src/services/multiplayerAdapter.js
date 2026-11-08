@@ -236,56 +236,209 @@ export function getRelativeSeats(players = [], viewerPlayerId) {
   };
 }
 
+const ROOM_SELECT_COLS = 'id, code, host_id, status, players, game_state, updated_at';
+const ROOM_META_COLS = 'id, code, host_id, status, players, updated_at';
+
+// In-memory avatar cache to avoid sending 20-40KB Base64 strings inside game_state on every card play
+const playerAvatarCache = new Map();
+const inflightGetRoom = new Map();
+
+function cacheAvatarsFromPlayers(players = []) {
+  if (!Array.isArray(players)) return;
+  for (const p of players) {
+    if (!p || !p.avatar || p.avatar === '__CACHED__') continue;
+    if (p.id) playerAvatarCache.set(`id:${p.id}`, p.avatar);
+    if (p.name) playerAvatarCache.set(`name:${String(p.name).trim().toLowerCase()}`, p.avatar);
+  }
+}
+
+function resolveCachedAvatar(p, roomPlayers = []) {
+  if (!p) return '👤';
+  if (p.avatar && p.avatar !== '__CACHED__') {
+    cacheAvatarsFromPlayers([p]);
+    return p.avatar;
+  }
+  const normName = p.name ? String(p.name).trim().toLowerCase() : '';
+  if (Array.isArray(roomPlayers)) {
+    const match = roomPlayers.find(
+      (rp) =>
+        (p.id && rp.id === p.id) ||
+        (normName && rp.name && String(rp.name).trim().toLowerCase() === normName)
+    );
+    if (match?.avatar && match.avatar !== '__CACHED__') {
+      cacheAvatarsFromPlayers([match]);
+      return match.avatar;
+    }
+  }
+  if (p.id && playerAvatarCache.has(`id:${p.id}`)) {
+    return playerAvatarCache.get(`id:${p.id}`);
+  }
+  if (normName && playerAvatarCache.has(`name:${normName}`)) {
+    return playerAvatarCache.get(`name:${normName}`);
+  }
+  return '👤';
+}
+
+function hydrateGameStateAvatars(gameState, roomPlayers = []) {
+  if (!gameState || typeof gameState !== 'object') return gameState;
+  cacheAvatarsFromPlayers(roomPlayers);
+  if (Array.isArray(gameState.players)) {
+    cacheAvatarsFromPlayers(gameState.players);
+  }
+
+  let nextPlayers = gameState.players;
+  if (Array.isArray(gameState.players)) {
+    nextPlayers = gameState.players.map((p) => ({
+      ...p,
+      avatar: resolveCachedAvatar(p, roomPlayers),
+    }));
+  }
+
+  let nextRankings = gameState.rankings;
+  if (Array.isArray(gameState.rankings)) {
+    nextRankings = gameState.rankings.map((r) => {
+      const resolved = resolveCachedAvatar(r.player || r, roomPlayers);
+      if (r.player) {
+        return {
+          ...r,
+          avatar: resolved,
+          player: { ...r.player, avatar: resolved },
+        };
+      }
+      return { ...r, avatar: resolved };
+    });
+  }
+
+  return {
+    ...gameState,
+    ...(nextPlayers ? { players: nextPlayers } : {}),
+    ...(nextRankings ? { rankings: nextRankings } : {}),
+  };
+}
+
+function hydrateRoomRecord(room, fallbackPlayers = []) {
+  if (!room || typeof room !== 'object') return room;
+  const effectivePlayers = Array.isArray(room.players) && room.players.length > 0 ? room.players : fallbackPlayers;
+  cacheAvatarsFromPlayers(effectivePlayers);
+  if (room.game_state && typeof room.game_state === 'object') {
+    return {
+      ...room,
+      game_state: hydrateGameStateAvatars(room.game_state, effectivePlayers),
+    };
+  }
+  return room;
+}
+
+/**
+ * Strips heavy Base64 data:image strings & trims unbounded history from game_state
+ * before broadcasting / updating on every card move (reduces payload by ~95% and prevents Postgres TOAST).
+ * Avatars remain safely stored in `rooms.players` and `playerAvatarCache` and are re-hydrated on receipt.
+ */
+function compactGameStateForWire(gameState) {
+  if (!gameState || typeof gameState !== 'object') return gameState;
+
+  if (Array.isArray(gameState.players)) {
+    cacheAvatarsFromPlayers(gameState.players);
+  }
+
+  const compactPlayers = Array.isArray(gameState.players)
+    ? gameState.players.map((p) => {
+        if (typeof p?.avatar === 'string' && p.avatar.startsWith('data:image/')) {
+          return { ...p, avatar: '__CACHED__' };
+        }
+        return p;
+      })
+    : gameState.players;
+
+  const compactRankings = Array.isArray(gameState.rankings)
+    ? gameState.rankings.map((r) => {
+        const nextR = { ...r };
+        if (typeof nextR.avatar === 'string' && nextR.avatar.startsWith('data:image/')) {
+          nextR.avatar = '__CACHED__';
+        }
+        if (nextR.player && typeof nextR.player.avatar === 'string' && nextR.player.avatar.startsWith('data:image/')) {
+          nextR.player = { ...nextR.player, avatar: '__CACHED__' };
+        }
+        return nextR;
+      })
+    : gameState.rankings;
+
+  const compactHistory =
+    Array.isArray(gameState.history) && gameState.history.length > 20
+      ? gameState.history.slice(-20)
+      : gameState.history;
+
+  return {
+    ...gameState,
+    ...(compactPlayers ? { players: compactPlayers } : {}),
+    ...(compactRankings ? { rankings: compactRankings } : {}),
+    ...(compactHistory ? { history: compactHistory } : {}),
+  };
+}
+
 export const multiplayerAdapter = {
   isConfigured() {
     return isSupabaseConfigured;
   },
 
   /**
-   * Fetches room by code
+   * Fetches room by code (with in-flight deduplication and explicit column selection)
    */
   async getRoom(roomCode) {
     if (!supabase) return { error: 'Supabase belum terkonfigurasi.' };
     const code = extractCleanRoomCode(roomCode);
     if (!code) return { error: 'Kode room tidak valid.' };
 
-    // 1. Direct search with cleaned code
-    let { data, error } = await supabase
-      .from('rooms')
-      .select('*')
-      .eq('code', code)
-      .maybeSingle();
-
-    if (error) return { error: error.message };
-    if (data) return { room: data };
-
-    // 2. Fallback: If code has hyphen, try without hyphen (e.g. SV-ABCD -> SVABCD)
-    if (code.includes('-')) {
-      const altCode = code.replace(/-/g, '');
-      const altRes = await supabase
-        .from('rooms')
-        .select('*')
-        .eq('code', altCode)
-        .maybeSingle();
-      if (altRes.data) return { room: altRes.data };
-    } else {
-      // 3. Fallback: If code starts with B2, SV, or R41 without hyphen, try with hyphen
-      let formattedWithHyphen = null;
-      if (code.startsWith('B2') && code.length > 2) formattedWithHyphen = `B2-${code.slice(2)}`;
-      else if (code.startsWith('SV') && code.length > 2) formattedWithHyphen = `SV-${code.slice(2)}`;
-      else if (code.startsWith('R41') && code.length > 3) formattedWithHyphen = `R41-${code.slice(3)}`;
-
-      if (formattedWithHyphen) {
-        const altRes = await supabase
-          .from('rooms')
-          .select('*')
-          .eq('code', formattedWithHyphen)
-          .maybeSingle();
-        if (altRes.data) return { room: altRes.data };
-      }
+    if (inflightGetRoom.has(code)) {
+      return inflightGetRoom.get(code);
     }
 
-    return { room: null };
+    const fetchPromise = (async () => {
+      try {
+        // 1. Direct search with cleaned code
+        let { data, error } = await supabase
+          .from('rooms')
+          .select(ROOM_SELECT_COLS)
+          .eq('code', code)
+          .maybeSingle();
+
+        if (error) return { error: error.message };
+        if (data) return { room: hydrateRoomRecord(data) };
+
+        // 2. Fallback: If code has hyphen, try without hyphen (e.g. SV-ABCD -> SVABCD)
+        if (code.includes('-')) {
+          const altCode = code.replace(/-/g, '');
+          const altRes = await supabase
+            .from('rooms')
+            .select(ROOM_SELECT_COLS)
+            .eq('code', altCode)
+            .maybeSingle();
+          if (altRes.data) return { room: hydrateRoomRecord(altRes.data) };
+        } else {
+          // 3. Fallback: If code starts with B2, SV, or R41 without hyphen, try with hyphen
+          let formattedWithHyphen = null;
+          if (code.startsWith('B2') && code.length > 2) formattedWithHyphen = `B2-${code.slice(2)}`;
+          else if (code.startsWith('SV') && code.length > 2) formattedWithHyphen = `SV-${code.slice(2)}`;
+          else if (code.startsWith('R41') && code.length > 3) formattedWithHyphen = `R41-${code.slice(3)}`;
+
+          if (formattedWithHyphen) {
+            const altRes = await supabase
+              .from('rooms')
+              .select(ROOM_SELECT_COLS)
+              .eq('code', formattedWithHyphen)
+              .maybeSingle();
+            if (altRes.data) return { room: hydrateRoomRecord(altRes.data) };
+          }
+        }
+
+        return { room: null };
+      } finally {
+        inflightGetRoom.delete(code);
+      }
+    })();
+
+    inflightGetRoom.set(code, fetchPromise);
+    return fetchPromise;
   },
 
   /**
@@ -313,6 +466,17 @@ export const multiplayerAdapter = {
       avatar: getLocalPlayerAvatar(AVATARS[0]),
       joinedAt: Date.now(),
     };
+    cacheAvatarsFromPlayers([hostPlayer]);
+
+    const initialGameState = {
+      config: {
+        playerCount: targetMax,
+        roomPlayerCount: targetMax,
+        deckMode: effectiveDeckMode,
+      },
+      gameType,
+    };
+    const nowIso = new Date().toISOString();
 
     const { data, error } = await supabase
       .from('rooms')
@@ -321,24 +485,28 @@ export const multiplayerAdapter = {
         host_id: playerId,
         status: 'lobby',
         players: [hostPlayer],
-        game_state: {
-          config: {
-            playerCount: targetMax,
-            roomPlayerCount: targetMax,
-            deckMode: effectiveDeckMode,
-          },
-          gameType,
-        },
+        game_state: initialGameState,
+        updated_at: nowIso,
       })
-      .select()
+      .select('id, updated_at')
       .single();
 
     if (error) {
       return { success: false, error: error.message };
     }
 
+    const createdRoom = {
+      id: data?.id,
+      code,
+      host_id: playerId,
+      status: 'lobby',
+      players: [hostPlayer],
+      game_state: initialGameState,
+      updated_at: data?.updated_at || nowIso,
+    };
+
     setLocalSession(playerId, name, code);
-    return { success: true, room: data, player: hostPlayer };
+    return { success: true, room: createdRoom, player: hostPlayer };
   },
 
   /**
@@ -383,13 +551,14 @@ export const multiplayerAdapter = {
       const localAvatar = getLocalPlayerAvatar();
       if (localAvatar && existingPlayer.avatar !== localAvatar && !existingPlayer.isBot) {
         existingPlayer.avatar = localAvatar;
+        cacheAvatarsFromPlayers([existingPlayer]);
         // Non-blocking sync to database
         this.syncPlayerAvatarInRoom(code, existingPlayer.id, localAvatar).catch(() => {});
       }
 
       return {
         success: true,
-        room,
+        room: hydrateRoomRecord(room),
         player: existingPlayer,
         isReconnected: true,
       };
@@ -411,35 +580,45 @@ export const multiplayerAdapter = {
         avatar: getLocalPlayerAvatar(AVATARS[0] || '👤'),
         joinedAt: Date.now(),
       };
+      cacheAvatarsFromPlayers([newHostPlayer]);
 
       const prevConfig = room.game_state?.config || {};
       const targetSeats = prevConfig.roomPlayerCount || prevConfig.playerCount || 4;
       const targetDeck = prevConfig.deckMode || (targetSeats > 4 ? 'double' : 'single');
       const targetType = room.game_state?.gameType || getGameTypeFromRoomCode(code) || 'sevens';
+      const nowIso = new Date().toISOString();
+      const nextGs = {
+        config: {
+          playerCount: targetSeats,
+          roomPlayerCount: targetSeats,
+          deckMode: targetDeck,
+        },
+        gameType: targetType,
+      };
 
-      const { data: updatedRoom, error: updateErr } = await supabase
+      const { error: updateErr } = await supabase
         .from('rooms')
         .update({
           host_id: playerId,
           players: [newHostPlayer],
           status: 'lobby',
-          game_state: {
-            config: {
-              playerCount: targetSeats,
-              roomPlayerCount: targetSeats,
-              deckMode: targetDeck,
-            },
-            gameType: targetType,
-          },
-          updated_at: new Date().toISOString(),
+          game_state: nextGs,
+          updated_at: nowIso,
         })
-        .eq('id', room.id)
-        .select()
-        .single();
+        .eq('id', room.id);
 
       if (updateErr) {
         return { success: false, error: updateErr.message };
       }
+
+      const updatedRoom = {
+        ...room,
+        host_id: playerId,
+        players: [newHostPlayer],
+        status: 'lobby',
+        game_state: nextGs,
+        updated_at: nowIso,
+      };
 
       setLocalSession(playerId, name, code);
       return { success: true, room: updatedRoom, player: newHostPlayer };
@@ -464,20 +643,22 @@ export const multiplayerAdapter = {
       avatar: getLocalPlayerAvatar(AVATARS[seatIdx] || '👤'),
       joinedAt: Date.now(),
     };
+    cacheAvatarsFromPlayers([newPlayer]);
 
     const updatedPlayers = [...players, newPlayer];
+    const nowIso = new Date().toISOString();
 
-    // Optimistic lock: hanya tulis jika room belum berubah (mis. host belum menekan Mulai / pemain lain belum join)
+    // Optimistic lock: hanya ambil kolom `id` untuk mengecek apakah update berhasil (hemat egress)
     const { data: updatedRows, error: updateErr } = await supabase
       .from('rooms')
       .update({
         players: updatedPlayers,
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso,
       })
       .eq('id', room.id)
       .eq('status', 'lobby')
       .eq('updated_at', room.updated_at)
-      .select();
+      .select('id');
 
     if (updateErr) {
       return { success: false, error: updateErr.message };
@@ -489,8 +670,14 @@ export const multiplayerAdapter = {
       return { success: false, error: 'Room sedang berubah, coba lagi.' };
     }
 
+    const updatedRoom = {
+      ...room,
+      players: updatedPlayers,
+      updated_at: nowIso,
+    };
+
     setLocalSession(playerId, name, code);
-    return { success: true, room: updatedRows[0], player: newPlayer };
+    return { success: true, room: updatedRoom, player: newPlayer };
   },
 
   /**
@@ -539,6 +726,7 @@ export const multiplayerAdapter = {
         }
         return p;
       });
+      cacheAvatarsFromPlayers(returnedRoom.players);
     }
 
     setLocalSession(playerId, name, returnedRoom.code);
@@ -548,7 +736,7 @@ export const multiplayerAdapter = {
       this.syncPlayerAvatarInRoom(returnedRoom.code, playerId, myAvatar).catch(() => {});
     }
 
-    return { success: true, room: returnedRoom, player: returnedPlayer, created: Boolean(data.created) };
+    return { success: true, room: hydrateRoomRecord(returnedRoom), player: returnedPlayer, created: Boolean(data.created) };
   },
 
   /**
@@ -600,36 +788,48 @@ export const multiplayerAdapter = {
       };
     });
 
+    const updatedPlayers = [...currentPlayers, ...newBots];
+    const nowIso = new Date().toISOString();
+
     const { data: botRows, error: updateErr } = await supabase
       .from('rooms')
       .update({
-        players: [...currentPlayers, ...newBots],
-        updated_at: new Date().toISOString(),
+        players: updatedPlayers,
+        updated_at: nowIso,
       })
       .eq('code', room.code)
       .eq('status', 'lobby')
       .eq('updated_at', room.updated_at)
-      .select();
+      .select('id');
 
     // Ada pemain yang baru join / berubah: ulangi agar pemain itu tidak tertimpa
     if (!updateErr && (!botRows || botRows.length === 0)) {
       if (_attempt < 4) return this.fillBots(roomCode, hostId, targetCount, _attempt + 1);
       return { success: false, error: 'Room sedang berubah, coba lagi.' };
     }
-    const updatedRoom = botRows ? botRows[0] : null;
 
     if (updateErr) return { success: false, error: updateErr.message };
-    return { success: true, room: updatedRoom };
+    return {
+      success: true,
+      room: { ...room, players: updatedPlayers, updated_at: nowIso },
+    };
   },
 
   /**
-   * Toggles ready state for a player
+   * Toggles ready state for a player (fetches only metadata columns, not full game_state)
    */
   async toggleReady(roomCode, playerId, isReady, _attempt = 0) {
     if (!supabase) return;
-    const { room } = await this.getRoom(roomCode);
-    if (!room) return;
-    const code = room.code;
+    const code = extractCleanRoomCode(roomCode);
+    if (!code) return;
+
+    const { data: room } = await supabase
+      .from('rooms')
+      .select(ROOM_META_COLS)
+      .eq('code', code)
+      .maybeSingle();
+
+    if (!room || room.status !== 'lobby') return;
 
     const updatedPlayers = (room.players || []).map((p) => {
       if (p.id === playerId) {
@@ -637,8 +837,6 @@ export const multiplayerAdapter = {
       }
       return p;
     });
-
-    if (room.status !== 'lobby') return;
 
     const { data: rows } = await supabase
       .from('rooms')
@@ -649,7 +847,7 @@ export const multiplayerAdapter = {
       .eq('code', code)
       .eq('status', 'lobby')
       .eq('updated_at', room.updated_at)
-      .select();
+      .select('id');
 
     if ((!rows || rows.length === 0) && _attempt < 4) {
       return this.toggleReady(roomCode, playerId, isReady, _attempt + 1);
@@ -696,22 +894,25 @@ export const multiplayerAdapter = {
     };
 
     const updatedPlayers = [...currentPlayers, botPlayer];
+    const nowIso = new Date().toISOString();
 
-    const { data: updatedRoom, error: updateErr } = await supabase
+    const { error: updateErr } = await supabase
       .from('rooms')
       .update({
         players: updatedPlayers,
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso,
       })
-      .eq('code', code)
-      .select()
-      .single();
+      .eq('code', code);
 
     if (updateErr) {
       return { success: false, error: updateErr.message };
     }
 
-    return { success: true, room: updatedRoom, bot: botPlayer };
+    return {
+      success: true,
+      room: { ...room, players: updatedPlayers, updated_at: nowIso },
+      bot: botPlayer,
+    };
   },
 
   /**
@@ -735,22 +936,24 @@ export const multiplayerAdapter = {
     const updatedPlayers = currentPlayers
       .filter((p) => p.id !== botId)
       .map((p, idx) => ({ ...p, seatIndex: idx }));
+    const nowIso = new Date().toISOString();
 
-    const { data: updatedRoom, error: updateErr } = await supabase
+    const { error: updateErr } = await supabase
       .from('rooms')
       .update({
         players: updatedPlayers,
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso,
       })
-      .eq('code', code)
-      .select()
-      .single();
+      .eq('code', code);
 
     if (updateErr) {
       return { success: false, error: updateErr.message };
     }
 
-    return { success: true, room: updatedRoom };
+    return {
+      success: true,
+      room: { ...room, players: updatedPlayers, updated_at: nowIso },
+    };
   },
 
   /**
@@ -772,22 +975,24 @@ export const multiplayerAdapter = {
       ...(room.game_state || {}),
       config: updatedConfig,
     };
+    const nowIso = new Date().toISOString();
 
-    const { data: updatedRoom, error: updateErr } = await supabase
+    const { error: updateErr } = await supabase
       .from('rooms')
       .update({
         game_state: updatedGameState,
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso,
       })
-      .eq('code', code)
-      .select()
-      .single();
+      .eq('code', code);
 
     if (updateErr) {
       return { success: false, error: updateErr.message };
     }
 
-    return { success: true, room: updatedRoom };
+    return {
+      success: true,
+      room: { ...room, game_state: updatedGameState, updated_at: nowIso },
+    };
   },
 
   /**
@@ -954,17 +1159,20 @@ export const multiplayerAdapter = {
       gameState.firstTurnWheel = safeOverrides.firstTurnWheel;
     }
 
+    const nowIso = new Date().toISOString();
+    const compactState = compactGameStateForWire(gameState);
+
     // Optimistic lock: jika ada pemain yang baru join saat kartu dikocok, ulangi dengan roster terbaru
     const { data: startedRows, error: updateErr } = await supabase
       .from('rooms')
       .update({
         status: 'playing',
-        game_state: gameState,
-        updated_at: new Date().toISOString(),
+        game_state: compactState,
+        updated_at: nowIso,
       })
       .eq('code', code)
       .eq('updated_at', room.updated_at)
-      .select();
+      .select('id');
 
     if (updateErr) {
       return { success: false, error: updateErr.message };
@@ -974,12 +1182,23 @@ export const multiplayerAdapter = {
       return { success: false, error: 'Room sedang berubah, coba mulai lagi.' };
     }
 
-    this.broadcastRoomState(code, startedRows[0]);
-    return { success: true, room: startedRows[0], gameState };
+    const startedRoom = hydrateRoomRecord({
+      ...room,
+      status: 'playing',
+      game_state: gameState,
+      updated_at: nowIso,
+    });
+    this.broadcastRoomState(code, {
+      ...room,
+      status: 'playing',
+      game_state: compactState,
+      updated_at: nowIso,
+    });
+    return { success: true, room: startedRoom, gameState };
   },
 
   /**
-   * Broadcasts full room state directly over WebSocket channel (bypasses Postgres >8KB TOAST truncation for 104-card Double Deck)
+   * Broadcasts room state directly over WebSocket channel (compacted to avoid large Base64 payloads)
    */
   async broadcastRoomState(roomCode, roomRecord) {
     if (!supabase || !roomCode || !roomRecord) return;
@@ -987,10 +1206,13 @@ export const multiplayerAdapter = {
     const ch = this.activeChannels[code];
     if (!ch) return;
     try {
+      const compactPayload = roomRecord.game_state
+        ? { ...roomRecord, game_state: compactGameStateForWire(roomRecord.game_state) }
+        : roomRecord;
       await ch.send({
         type: 'broadcast',
         event: 'room_state_sync',
-        payload: roomRecord,
+        payload: compactPayload,
       });
     } catch {}
   },
@@ -1006,21 +1228,23 @@ export const multiplayerAdapter = {
       nextGameState.gameStatus === 'GAME_OVER' ||
       nextGameState.gameStatus === 'game_over';
     const nextStatus = isOver ? 'game_over' : 'playing';
+    const nowIso = new Date().toISOString();
+    const compactState = compactGameStateForWire(nextGameState);
 
-    // Broadcast immediately via WebSocket so 104-card Double Deck state arrives without TOAST delay
+    // Broadcast immediately via WebSocket with compacted state (<8KB)
     this.broadcastRoomState(code, {
       code,
       status: nextStatus,
-      game_state: nextGameState,
-      updated_at: new Date().toISOString(),
+      game_state: compactState,
+      updated_at: nowIso,
     });
 
     const { error } = await supabase
       .from('rooms')
       .update({
-        game_state: nextGameState,
+        game_state: compactState,
         status: nextStatus,
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso,
       })
       .eq('code', code)
       .neq('status', 'lobby');
@@ -1122,26 +1346,25 @@ export const multiplayerAdapter = {
       delete nextGameState.config.sessionScores;
     }
 
-    const { data: restartedRoom } = await supabase
+    const nowIso = new Date().toISOString();
+    const compactState = compactGameStateForWire(nextGameState);
+
+    await supabase
       .from('rooms')
       .update({
         status: 'playing',
-        game_state: nextGameState,
-        updated_at: new Date().toISOString(),
+        game_state: compactState,
+        updated_at: nowIso,
       })
-      .eq('code', code)
-      .select()
-      .maybeSingle();
+      .eq('code', code);
 
-    this.broadcastRoomState(
+    this.broadcastRoomState(code, {
       code,
-      restartedRoom || {
-        code,
-        status: 'playing',
-        game_state: nextGameState,
-        updated_at: new Date().toISOString(),
-      }
-    );
+      status: 'playing',
+      players: room.players,
+      game_state: compactState,
+      updated_at: nowIso,
+    });
 
     return { success: true, gameState: nextGameState };
   },
@@ -1250,16 +1473,19 @@ export const multiplayerAdapter = {
       };
     }
 
+    const nowIso = new Date().toISOString();
+    const compactState = compactGameStateForWire(updatedGameState);
+
     const { data: updatedRows, error: updateErr } = await supabase
       .from('rooms')
       .update({
         players: updatedPlayers,
-        game_state: updatedGameState,
-        updated_at: new Date().toISOString(),
+        game_state: compactState,
+        updated_at: nowIso,
       })
       .eq('code', code)
       .eq('updated_at', room.updated_at)
-      .select();
+      .select('id');
 
     if (updateErr) {
       return { success: false, error: updateErr.message };
@@ -1272,8 +1498,19 @@ export const multiplayerAdapter = {
       return { success: false, error: 'Status permainan sedang diperbarui, coba lagi.' };
     }
 
-    this.broadcastRoomState(code, updatedRows[0]);
-    return { success: true, room: updatedRows[0] };
+    const updatedRoom = hydrateRoomRecord({
+      ...room,
+      players: updatedPlayers,
+      game_state: updatedGameState,
+      updated_at: nowIso,
+    });
+    this.broadcastRoomState(code, {
+      ...room,
+      players: updatedPlayers,
+      game_state: compactState,
+      updated_at: nowIso,
+    });
+    return { success: true, room: updatedRoom };
   },
 
   /**
@@ -1301,19 +1538,27 @@ export const multiplayerAdapter = {
       };
     }
 
-    const { data: updatedRoom, error: updateErr } = await supabase
+    const nowIso = new Date().toISOString();
+    const compactState = compactGameStateForWire(updatedGameState);
+
+    const { error: updateErr } = await supabase
       .from('rooms')
       .update({
         host_id: newHostId,
         players: updatedPlayers,
-        game_state: updatedGameState,
-        updated_at: new Date().toISOString(),
+        game_state: compactState,
+        updated_at: nowIso,
       })
-      .eq('code', code)
-      .select()
-      .single();
+      .eq('code', code);
 
     if (updateErr) return { success: false, error: updateErr.message };
+    const updatedRoom = hydrateRoomRecord({
+      ...room,
+      host_id: newHostId,
+      players: updatedPlayers,
+      game_state: updatedGameState,
+      updated_at: nowIso,
+    });
     return { success: true, room: updatedRoom };
   },
 
@@ -1331,6 +1576,8 @@ export const multiplayerAdapter = {
       const updatedPlayers = (room.players || []).map((p) => {
         if (p.id === playerId && !p.isBot && p.avatar !== newAvatar) {
           changed = true;
+          playerAvatarCache.set(p.id, newAvatar);
+          if (p.name) playerAvatarCache.set(`name:${p.name.trim().toLowerCase()}`, newAvatar);
           return { ...p, avatar: newAvatar };
         }
         return p;
@@ -1352,19 +1599,32 @@ export const multiplayerAdapter = {
 
       if (!changed) return { success: true, room };
 
-      const { data: updatedRows, error: updateErr } = await supabase
+      const nowIso = new Date().toISOString();
+      const compactState = compactGameStateForWire(updatedGameState);
+
+      const { error: updateErr } = await supabase
         .from('rooms')
         .update({
           players: updatedPlayers,
-          game_state: updatedGameState,
-          updated_at: new Date().toISOString(),
+          game_state: compactState,
+          updated_at: nowIso,
         })
-        .eq('code', code)
-        .select();
+        .eq('code', code);
 
-      if (!updateErr && updatedRows && updatedRows[0]) {
-        this.broadcastRoomState(code, updatedRows[0]);
-        return { success: true, room: updatedRows[0] };
+      if (!updateErr) {
+        const updatedRoom = hydrateRoomRecord({
+          ...room,
+          players: updatedPlayers,
+          game_state: updatedGameState,
+          updated_at: nowIso,
+        });
+        this.broadcastRoomState(code, {
+          ...room,
+          players: updatedPlayers,
+          game_state: compactState,
+          updated_at: nowIso,
+        });
+        return { success: true, room: updatedRoom };
       }
     } catch (e) {
       console.warn('[multiplayerAdapter] Failed to sync player avatar in room:', e);
@@ -1394,27 +1654,35 @@ export const multiplayerAdapter = {
       isBotTakeover: false,
     }));
 
-    const { data: updatedRoom, error: updateErr } = await supabase
+    const nowIso = new Date().toISOString();
+    const nextGameState = {
+      config: {
+        playerCount: prevSeats,
+        roomPlayerCount: prevSeats,
+        deckMode: prevDeck,
+      },
+      gameType: prevType,
+      sessionScores: prevSessionScores,
+    };
+
+    const { error: updateErr } = await supabase
       .from('rooms')
       .update({
         status: 'lobby',
-        game_state: {
-          config: {
-            playerCount: prevSeats,
-            roomPlayerCount: prevSeats,
-            deckMode: prevDeck,
-          },
-          gameType: prevType,
-          sessionScores: prevSessionScores,
-        },
+        game_state: nextGameState,
         players: cleanPlayers,
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso,
       })
-      .eq('code', code)
-      .select()
-      .single();
+      .eq('code', code);
 
     if (updateErr) return { success: false, error: updateErr.message };
+    const updatedRoom = hydrateRoomRecord({
+      ...room,
+      status: 'lobby',
+      game_state: nextGameState,
+      players: cleanPlayers,
+      updated_at: nowIso,
+    });
     return { success: true, room: updatedRoom };
   },
 
@@ -1445,28 +1713,37 @@ export const multiplayerAdapter = {
       joinedAt: Date.now(),
     };
 
-    const { data: updatedRoom, error: updateErr } = await supabase
+    const nowIso = new Date().toISOString();
+    const nextGameState = {
+      config: {
+        playerCount: prevSeats,
+        roomPlayerCount: prevSeats,
+        deckMode: prevDeck,
+      },
+      gameType: prevType,
+    };
+
+    const { error: updateErr } = await supabase
       .from('rooms')
       .update({
         host_id: playerId,
         players: [newHostPlayer],
         status: 'lobby',
-        game_state: {
-          config: {
-            playerCount: prevSeats,
-            roomPlayerCount: prevSeats,
-            deckMode: prevDeck,
-          },
-          gameType: prevType,
-        },
-        updated_at: new Date().toISOString(),
+        game_state: nextGameState,
+        updated_at: nowIso,
       })
-      .eq('code', code)
-      .select()
-      .single();
+      .eq('code', code);
 
     if (updateErr) return { success: false, error: updateErr.message };
 
+    const updatedRoom = hydrateRoomRecord({
+      ...room,
+      host_id: playerId,
+      players: [newHostPlayer],
+      status: 'lobby',
+      game_state: nextGameState,
+      updated_at: nowIso,
+    });
     setLocalSession(playerId, name, code);
     return { success: true, room: updatedRoom, player: newHostPlayer };
   },
@@ -1610,6 +1887,17 @@ export const multiplayerAdapter = {
     const code = roomCode.trim().toUpperCase();
     const channelName = `room_channel_${code}`;
 
+    // Clean up any existing channel for this room code to prevent duplicate subscriptions
+    if (this.activeChannels[code]) {
+      try {
+        supabase.removeChannel(this.activeChannels[code]);
+      } catch {}
+      delete this.activeChannels[code];
+    }
+
+    let lastBroadcastAt = 0;
+    let cachedPlayers = [];
+
     const channel = supabase
       .channel(channelName)
       .on(
@@ -1623,27 +1911,44 @@ export const multiplayerAdapter = {
         (payload) => {
           if (payload.new) {
             const incoming = payload.new;
-            // If Postgres TOASTed game_state (>8KB) during 'playing' or 'game_over', fetch full record
+            if (Array.isArray(incoming.players) && incoming.players.length > 0) {
+              cachedPlayers = incoming.players;
+            }
+            // Use payload.new directly without re-fetching from PostgREST!
+            // If game_state was omitted by Postgres TOAST (>8KB), room_state_sync Broadcast already delivered it.
+            // Only fall back to getRoom if no Broadcast was received in the last 6 seconds.
             if (
               incoming.status !== 'lobby' &&
               (!incoming.game_state || !incoming.game_state.players)
             ) {
+              if (Date.now() - lastBroadcastAt < 6000) {
+                onRoomUpdate(hydrateRoomRecord(incoming));
+                return;
+              }
               this.getRoom(code)
                 .then(({ room }) => {
-                  onRoomUpdate(room || incoming);
+                  onRoomUpdate(room || hydrateRoomRecord(incoming));
                 })
                 .catch(() => {
-                  onRoomUpdate(incoming);
+                  onRoomUpdate(hydrateRoomRecord(incoming));
                 });
             } else {
-              onRoomUpdate(incoming);
+              onRoomUpdate(hydrateRoomRecord(incoming));
             }
           }
         }
       )
       .on('broadcast', { event: 'room_state_sync' }, ({ payload }) => {
         if (payload && payload.game_state && onRoomUpdate) {
-          onRoomUpdate(payload);
+          lastBroadcastAt = Date.now();
+          if (Array.isArray(payload.players) && payload.players.length > 0) {
+            cachedPlayers = payload.players;
+          }
+          const hydrated = hydrateRoomRecord({
+            ...payload,
+            players: payload.players || cachedPlayers,
+          });
+          onRoomUpdate(hydrated);
         }
       })
       .on('broadcast', { event: 'room_chat' }, ({ payload }) => {
@@ -1668,15 +1973,14 @@ export const multiplayerAdapter = {
       })
       .subscribe((status) => {
         if (onStatusChange) onStatusChange(status);
-        if (status === 'SUBSCRIBED') {
-          // Channel connected
-        }
       });
 
     this.activeChannels[code] = channel;
 
     return () => {
-      delete this.activeChannels[code];
+      if (this.activeChannels[code] === channel) {
+        delete this.activeChannels[code];
+      }
       supabase.removeChannel(channel);
     };
   },

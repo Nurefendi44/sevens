@@ -329,6 +329,7 @@ export default function ModeSelectionScreen({
 
     if (previewModalStats?.avatar) {
       setEditAvatarInput(previewModalStats.avatar);
+      return;
     }
 
     let cancelled = false;
@@ -337,13 +338,13 @@ export default function ModeSelectionScreen({
       if (!cancelled && remote?.avatar && !hasManuallyChangedAvatar) {
         setEditAvatarInput(remote.avatar);
       }
-    }, 220);
+    }, 600);
 
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [editNameInput, isProfileModalOpen, hasManuallyChangedAvatar, previewModalStats?.avatar]);
+  }, [editNameInput, isProfileModalOpen, hasManuallyChangedAvatar]);
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files?.[0];

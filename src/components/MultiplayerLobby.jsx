@@ -170,7 +170,7 @@ export default function MultiplayerLobby({
 
   // Auto-load saved avatar from Supabase when user types their Nickname on a new device (Device B)
   useEffect(() => {
-    if (hasManuallyChangedLobbyAvatar) return;
+    if (hasManuallyChangedLobbyAvatar || isParticipant) return;
     const clean = usernameInput.trim();
     if (!clean) return;
     let cancelled = false;
@@ -179,12 +179,12 @@ export default function MultiplayerLobby({
       if (!cancelled && remote?.avatar && !hasManuallyChangedLobbyAvatar) {
         setAvatarInput(remote.avatar);
       }
-    }, 220);
+    }, 600);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [usernameInput, pinInput, hasManuallyChangedLobbyAvatar]);
+  }, [usernameInput, pinInput, hasManuallyChangedLobbyAvatar, isParticipant]);
 
   const handleLobbyPhotoUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -255,14 +255,14 @@ export default function MultiplayerLobby({
     return () => clearInterval(id);
   }, [isParticipant, isMatchmakingRoom, hasEnoughToStart, isRoomFull, isHost, playerCountNow, roomCodeNow]);
 
-  // Heartbeat keeps the room visible in the matchmaking queue (drops ghost rooms)
+  // Heartbeat keeps the room visible in the matchmaking queue (only Host sends heartbeat every 45s)
   useEffect(() => {
-    if (!(isParticipant && isMatchmakingRoom && !isRoomFull)) return undefined;
+    if (!(isHost && isParticipant && isMatchmakingRoom && !isRoomFull)) return undefined;
     const id = setInterval(() => {
       if (onTouchRoomRef.current) onTouchRoomRef.current();
-    }, 20000);
+    }, 45000);
     return () => clearInterval(id);
-  }, [isParticipant, isMatchmakingRoom, isRoomFull, roomCodeNow]);
+  }, [isHost, isParticipant, isMatchmakingRoom, isRoomFull, roomCodeNow]);
 
   const showBotPrompt =
     isHost && isMatchmakingRoom && !hasEnoughToStart && waitSeconds >= Math.max(20, snoozeUntil);

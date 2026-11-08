@@ -96,6 +96,10 @@ class VoiceChatService {
     this.pendingCandidates = new Map();
     // Map: peerId -> sessionId
     this.peerSessions = new Map();
+    // Set of speaking peer IDs
+    this.speakingPeers = new Set();
+    // Map: peerId -> number of failed connection attempts in current session
+    this.failedAttempts = new Map();
 
     // Callbacks
     this.onSpeakingChange = null; // (playerId, isSpeaking) => void
@@ -229,7 +233,7 @@ class VoiceChatService {
         }
       }, 1200);
 
-      // Start periodic 4-second presence heartbeat
+      // Start periodic 20-second presence heartbeat (reduced from 4s to prevent Realtime Egress drain)
       if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = setInterval(() => {
         if (this.isConnected && this.roomCode) {
@@ -239,7 +243,7 @@ class VoiceChatService {
             sessionId: this.sessionId,
           });
         }
-      }, 4000);
+      }, 20000);
 
       return true;
     } catch (err) {
@@ -439,6 +443,7 @@ class VoiceChatService {
         // If the peer refreshed or started a fresh session, drop any stale connection
         if (isNewSession) {
           console.log(`[VoiceChat] Peer ${senderId} started new session (${sessionId}), resetting peer connection`);
+          this.failedAttempts.delete(senderId);
           this.closePeer(senderId);
         } else if (
           existingPc &&
@@ -477,6 +482,8 @@ class VoiceChatService {
         ) {
           return;
         }
+        const fails = this.failedAttempts.get(senderId) || 0;
+        if (fails >= 3) return;
         this.closePeer(senderId);
         if (this.myPlayerId < senderId) {
           await this.initiateCall(senderId);
@@ -486,6 +493,7 @@ class VoiceChatService {
         if (sessionId) {
           const prevSession = this.peerSessions.get(senderId);
           if (prevSession && prevSession !== sessionId) {
+            this.failedAttempts.delete(senderId);
             this.closePeer(senderId);
           }
           this.peerSessions.set(senderId, sessionId);
@@ -496,6 +504,11 @@ class VoiceChatService {
           (existingPc.connectionState === 'connected' || existingPc.connectionState === 'connecting');
 
         if (!isHealthy) {
+          const fails = this.failedAttempts.get(senderId) || 0;
+          if (fails >= 3) {
+            return;
+          }
+          this.failedAttempts.set(senderId, fails + 1);
           if (this.myPlayerId < senderId) {
             this.closePeer(senderId);
             await this.initiateCall(senderId);
@@ -522,6 +535,7 @@ class VoiceChatService {
       } else if (type === 'voice_leave') {
         this.closePeer(senderId);
         this.peerSessions.delete(senderId);
+        this.failedAttempts.delete(senderId);
         if (this.onSpeakingChange) {
           this.onSpeakingChange(senderId, false);
         }
@@ -585,19 +599,23 @@ class VoiceChatService {
     pc.onconnectionstatechange = () => {
       console.log(`📡 [VoiceChat] Connection state with ${peerId}: ${pc.connectionState}`);
       if (pc.connectionState === 'connected') {
+        this.failedAttempts.delete(peerId);
         console.log(`🎉 [VoiceChat] PEER CONNECTED with ${peerId}! Audio packets flowing.`);
         if (this.onPeerConnect) {
           this.onPeerConnect(peerId);
         }
       } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-        if (pc.connectionState === 'failed' && this.onStatusChange) {
-          this.onStatusChange({
-            isConnected: this.isConnected,
-            isMuted: this.isMuted,
-            error: this.iceConfig.hasTurn
-              ? 'Koneksi voice terputus. Mencoba menyambung kembali...'
-              : 'Koneksi voice gagal (jaringan memblokir P2P). Server TURN belum dikonfigurasi.',
-          });
+        if (pc.connectionState === 'failed') {
+          this.failedAttempts.set(peerId, (this.failedAttempts.get(peerId) || 0) + 1);
+          if (this.onStatusChange) {
+            this.onStatusChange({
+              isConnected: this.isConnected,
+              isMuted: this.isMuted,
+              error: this.iceConfig.hasTurn
+                ? 'Koneksi voice terputus. Mencoba menyambung kembali...'
+                : 'Koneksi voice gagal (jaringan memblokir P2P). Server TURN belum dikonfigurasi.',
+            });
+          }
         }
         this.closePeer(peerId);
       }

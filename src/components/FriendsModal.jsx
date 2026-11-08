@@ -85,25 +85,27 @@ export default function FriendsModal({
     }, 3200);
   };
 
-  // Reload local lists & sync stats with Top Global Leaderboard
-  const reloadFriendsData = () => {
+  // Reload local lists & optionally sync stats with Top Global Leaderboard
+  const reloadFriendsData = (syncWithServer = false) => {
     if (!currentDisplayName) return;
     setFriendsList(getFriendsList(currentDisplayName));
     setIncomingRequests(getIncomingFriendRequests(currentDisplayName));
     setSentRequests(getSentFriendRequests(currentDisplayName));
-    syncFriendsWithLeaderboard(currentDisplayName)
-      .then((res) => {
-        if (res?.friends) setFriendsList(res.friends);
-        if (res?.incomingRequests) setIncomingRequests(res.incomingRequests);
-        if (res?.sentRequests) setSentRequests(res.sentRequests);
-      })
-      .catch(() => {});
+    if (syncWithServer) {
+      syncFriendsWithLeaderboard(currentDisplayName)
+        .then((res) => {
+          if (res?.friends) setFriendsList(res.friends);
+          if (res?.incomingRequests) setIncomingRequests(res.incomingRequests);
+          if (res?.sentRequests) setSentRequests(res.sentRequests);
+        })
+        .catch(() => {});
+    }
   };
 
   // Sync data on open or username change
   useEffect(() => {
     if (isOpen && currentDisplayName) {
-      reloadFriendsData();
+      reloadFriendsData(true);
     }
   }, [isOpen, currentDisplayName]);
 
@@ -112,7 +114,8 @@ export default function FriendsModal({
     if (!currentDisplayName) return;
 
     const unsubscribe = subscribeToFriendEvents(currentDisplayName, (event) => {
-      reloadFriendsData();
+      // Only refresh local state from localStorage; never trigger a network re-fetch on storage sync
+      reloadFriendsData(false);
 
       if (event.type === 'friend_request_send') {
         showToast(`${event.from} mengirimkan permintaan pertemanan!`, 'info');

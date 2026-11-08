@@ -94,7 +94,7 @@ export default function LobbyChatDrawer({
 
   const currentDisplayName = String(myProfile.name || '').trim() || guestName;
 
-  // Load chat history (Global, Mabar Invites, DM) from Supabase & sync friends on mount / open
+  // Load chat history (Global, Mabar Invites, DM) from Supabase on mount / username change
   useEffect(() => {
     let active = true;
     if (currentDisplayName) {
@@ -123,18 +123,25 @@ export default function LobbyChatDrawer({
       }
     });
 
-    if (isOpen && currentDisplayName) {
-      syncFriendsWithLeaderboard(currentDisplayName)
-        .then((res) => {
-          if (active && res?.friends) setFriendsList(res.friends);
-        })
-        .catch(() => {});
-    }
     return () => {
       active = false;
       unsubSync();
     };
-  }, [currentDisplayName, isOpen]);
+  }, [currentDisplayName]);
+
+  // Sync friends stats when drawer is opened
+  useEffect(() => {
+    if (!isOpen || !currentDisplayName) return;
+    let active = true;
+    syncFriendsWithLeaderboard(currentDisplayName)
+      .then((res) => {
+        if (active && res?.friends) setFriendsList(res.friends);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isOpen, currentDisplayName]);
 
   // Friends List State
   const [friendsList, setFriendsList] = useState([]);

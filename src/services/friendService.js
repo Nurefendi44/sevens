@@ -226,82 +226,133 @@ export function getSentFriendRequests(username) {
   return [];
 }
 
+const FRIEND_SYNC_CACHE = new Map();
+const FRIEND_SYNC_INFLIGHT = new Map();
+const MISSING_FRIEND_STATS_CACHE = new Map();
+
+function setLocalStorageIfChanged(key, valueObj) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const nextJson = JSON.stringify(valueObj);
+    if (localStorage.getItem(key) !== nextJson) {
+      localStorage.setItem(key, nextJson);
+    }
+  } catch (e) {}
+}
+
 /**
  * Sinkronkan statistik (Skor, Juara 1, Tier, Avatar) daftar teman & permintaan pertemanan
  * langsung dari Top Global Leaderboard di Supabase dan simpan ke localStorage.
  */
-export async function syncFriendsWithLeaderboard(username) {
+export async function syncFriendsWithLeaderboard(username, forceRefresh = false) {
   const norm = normalizeUsernameKey(username);
   if (!norm) {
     return { friends: [], incomingRequests: [], sentRequests: [] };
   }
 
-  try {
-    await fetchGlobalLeaderboard('all', 200);
-  } catch (e) {
-    // Ignore network error, fallback to cache
-  }
-
-  const statsMap = getCachedGlobalStatsMap();
-  const friends = getFriendsList(username);
-  const incomingRequests = getIncomingFriendRequests(username);
-  const sentRequests = getSentFriendRequests(username);
-
-  // Jika ada teman yang belum masuk di cache Top Global, query langsung ke tabel leaderboard
-  const allEntries = [...friends, ...incomingRequests, ...sentRequests];
-  const missingNames = allEntries
-    .map((item) => item?.name)
-    .filter((name) => name && !statsMap.has(normalizeUsernameKey(name)));
-
-  if (missingNames.length > 0 && isSupabaseConfigured && supabase) {
-    try {
-      for (const targetName of missingNames) {
-        const sanitized = String(targetName).trim().replace(/[\\%_]/g, (c) => '\\' + c);
-        const { data } = await supabase
-          .from('leaderboard')
-          .select('player_name, avatar, score, wins, games_played')
-          .ilike('player_name', sanitized);
-
-        if (Array.isArray(data) && data.length > 0) {
-          let totalScore = 0;
-          let totalWins = 0;
-          let totalGames = 0;
-          let latestAvatar = null;
-          data.forEach((row) => {
-            totalScore += Math.max(0, Number(row.score || 0));
-            totalWins += Math.max(0, Number(row.wins || 0));
-            totalGames += Math.max(0, Number(row.games_played || 0));
-            if (row.avatar) latestAvatar = row.avatar;
-          });
-          statsMap.set(normalizeUsernameKey(targetName), {
-            score: totalScore,
-            wins: totalWins,
-            games_played: totalGames,
-            avatar: latestAvatar,
-            tier: getPlayerRankTier(totalScore, totalWins),
-          });
-        }
-      }
-    } catch (e) {}
-  }
-
-  const syncedFriends = friends.map((f) => enrichUserEntryWithMap(f, statsMap));
-  const syncedIncoming = incomingRequests.map((r) => enrichUserEntryWithMap(r, statsMap));
-  const syncedSent = sentRequests.map((r) => enrichUserEntryWithMap(r, statsMap));
-
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(`${FRIENDS_PREFIX}${norm}`, JSON.stringify(syncedFriends));
-      localStorage.setItem(`${REQ_IN_PREFIX}${norm}`, JSON.stringify(syncedIncoming));
-      localStorage.setItem(`${REQ_OUT_PREFIX}${norm}`, JSON.stringify(syncedSent));
+  const now = Date.now();
+  if (!forceRefresh) {
+    const cached = FRIEND_SYNC_CACHE.get(norm);
+    if (cached && now - cached.timestamp < 60000) {
+      return {
+        friends: getFriendsList(username),
+        incomingRequests: getIncomingFriendRequests(username),
+        sentRequests: getSentFriendRequests(username),
+      };
     }
-  } catch (e) {}
+    if (FRIEND_SYNC_INFLIGHT.has(norm)) {
+      return FRIEND_SYNC_INFLIGHT.get(norm);
+    }
+  }
 
-  return {
-    friends: syncedFriends,
-    incomingRequests: syncedIncoming,
-    sentRequests: syncedSent,
-  };
+  const syncPromise = (async () => {
+    try {
+      await fetchGlobalLeaderboard('all', 200);
+    } catch (e) {
+      // Ignore network error, fallback to cache
+    }
+
+    const statsMap = getCachedGlobalStatsMap();
+    const friends = getFriendsList(username);
+    const incomingRequests = getIncomingFriendRequests(username);
+    const sentRequests = getSentFriendRequests(username);
+
+    // Jika ada teman yang belum masuk di cache Top Global, query langsung ke tabel leaderboard (dengan cache)
+    const allEntries = [...friends, ...incomingRequests, ...sentRequests];
+    const missingNames = allEntries
+      .map((item) => item?.name)
+      .filter((name) => {
+        if (!name) return false;
+        const k = normalizeUsernameKey(name);
+        if (statsMap.has(k)) return false;
+        const cachedMissing = MISSING_FRIEND_STATS_CACHE.get(k);
+        if (cachedMissing && Date.now() - cachedMissing.timestamp < 120000) {
+          if (cachedMissing.data) statsMap.set(k, cachedMissing.data);
+          return false;
+        }
+        return true;
+      });
+
+    if (missingNames.length > 0 && isSupabaseConfigured && supabase) {
+      try {
+        const uniqueMissing = Array.from(new Set(missingNames.map((n) => String(n).trim()))).slice(0, 10);
+        for (const targetName of uniqueMissing) {
+          const targetKey = normalizeUsernameKey(targetName);
+          const sanitized = targetName.replace(/[\\%_]/g, (c) => '\\' + c);
+          const { data } = await supabase
+            .from('leaderboard')
+            .select('player_name, avatar, score, wins, games_played')
+            .ilike('player_name', sanitized)
+            .limit(10);
+
+          if (Array.isArray(data) && data.length > 0) {
+            let totalScore = 0;
+            let totalWins = 0;
+            let totalGames = 0;
+            let latestAvatar = null;
+            data.forEach((row) => {
+              totalScore += Math.max(0, Number(row.score || 0));
+              totalWins += Math.max(0, Number(row.wins || 0));
+              totalGames += Math.max(0, Number(row.games_played || 0));
+              if (row.avatar) latestAvatar = row.avatar;
+            });
+            const entryData = {
+              score: totalScore,
+              wins: totalWins,
+              games_played: totalGames,
+              avatar: latestAvatar,
+              tier: getPlayerRankTier(totalScore, totalWins),
+            };
+            statsMap.set(targetKey, entryData);
+            MISSING_FRIEND_STATS_CACHE.set(targetKey, { timestamp: Date.now(), data: entryData });
+          } else {
+            MISSING_FRIEND_STATS_CACHE.set(targetKey, { timestamp: Date.now(), data: null });
+          }
+        }
+      } catch (e) {}
+    }
+
+    const syncedFriends = friends.map((f) => enrichUserEntryWithMap(f, statsMap));
+    const syncedIncoming = incomingRequests.map((r) => enrichUserEntryWithMap(r, statsMap));
+    const syncedSent = sentRequests.map((r) => enrichUserEntryWithMap(r, statsMap));
+
+    setLocalStorageIfChanged(`${FRIENDS_PREFIX}${norm}`, syncedFriends);
+    setLocalStorageIfChanged(`${REQ_IN_PREFIX}${norm}`, syncedIncoming);
+    setLocalStorageIfChanged(`${REQ_OUT_PREFIX}${norm}`, syncedSent);
+
+    const result = {
+      friends: syncedFriends,
+      incomingRequests: syncedIncoming,
+      sentRequests: syncedSent,
+    };
+    FRIEND_SYNC_CACHE.set(norm, { timestamp: Date.now(), data: result });
+    return result;
+  })().finally(() => {
+    FRIEND_SYNC_INFLIGHT.delete(norm);
+  });
+
+  FRIEND_SYNC_INFLIGHT.set(norm, syncPromise);
+  return syncPromise;
 }
 
 /**
@@ -886,5 +937,11 @@ export function subscribeToFriendEvents(currentUsername, onEvent) {
 
   return () => {
     friendSubscribers.delete(wrappedListener);
+    if (friendSubscribers.size === 0 && socialChannel && supabase) {
+      try {
+        supabase.removeChannel(socialChannel);
+      } catch {}
+      socialChannel = null;
+    }
   };
 }
