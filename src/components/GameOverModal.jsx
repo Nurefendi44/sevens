@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 import { RotateCcw, Award, X, Sparkles } from 'lucide-react';
 import { SUIT_SYMBOLS } from '../engine/constants.js';
 import AvatarDisplay from './AvatarDisplay.jsx';
+import { resolvePlayerAvatar } from '../services/leaderboardService.js';
 import '../styles/animations.css';
 
 export default function GameOverModal({
@@ -63,7 +64,12 @@ export default function GameOverModal({
               <div className="mlbb-mvp-left">
                 <div className="mlbb-mvp-avatar-wrap">
                   <span className="mlbb-mvp-crown">👑</span>
-                  <AvatarDisplay avatar={winner.avatar} fallback="🧙‍♂️" size={44} />
+                  <AvatarDisplay
+                    avatar={resolvePlayerAvatar(winner, '🧙‍♂️')}
+                    fallback="🧙‍♂️"
+                    size={44}
+                    playerName={winner.name}
+                  />
                   <span className="mlbb-mvp-ribbon">MVP • JUARA 1</span>
                 </div>
                 <div className="mlbb-mvp-info">
@@ -105,7 +111,12 @@ export default function GameOverModal({
                 {idx === 0 && <div className="winner-crown">👑</div>}
                 <div className={`rank-medal rank-${idx + 1}`}>{player.rank}</div>
                 <div style={{ fontSize: '1.75rem', display: 'flex', justifyContent: 'center' }}>
-                  <AvatarDisplay avatar={player.avatar} fallback="👤" size={36} />
+                  <AvatarDisplay
+                    avatar={resolvePlayerAvatar(player, '👤')}
+                    fallback="👤"
+                    size={36}
+                    playerName={player.name}
+                  />
                 </div>
                 <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#f8fafc' }}>
                   {player.name}
@@ -173,7 +184,12 @@ export default function GameOverModal({
                     </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <AvatarDisplay avatar={r.avatar} fallback="👤" size={22} />
+                        <AvatarDisplay
+                          avatar={resolvePlayerAvatar(r, '👤')}
+                          fallback="👤"
+                          size={22}
+                          playerName={r.name}
+                        />
                         <span style={{ fontWeight: 700 }}>{r.name}</span>
                       </div>
                     </td>

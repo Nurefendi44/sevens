@@ -147,7 +147,7 @@
         'seatIndex', v_seat,
         'isHost', false,
         'isReady', true,
-        'avatar', v_avatars[LEAST(v_seat + 1, 6)],
+        'avatar', COALESCE(NULLIF(p_player->>'avatar', ''), v_avatars[LEAST(v_seat + 1, 6)]),
         'joinedAt', (extract(epoch FROM clock_timestamp()) * 1000)::bigint
       );
 
@@ -172,7 +172,7 @@
       'seatIndex', 0,
       'isHost', true,
       'isReady', true,
-      'avatar', v_avatars[1],
+      'avatar', COALESCE(NULLIF(p_player->>'avatar', ''), v_avatars[1]),
       'joinedAt', (extract(epoch FROM clock_timestamp()) * 1000)::bigint
     );
 

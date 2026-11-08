@@ -400,6 +400,96 @@ export async function syncPlayerProfileFromServer(username, pin = '') {
 }
 
 /**
+ * In-memory & localStorage cached lookup for player avatar/photo by player name or ID.
+ * Resolves avatar for opponents/teammates across match tables, scoreboards, and battle results.
+ */
+const KNOWN_AVATAR_CACHE = new Map();
+
+export function cachePlayerAvatar(nameOrId, avatar) {
+  if (!nameOrId || !avatar) return;
+  const key = String(nameOrId).trim().toLowerCase();
+  if (key) {
+    KNOWN_AVATAR_CACHE.set(key, avatar);
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem('sevens_known_avatars');
+        const map = raw ? JSON.parse(raw) : {};
+        map[key] = avatar;
+        // Limit cache size to 100 entries
+        const keys = Object.keys(map);
+        if (keys.length > 100) {
+          delete map[keys[0]];
+        }
+        localStorage.setItem('sevens_known_avatars', JSON.stringify(map));
+      }
+    } catch {}
+  }
+}
+
+export function getCachedPlayerAvatar(nameOrId, fallback = null) {
+  if (!nameOrId) return fallback;
+  const key = String(nameOrId).trim().toLowerCase();
+  if (KNOWN_AVATAR_CACHE.has(key)) {
+    return KNOWN_AVATAR_CACHE.get(key);
+  }
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem('sevens_known_avatars');
+      if (raw) {
+        const map = JSON.parse(raw);
+        if (map && map[key]) {
+          KNOWN_AVATAR_CACHE.set(key, map[key]);
+          return map[key];
+        }
+      }
+    }
+  } catch {}
+  return fallback;
+}
+
+/**
+ * Resolves the best available avatar for a player:
+ * 1. If player is current local human viewer, returns local profile avatar / photo.
+ * 2. If player already has a custom image avatar (data:image or http), returns it.
+ * 3. Checks known avatar cache by player name or ID.
+ * 4. Falls back to player.avatar or fallback emoji.
+ */
+export function resolvePlayerAvatar(player, fallback = '👤') {
+  if (!player) return fallback;
+  const localProfile = getLocalPlayerProfile();
+  const cleanName = (player.name || '').trim().toLowerCase();
+  const localName = (localProfile.name || '').trim().toLowerCase();
+  const localId = (typeof localStorage !== 'undefined' && localStorage.getItem('sevens_player_id')) || '';
+
+  // 1. Is this the current local player?
+  if (
+    (localId && player.id === localId) ||
+    (localName && cleanName === localName && !player.isBot)
+  ) {
+    if (localProfile.avatar && localProfile.avatar !== '👤' && localProfile.avatar !== '👑') {
+      return localProfile.avatar;
+    }
+    const localAvatar = (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_PLAYER_AVATAR)) || '';
+    if (localAvatar) return localAvatar;
+  }
+
+  // 2. Player already carries custom photo
+  if (typeof player.avatar === 'string' && (player.avatar.startsWith('data:image/') || player.avatar.startsWith('http'))) {
+    cachePlayerAvatar(cleanName, player.avatar);
+    cachePlayerAvatar(player.id, player.avatar);
+    return player.avatar;
+  }
+
+  // 3. Check cached avatar by name or id
+  const fromCache = getCachedPlayerAvatar(cleanName) || getCachedPlayerAvatar(player.id);
+  if (fromCache && (fromCache.startsWith('data:image/') || fromCache.startsWith('http'))) {
+    return fromCache;
+  }
+
+  return player.avatar || fromCache || fallback;
+}
+
+/**
  * Permata & Kasino Rank Tier calculator:
  * Bronze ➔ Silver ➔ Gold ➔ Diamond ➔ Crown ➔ Ace ➔ Royal King
  * Computed from player's accumulated Global Score (points) and Wins (Juara 1).

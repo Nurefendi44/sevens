@@ -113,7 +113,18 @@ export function getLocalPlayerName() {
 
 export function getLocalPlayerAvatar(fallback = null) {
   if (typeof localStorage === 'undefined') return fallback || AVATARS[0];
-  return localStorage.getItem('sevens_player_avatar') || fallback || AVATARS[0];
+  const saved = localStorage.getItem('sevens_player_avatar');
+  if (saved && saved.trim()) return saved.trim();
+  try {
+    const rawProfile = localStorage.getItem('sevens_user_profile');
+    if (rawProfile) {
+      const parsed = JSON.parse(rawProfile);
+      if (parsed?.avatar && typeof parsed.avatar === 'string' && parsed.avatar.trim()) {
+        return parsed.avatar.trim();
+      }
+    }
+  } catch {}
+  return fallback || AVATARS[0];
 }
 
 /**
@@ -367,6 +378,15 @@ export const multiplayerAdapter = {
     if (existingPlayer) {
       // Reconnect: persist matching player id and name
       setLocalSession(existingPlayer.id, existingPlayer.name, code);
+
+      // Check if local profile has a newer custom photo/avatar not yet updated in room
+      const localAvatar = getLocalPlayerAvatar();
+      if (localAvatar && existingPlayer.avatar !== localAvatar && !existingPlayer.isBot) {
+        existingPlayer.avatar = localAvatar;
+        // Non-blocking sync to database
+        this.syncPlayerAvatarInRoom(code, existingPlayer.id, localAvatar).catch(() => {});
+      }
+
       return {
         success: true,
         room,
@@ -486,9 +506,11 @@ export const multiplayerAdapter = {
     const name = (playerName || '').trim() || 'Pemain';
     const playerId = getLocalPlayerId();
 
+    const myAvatar = getLocalPlayerAvatar(AVATARS[0]);
+
     const { data, error } = await supabase.rpc('matchmake', {
       p_game_type: gameType || 'sevens',
-      p_player: { id: playerId, name, avatar: getLocalPlayerAvatar(AVATARS[0]), joinedAt: Date.now() },
+      p_player: { id: playerId, name, avatar: myAvatar, joinedAt: Date.now() },
     });
 
     if (error) {
@@ -507,8 +529,26 @@ export const multiplayerAdapter = {
       return { success: false, error: 'Matchmaking tidak mengembalikan room.' };
     }
 
-    setLocalSession(playerId, name, data.room.code);
-    return { success: true, room: data.room, player: data.player, created: Boolean(data.created) };
+    // Ensure player object carries local profile avatar if RPC used default/fallback
+    const returnedRoom = data.room;
+    const returnedPlayer = { ...data.player, avatar: myAvatar || data.player.avatar };
+    if (returnedRoom && Array.isArray(returnedRoom.players)) {
+      returnedRoom.players = returnedRoom.players.map((p) => {
+        if (p.id === playerId && !p.isBot) {
+          return { ...p, avatar: myAvatar };
+        }
+        return p;
+      });
+    }
+
+    setLocalSession(playerId, name, returnedRoom.code);
+
+    // Sync avatar update to database if RPC created/joined with default emoji
+    if (myAvatar && data.player.avatar !== myAvatar) {
+      this.syncPlayerAvatarInRoom(returnedRoom.code, playerId, myAvatar).catch(() => {});
+    }
+
+    return { success: true, room: returnedRoom, player: returnedPlayer, created: Boolean(data.created) };
   },
 
   /**
@@ -1275,6 +1315,61 @@ export const multiplayerAdapter = {
 
     if (updateErr) return { success: false, error: updateErr.message };
     return { success: true, room: updatedRoom };
+  },
+
+  /**
+   * Synchronizes the player's latest profile (custom photo / avatar) in the active room (players array and game_state.players)
+   */
+  async syncPlayerAvatarInRoom(roomCode, playerId, newAvatar) {
+    if (!supabase || !roomCode || !playerId || !newAvatar) return { success: false };
+    const code = roomCode.trim().toUpperCase();
+    try {
+      const { room } = await this.getRoom(code);
+      if (!room) return { success: false };
+
+      let changed = false;
+      const updatedPlayers = (room.players || []).map((p) => {
+        if (p.id === playerId && !p.isBot && p.avatar !== newAvatar) {
+          changed = true;
+          return { ...p, avatar: newAvatar };
+        }
+        return p;
+      });
+
+      let updatedGameState = room.game_state;
+      if (updatedGameState && Array.isArray(updatedGameState.players)) {
+        updatedGameState = {
+          ...updatedGameState,
+          players: updatedGameState.players.map((p) => {
+            if (p.id === playerId && !p.isBot && p.avatar !== newAvatar) {
+              changed = true;
+              return { ...p, avatar: newAvatar };
+            }
+            return p;
+          }),
+        };
+      }
+
+      if (!changed) return { success: true, room };
+
+      const { data: updatedRows, error: updateErr } = await supabase
+        .from('rooms')
+        .update({
+          players: updatedPlayers,
+          game_state: updatedGameState,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('code', code)
+        .select();
+
+      if (!updateErr && updatedRows && updatedRows[0]) {
+        this.broadcastRoomState(code, updatedRows[0]);
+        return { success: true, room: updatedRows[0] };
+      }
+    } catch (e) {
+      console.warn('[multiplayerAdapter] Failed to sync player avatar in room:', e);
+    }
+    return { success: false };
   },
 
   /**

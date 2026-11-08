@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Crown, LogOut, Bot, Hourglass, Swords, Radar, Play, Sparkles, X, Mic, MicOff } from 'lucide-react';
 import AvatarDisplay from './AvatarDisplay.jsx';
+import { getLocalPlayerAvatar } from '../services/multiplayerAdapter.js';
 import '../styles/matchmaking.css';
 
 const SUIT_PARTICLES = ['♠', '♥', '♦', '♣', '♠', '♥', '♦', '♣', '♠', '♥'];
@@ -186,6 +187,11 @@ export default function MatchmakingScreen({
             }
             const isMe = p.id === myPlayerId;
             const isSpeaking = speakingPlayers?.has?.(p.id);
+            const effectiveAvatar =
+              isMe && (!p.avatar || p.avatar === '👤' || p.avatar === '👑')
+                ? getLocalPlayerAvatar(p.avatar || '👑')
+                : p.avatar || (p.isBot ? '🤖' : '🃏');
+
             return (
               <div
                 key={p.id}
@@ -215,7 +221,7 @@ export default function MatchmakingScreen({
                 )}
                 <div className={`mmx-slot-avatar ${isSpeaking ? 'speaking-avatar-ring' : ''}`}>
                   <AvatarDisplay
-                    avatar={p.avatar || (p.isBot ? '🤖' : '🃏')}
+                    avatar={effectiveAvatar}
                     fallback="🃏"
                   />
                 </div>

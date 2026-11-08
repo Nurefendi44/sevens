@@ -18,6 +18,7 @@ import {
   clearLocalSession,
   getLocalPlayerId,
   getLocalPlayerName,
+  getLocalPlayerAvatar,
   getGameTypeFromRoomCode,
   extractCleanRoomCode,
   MATCHMAKING_MIN_PLAYERS,
@@ -486,6 +487,14 @@ export default function App() {
 
           if (matchedPlayer) {
             // Already registered in room: reconnect seamlessly
+            const localAvatar = getLocalPlayerAvatar();
+            if (localAvatar && matchedPlayer.avatar !== localAvatar && !matchedPlayer.isBot) {
+              matchedPlayer.avatar = localAvatar;
+              if (Array.isArray(room.players)) {
+                room.players = room.players.map((p) => (p.id === matchedPlayer.id ? { ...p, avatar: localAvatar } : p));
+              }
+              multiplayerAdapter.syncPlayerAvatarInRoom(room.code, matchedPlayer.id, localAvatar).catch(() => {});
+            }
             setCurrentRoom(room);
             setGameMode('multiplayer');
             setMyPlayerId(matchedPlayer.id);

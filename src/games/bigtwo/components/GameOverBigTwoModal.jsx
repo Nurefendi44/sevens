@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 import { RotateCcw, Home, Award, Sparkles, X } from 'lucide-react';
 import Card from '../../../components/CardView.jsx';
 import AvatarDisplay from '../../../components/AvatarDisplay.jsx';
+import { resolvePlayerAvatar } from '../../../services/leaderboardService.js';
 import '../../../styles/animations.css';
 
 export default function GameOverBigTwoModal({
@@ -78,7 +79,12 @@ export default function GameOverBigTwoModal({
               <div className="mlbb-mvp-left">
                 <div className="mlbb-mvp-avatar-wrap">
                   <span className="mlbb-mvp-crown">👑</span>
-                  <AvatarDisplay avatar={winner.avatar} fallback="🧙‍♂️" size={44} />
+                  <AvatarDisplay
+                    avatar={resolvePlayerAvatar(winner, '🧙‍♂️')}
+                    fallback="🧙‍♂️"
+                    size={44}
+                    playerName={winner.name}
+                  />
                   <span className="mlbb-mvp-ribbon">MVP • JUARA 1</span>
                 </div>
                 <div className="mlbb-mvp-info">
@@ -167,7 +173,11 @@ export default function GameOverBigTwoModal({
                           overflow: 'hidden',
                         }}
                       >
-                        <AvatarDisplay avatar={player.avatar} fallback="🤖" />
+                        <AvatarDisplay
+                          avatar={resolvePlayerAvatar(player, '🤖')}
+                          fallback="🤖"
+                          playerName={player.name}
+                        />
                       </span>
                       <div>
                         <div style={{ fontWeight: 800, color: '#f8fafc', fontSize: '0.95rem' }}>

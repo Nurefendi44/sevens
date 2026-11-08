@@ -1,5 +1,6 @@
 import React from 'react';
 import AvatarDisplay from './AvatarDisplay.jsx';
+import { resolvePlayerAvatar } from '../services/leaderboardService.js';
 
 export default function PlayerSeat({
   player,
@@ -13,7 +14,11 @@ export default function PlayerSeat({
     <div className={`player-seat ${isTurn ? 'active-turn' : ''}`}>
       <div className="seat-header">
         <div className={`player-avatar ${isSpeaking ? 'speaking-avatar-ring' : ''}`}>
-          <AvatarDisplay avatar={player.avatar} fallback="👤" />
+          <AvatarDisplay
+            avatar={resolvePlayerAvatar(player, '👤')}
+            fallback="👤"
+            playerName={player.name}
+          />
         </div>
         <div className="player-info">
           <div className="player-name">

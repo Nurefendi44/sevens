@@ -18,6 +18,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import AvatarDisplay from '../../../components/AvatarDisplay.jsx';
+import { resolvePlayerAvatar } from '../../../services/leaderboardService.js';
 import '../../../styles/game41.css';
 
 export default function Table41({
@@ -134,7 +135,12 @@ export default function Table41({
                 style={{ fontSize: '1.25rem', display: 'inline-flex', alignItems: 'center' }}
                 className={speakingPlayers?.has?.(p.id) ? 'speaking-avatar-ring' : ''}
               >
-                <AvatarDisplay avatar={p.avatar} fallback="🤖" size={24} />
+                <AvatarDisplay
+                  avatar={resolvePlayerAvatar(p, '🤖')}
+                  fallback="🤖"
+                  size={24}
+                  playerName={p.name}
+                />
               </span>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <strong style={{ fontSize: '0.8rem', color: isOpponentTurn ? '#fbbf24' : '#f8fafc' }}>
@@ -289,7 +295,12 @@ export default function Table41({
               style={{ fontSize: '1.3rem', display: 'inline-flex', alignItems: 'center' }}
               className={speakingPlayers?.has?.(myPlayer.id) ? 'speaking-avatar-ring' : ''}
             >
-              <AvatarDisplay avatar={myPlayer.avatar} fallback="👑" size={26} />
+              <AvatarDisplay
+                avatar={resolvePlayerAvatar(myPlayer, '👑')}
+                fallback="👑"
+                size={26}
+                playerName={myPlayer.name}
+              />
             </span>
             <strong>{myPlayer.name}</strong>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
