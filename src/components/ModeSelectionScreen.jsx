@@ -37,6 +37,7 @@ import {
   getLocalPlayerProfile,
   verifyAndSaveProfileWithPin,
   updatePlayerAvatarEverywhere,
+  syncPlayerProfileFromServer,
   extractPinHashFromItem,
   hashProfilePin,
   PROFILE_AVATARS,
@@ -157,6 +158,7 @@ export default function ModeSelectionScreen({
   const [editNameInput, setEditNameInput] = useState(() => getLocalPlayerProfile().name || '');
   const [editAvatarInput, setEditAvatarInput] = useState(() => getLocalPlayerProfile().avatar || '👑');
   const [editPinInput, setEditPinInput] = useState(() => getLocalPlayerProfile().pin || '');
+  const [hasManuallyChangedAvatar, setHasManuallyChangedAvatar] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [photoSuccessMsg, setPhotoSuccessMsg] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -219,13 +221,22 @@ export default function ModeSelectionScreen({
 
   // Keep profile synced with localStorage on mount, window focus, and avatar updates
   useEffect(() => {
-    const syncProfile = () => {
+    const syncProfile = async () => {
       const latest = getLocalPlayerProfile();
       setProfile((prev) =>
         prev.name !== latest.name || prev.avatar !== latest.avatar || prev.pin !== latest.pin
           ? latest
           : prev
       );
+      if (latest.name) {
+        const remote = await syncPlayerProfileFromServer(latest.name, latest.pin);
+        if (remote?.avatar && remote.avatar !== latest.avatar) {
+          // If server has a custom photo or local is still default emoji, sync from server
+          if (isImageAvatar(remote.avatar) || !isImageAvatar(latest.avatar)) {
+            setProfile((prev) => ({ ...prev, avatar: remote.avatar }));
+          }
+        }
+      }
     };
     syncProfile();
     window.addEventListener('focus', syncProfile);
@@ -304,6 +315,30 @@ export default function ModeSelectionScreen({
     [previewModalStats]
   );
 
+  // Auto-load saved avatar from Supabase when user types their Nickname on a new device (Device B)
+  useEffect(() => {
+    if (!isProfileModalOpen || hasManuallyChangedAvatar) return;
+    const clean = editNameInput.trim();
+    if (!clean) return;
+
+    if (previewModalStats?.avatar) {
+      setEditAvatarInput(previewModalStats.avatar);
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const remote = await syncPlayerProfileFromServer(clean);
+      if (!cancelled && remote?.avatar && !hasManuallyChangedAvatar) {
+        setEditAvatarInput(remote.avatar);
+      }
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [editNameInput, isProfileModalOpen, hasManuallyChangedAvatar, previewModalStats?.avatar]);
+
   const handlePhotoUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -312,6 +347,7 @@ export default function ModeSelectionScreen({
     setIsProcessingPhoto(true);
     try {
       const compressedDataUrl = await compressProfileImage(file);
+      setHasManuallyChangedAvatar(true);
       setEditAvatarInput(compressedDataUrl);
       // Immediately persist locally & to Supabase if registered so user never loses their uploaded photo
       await updatePlayerAvatarEverywhere(compressedDataUrl);
@@ -328,6 +364,7 @@ export default function ModeSelectionScreen({
 
   const handleRemoveCustomPhoto = async () => {
     const fallbackEmoji = '👑';
+    setHasManuallyChangedAvatar(true);
     setEditAvatarInput(fallbackEmoji);
     setPhotoSuccessMsg('');
     await updatePlayerAvatarEverywhere(fallbackEmoji);
@@ -367,6 +404,8 @@ export default function ModeSelectionScreen({
       name: cleanedName,
       avatar: chosenAvatar,
       pin: cleanedPin,
+      preserveRemoteAvatar: !hasManuallyChangedAvatar,
+      explicitAvatarChange: hasManuallyChangedAvatar,
     });
     setIsSavingProfile(false);
 
@@ -376,6 +415,7 @@ export default function ModeSelectionScreen({
     }
 
     const finalAvatar = res.avatar || chosenAvatar;
+    setEditAvatarInput(finalAvatar);
     setProfile({ name: cleanedName, avatar: finalAvatar, pin: cleanedPin });
     setIsProfileModalOpen(false);
     loadHomepageLeaderboard(previewCategory);
@@ -606,6 +646,7 @@ export default function ModeSelectionScreen({
               setEditNameInput(profile.name || '');
               setEditAvatarInput(profile.avatar || '👑');
               setEditPinInput(profile.pin || '');
+              setHasManuallyChangedAvatar(false);
               setProfileError('');
               setPhotoSuccessMsg('');
               setIsProfileModalOpen(true);
@@ -782,6 +823,7 @@ export default function ModeSelectionScreen({
                   setEditNameInput(profile.name || '');
                   setEditAvatarInput(profile.avatar || '👑');
                   setEditPinInput(profile.pin || '');
+                  setHasManuallyChangedAvatar(false);
                   setProfileError('');
                   setPhotoSuccessMsg('');
                   setIsProfileModalOpen(true);
@@ -1424,6 +1466,7 @@ export default function ModeSelectionScreen({
                       type="button"
                       className={`mlbb-avatar-option ${editAvatarInput === av ? 'selected' : ''}`}
                       onClick={() => {
+                        setHasManuallyChangedAvatar(true);
                         setEditAvatarInput(av);
                         setPhotoSuccessMsg('');
                       }}
@@ -1950,7 +1993,9 @@ export default function ModeSelectionScreen({
           setEditNameInput(profile.name || '');
           setEditAvatarInput(profile.avatar || '👑');
           setEditPinInput(profile.pin || '');
+          setHasManuallyChangedAvatar(false);
           setProfileError('');
+          setPhotoSuccessMsg('');
           setIsProfileModalOpen(true);
         }}
       />

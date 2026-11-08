@@ -36,6 +36,7 @@ import {
   getLocalPlayerProfile,
   verifyAndSaveProfileWithPin,
   updatePlayerAvatarEverywhere,
+  syncPlayerProfileFromServer,
 } from '../services/leaderboardService.js';
 import { sendLobbyChatMessage } from '../services/lobbyChatService.js';
 import MatchmakingScreen from './MatchmakingScreen.jsx';
@@ -159,6 +160,7 @@ export default function MultiplayerLobby({
   const [usernameInput, setUsernameInput] = useState(() => getLocalPlayerName() || '');
   const [pinInput, setPinInput] = useState(() => getLocalPlayerProfile().pin || '');
   const [avatarInput, setAvatarInput] = useState(() => getLocalPlayerProfile().avatar || '👑');
+  const [hasManuallyChangedLobbyAvatar, setHasManuallyChangedLobbyAvatar] = useState(false);
   const lobbyPhotoInputRef = useRef(null);
   const [roomCodeInput, setRoomCodeInput] = useState(() =>
     extractCleanRoomCode(effectiveInviteCode || '')
@@ -166,11 +168,30 @@ export default function MultiplayerLobby({
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Auto-load saved avatar from Supabase when user types their Nickname on a new device (Device B)
+  useEffect(() => {
+    if (hasManuallyChangedLobbyAvatar) return;
+    const clean = usernameInput.trim();
+    if (!clean) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const remote = await syncPlayerProfileFromServer(clean, pinInput);
+      if (!cancelled && remote?.avatar && !hasManuallyChangedLobbyAvatar) {
+        setAvatarInput(remote.avatar);
+      }
+    }, 220);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [usernameInput, pinInput, hasManuallyChangedLobbyAvatar]);
+
   const handleLobbyPhotoUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       const compressed = await compressProfileImage(file);
+      setHasManuallyChangedLobbyAvatar(true);
       setAvatarInput(compressed);
       await updatePlayerAvatarEverywhere(compressed);
     } catch (err) {
@@ -356,7 +377,8 @@ export default function MultiplayerLobby({
       name: cleanName,
       avatar: currentAvatar,
       pin: cleanPin,
-      preserveRemoteAvatar: !isImageAvatar(currentAvatar),
+      preserveRemoteAvatar: !hasManuallyChangedLobbyAvatar,
+      explicitAvatarChange: hasManuallyChangedLobbyAvatar,
     });
     if (!check.success) {
       setErrorMsg(check.error || 'PIN tidak cocok dengan pemilik Nickname ini.');

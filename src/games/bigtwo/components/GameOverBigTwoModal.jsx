@@ -66,7 +66,7 @@ export default function GameOverBigTwoModal({
           </div>
           <div className="mlbb-victory-subtitle">
             {activeState.endReason === 'LAST_CARD_TWO_DISQUALIFICATION'
-              ? `${activeState.disqualifiedPlayerName || 'Pemain'} mengeluarkan Kartu 2 sebagai kartu terakhir!`
+              ? `${activeState.disqualifiedPlayerName || 'Pemain'} mengeluarkan Kartu 2 (Single/Pair/Triple) sebagai kartu terakhir!`
               : 'Urutan Kemenangan & Poin Klasemen Capsa Banting'}
           </div>
         </div>

@@ -185,6 +185,7 @@ export async function verifyAndSaveProfileWithPin({
   avatar,
   pin,
   preserveRemoteAvatar = false,
+  explicitAvatarChange = false,
 }) {
   const cleanName = String(name || '').trim();
   const cleanPin = String(pin || '').trim();
@@ -220,18 +221,29 @@ export async function verifyAndSaveProfileWithPin({
           };
         }
 
-        // If logging in from a new device without explicitly picking a new avatar, restore existing remote photo/avatar
-        if (preserveRemoteAvatar) {
-          const remotePhoto = rows.find(
-            (r) => typeof r.avatar === 'string' && r.avatar.startsWith('data:image/')
-          )?.avatar;
-          const remoteAny = rows.find((r) => r.avatar)?.avatar;
-          if (remotePhoto || (remoteAny && (!avatar || avatar === '👑'))) {
-            chosenAvatar = remotePhoto || remoteAny || chosenAvatar;
+        const remotePhoto = rows.find(
+          (r) => typeof r.avatar === 'string' && r.avatar.startsWith('data:image/')
+        )?.avatar;
+        const remoteAny =
+          rows.find((r) => r.avatar && r.avatar !== '👤' && r.avatar !== '👑')?.avatar ||
+          rows.find((r) => r.avatar)?.avatar;
+
+        // If logging in on a second device (Device B) without explicitly changing the avatar,
+        // ALWAYS restore the existing remote photo/avatar from Supabase so it is never lost!
+        const shouldRestoreRemote =
+          preserveRemoteAvatar ||
+          !explicitAvatarChange ||
+          (Boolean(remotePhoto) && !String(chosenAvatar).startsWith('data:image/'));
+
+        if (shouldRestoreRemote && (remotePhoto || remoteAny)) {
+          if (remotePhoto) {
+            chosenAvatar = remotePhoto;
+          } else if (!explicitAvatarChange && remoteAny) {
+            chosenAvatar = remoteAny;
           }
         }
 
-        // Either PIN matched OR legacy account didn't have a PIN yet -> lock all rows with `lockedPlayerId` & update avatar
+        // Either PIN matched OR legacy account didn't have a PIN yet -> lock all rows with `lockedPlayerId` & sync avatar
         for (const r of rows) {
           await supabase
             .from('leaderboard')
@@ -289,6 +301,10 @@ export async function updatePlayerAvatarEverywhere(newAvatar) {
   if (current.name && isSupabaseConfigured && supabase) {
     try {
       const cleanName = current.name.trim();
+      const normName = cleanName.toLowerCase();
+      const myHash = current.pin ? hashProfilePin(cleanName, current.pin) : '';
+      const lockedPlayerId = myHash ? `user_${normName}__pin_${myHash}` : `user_${normName}`;
+
       const { data: rows } = await supabase
         .from('leaderboard')
         .select('id, player_id, player_name')
@@ -298,15 +314,31 @@ export async function updatePlayerAvatarEverywhere(newAvatar) {
         const existingHash = extractPinHashFromItem({
           player_ids: rows.map((r) => r.player_id),
         });
-        const myHash = current.pin ? hashProfilePin(cleanName, current.pin) : '';
-        if (!existingHash || existingHash === myHash) {
+        if (!existingHash || !myHash || existingHash === myHash) {
           for (const r of rows) {
             await supabase
               .from('leaderboard')
-              .update({ avatar: chosenAvatar })
+              .update({
+                avatar: chosenAvatar,
+                last_played_at: new Date().toISOString(),
+              })
               .eq('id', r.id);
           }
         }
+      } else if (myHash) {
+        await supabase.from('leaderboard').upsert(
+          {
+            player_id: lockedPlayerId,
+            player_name: cleanName,
+            avatar: chosenAvatar,
+            game_type: 'sevens',
+            wins: 0,
+            games_played: 0,
+            score: 0,
+            last_played_at: new Date().toISOString(),
+          },
+          { onConflict: 'player_id, game_type' }
+        );
       }
     } catch (e) {
       console.warn('[Leaderboard] Failed to sync new avatar to server:', e);
@@ -314,6 +346,57 @@ export async function updatePlayerAvatarEverywhere(newAvatar) {
   }
 
   return { success: true, avatar: chosenAvatar };
+}
+
+/**
+ * Fetches & restores the saved avatar/photo from Supabase for a given username (and optional PIN).
+ * Used when logging in on a new device (Device B) or syncing profile on startup.
+ */
+export async function syncPlayerProfileFromServer(username, pin = '') {
+  const cleanName = String(username || '').trim();
+  if (!cleanName || !isSupabaseConfigured || !supabase) return null;
+
+  try {
+    const { data: rows, error } = await supabase
+      .from('leaderboard')
+      .select('id, player_id, player_name, avatar, game_type, wins, games_played, score, last_played_at')
+      .ilike('player_name', cleanName.replace(/[\\%_]/g, (c) => '\\' + c));
+
+    if (error || !Array.isArray(rows) || rows.length === 0) return null;
+
+    const existingHash = extractPinHashFromItem({
+      player_ids: rows.map((r) => r.player_id),
+    });
+
+    const remotePhoto = rows.find(
+      (r) => typeof r.avatar === 'string' && r.avatar.startsWith('data:image/')
+    )?.avatar;
+    const remoteAny =
+      rows.find((r) => r.avatar && r.avatar !== '👤' && r.avatar !== '👑')?.avatar ||
+      rows.find((r) => r.avatar)?.avatar;
+    const bestAvatar = remotePhoto || remoteAny || '👑';
+
+    // If PIN is provided and matches (or account has no PIN), also persist to localStorage
+    if (pin && /^\d{4}$/.test(String(pin).trim())) {
+      const myHash = hashProfilePin(cleanName, pin);
+      if (!existingHash || existingHash === myHash) {
+        saveLocalPlayerProfile({
+          name: rows[0]?.player_name || cleanName,
+          avatar: bestAvatar,
+          pin: String(pin).trim(),
+        });
+      }
+    }
+
+    return {
+      name: rows[0]?.player_name || cleanName,
+      avatar: bestAvatar,
+      hasPin: Boolean(existingHash),
+      pinHash: existingHash || null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**

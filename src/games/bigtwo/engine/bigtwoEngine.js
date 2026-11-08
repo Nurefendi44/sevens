@@ -297,13 +297,18 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
 
   // Check if player's hand is empty (Finished all cards!)
   if (newPlayerHand.length === 0) {
-    // RULE 1: Kartu angka 2 tidak boleh menjadi kartu terakhir yang dikeluarkan/dipegang!
-    const hasTwoAsLastCard = selectedCards.some(
-      (c) => c.rank === 2 || getCardRank(c) === 15
-    );
+    // RULE 1: Kartu angka 2 tidak boleh menjadi kartu terakhir untuk Single, Pair, atau Triple!
+    // Untuk kombinasi 5 kartu (Straight, Flush, Full House, Four of a Kind, Straight Flush) tetap sah jika keluar terakhir.
+    const isForbiddenLastTwoCombo =
+      combo.type === HAND_TYPE_BIGTWO.SINGLE ||
+      combo.type === HAND_TYPE_BIGTWO.PAIR ||
+      combo.type === HAND_TYPE_BIGTWO.TRIPLE;
+    const hasTwoAsLastCard =
+      isForbiddenLastTwoCombo &&
+      selectedCards.some((c) => c.rank === 2 || getCardRank(c) === 15);
 
     if (hasTwoAsLastCard) {
-      // RULE 1 VIOLATION: Pemain mengeluarkan kartu 2 terakhir -> OTOMATIS KALAH!
+      // RULE 1 VIOLATION: Pemain mengeluarkan kartu 2 terakhir (Single/Pair/Triple) -> OTOMATIS KALAH!
       const previousFinished = gameState.finishedPlayers || [];
       const disqualifiedPlayerObj = gameState.players.find((p) => p.id === playerId);
       const finishedIds = previousFinished.map((f) => f.id);
@@ -341,11 +346,18 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
         pointsEarned: 0,
         isWinner: false,
         isDisqualified: true,
-        penaltyReason: 'Mengeluarkan Kartu 2 Terakhir (Dilarang)',
+        penaltyReason: 'Mengeluarkan Kartu 2 Terakhir (Single/Pair/Triple Dilarang)',
       };
 
       const rankings = [...nonDisqualified, disqualifiedEntry];
       const actualWinner = rankings[0];
+
+      const comboLabelType =
+        combo.type === HAND_TYPE_BIGTWO.TRIPLE
+          ? 'Triple'
+          : combo.type === HAND_TYPE_BIGTWO.PAIR
+          ? 'Pair'
+          : 'Single';
 
       const actionPayload = {
         type: 'PLAY_COMBO',
@@ -355,7 +367,7 @@ export function playComboBigTwo(gameState, playerId, selectedCards = []) {
         cards: selectedCards,
         combo,
         isDisqualified: true,
-        message: `⚠️ PELANGGARAN ATURAN: ${playerName} mengeluarkan kartu 2 sebagai kartu terakhir! ${playerName} OTOMATIS KALAH!`,
+        message: `⚠️ PELANGGARAN ATURAN: ${playerName} mengeluarkan kartu 2 (${comboLabelType}) sebagai kartu terakhir! ${playerName} OTOMATIS KALAH!`,
         timestamp: Date.now(),
       };
 

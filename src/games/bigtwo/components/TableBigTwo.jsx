@@ -475,15 +475,23 @@ export default function TableBigTwo({
           <div
             className="bigtwo-floating-combo-pill"
             style={
-              selectedCards.length === myHand.length && selectedCards.some((c) => c.rank === 2)
+              selectedCards.length === myHand.length &&
+              (selectedEval.type === 'SINGLE' ||
+                selectedEval.type === 'PAIR' ||
+                selectedEval.type === 'TRIPLE') &&
+              selectedCards.some((c) => c.rank === 2)
                 ? { background: 'rgba(220, 38, 38, 0.95)', border: '1px solid #ef4444', color: '#ffffff' }
                 : {}
             }
           >
-            {selectedCards.length === myHand.length && selectedCards.some((c) => c.rank === 2) ? (
+            {selectedCards.length === myHand.length &&
+            (selectedEval.type === 'SINGLE' ||
+              selectedEval.type === 'PAIR' ||
+              selectedEval.type === 'TRIPLE') &&
+            selectedCards.some((c) => c.rank === 2) ? (
               <>
                 <AlertTriangle size={13} color="#fef08a" />
-                <span style={{ fontWeight: 800 }}>⚠️ PERINGATAN: Kartu 2 terakhir = Kalah Otomatis!</span>
+                <span style={{ fontWeight: 800 }}>⚠️ PERINGATAN: Kartu 2 terakhir (Single/Pair/Triple) = Kalah Otomatis!</span>
               </>
             ) : (
               <>

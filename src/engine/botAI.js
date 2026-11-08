@@ -249,19 +249,20 @@ function isTwo(card) {
 
 /**
  * Checks if playing this combo would violate Rule 1 or trap the bot into violating Rule 1:
- * - Finishing with a 2 (selected has 2 and empties hand) -> automatic loss!
- * - Leaving ONLY 2s in hand (leaves 1 or more cards, all of which are 2) -> will force finishing with 2 later and lose!
+ * - Finishing with a 2 as SINGLE, PAIR, or TRIPLE (selected has 1-3 cards with a 2 and empties hand) -> automatic loss!
+ * - Finishing with a 5-card combo (Straight, Flush, Full House, Four of a Kind, Straight Flush) containing a 2 is VALID!
+ * - Leaving ONLY 1, 2, or 3 cards in hand that are all 2s -> will force finishing with Single/Pair/Triple 2 later and lose!
  */
 function isSuicidalRule1Move(hand, comboCards) {
   const remaining = hand.filter(
     (c) => !comboCards.some((sc) => sc.id === c.id || (sc.rank === c.rank && sc.suit === c.suit))
   );
-  // Finishing with a 2 causes immediate loss
-  if (remaining.length === 0 && comboCards.some(isTwo)) {
+  // Finishing with a Single 2, Pair 2, or Triple 2 causes immediate loss (5-card combo with 2 is valid!)
+  if (remaining.length === 0 && comboCards.length <= 3 && comboCards.some(isTwo)) {
     return true;
   }
-  // Leaving only 2s in hand traps player into finishing with a 2 later
-  if (remaining.length > 0 && remaining.every(isTwo)) {
+  // Leaving only 1, 2, or 3 cards in hand that are all 2s traps player into finishing with Single/Pair/Triple 2 later
+  if (remaining.length > 0 && remaining.length <= 3 && remaining.every(isTwo)) {
     return true;
   }
   return false;
