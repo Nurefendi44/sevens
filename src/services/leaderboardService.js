@@ -124,30 +124,35 @@ export function getLocalPlayerProfile() {
  */
 export function saveLocalPlayerProfile({ name, avatar, pin }) {
   if (typeof localStorage === 'undefined') return;
+  const current = getLocalPlayerProfile();
+  let changed = false;
+
   if (typeof name === 'string') {
     const clean = name.trim();
-    if (clean) {
+    if (clean && clean !== current.name) {
       localStorage.setItem(STORAGE_PLAYER_NAME, clean);
+      changed = true;
     }
   }
-  if (avatar) {
+  if (avatar && avatar !== current.avatar) {
     localStorage.setItem(STORAGE_PLAYER_AVATAR, avatar);
+    changed = true;
     try {
       const localId = localStorage.getItem('sevens_player_id') || '';
       const cachedRoomRaw = localStorage.getItem('sevens_cached_room');
       if (cachedRoomRaw && localId) {
         const parsedRoom = JSON.parse(cachedRoomRaw);
-        let changed = false;
+        let roomChanged = false;
         if (Array.isArray(parsedRoom?.players)) {
           parsedRoom.players = parsedRoom.players.map((p) => {
             if (p.id === localId && !p.isBot) {
-              changed = true;
+              roomChanged = true;
               return { ...p, avatar };
             }
             return p;
           });
         }
-        if (changed) {
+        if (roomChanged) {
           localStorage.setItem('sevens_cached_room', JSON.stringify(parsedRoom));
         }
       }
@@ -156,9 +161,15 @@ export function saveLocalPlayerProfile({ name, avatar, pin }) {
     }
   }
   if (typeof pin === 'string' && /^\d{4}$/.test(pin.trim())) {
-    localStorage.setItem(STORAGE_PLAYER_PIN, pin.trim());
+    const cleanPin = pin.trim();
+    if (cleanPin !== current.pin) {
+      localStorage.setItem(STORAGE_PLAYER_PIN, cleanPin);
+      changed = true;
+    }
   }
-  if (typeof window !== 'undefined') {
+
+  // Only dispatch event if data actually changed
+  if (changed && typeof window !== 'undefined') {
     try {
       window.dispatchEvent(
         new CustomEvent('profile_avatar_updated', {
@@ -352,51 +363,80 @@ export async function updatePlayerAvatarEverywhere(newAvatar) {
  * Fetches & restores the saved avatar/photo from Supabase for a given username (and optional PIN).
  * Used when logging in on a new device (Device B) or syncing profile on startup.
  */
-export async function syncPlayerProfileFromServer(username, pin = '') {
+const SERVER_PROFILE_CACHE = new Map();
+const SERVER_PROFILE_INFLIGHT = new Map();
+
+export async function syncPlayerProfileFromServer(username, pin = '', forceRefresh = false) {
   const cleanName = String(username || '').trim();
   if (!cleanName || !isSupabaseConfigured || !supabase) return null;
 
-  try {
-    const { data: rows, error } = await supabase
-      .from('leaderboard')
-      .select('id, player_id, player_name, avatar, game_type, wins, games_played, score, last_played_at')
-      .ilike('player_name', cleanName.replace(/[\\%_]/g, (c) => '\\' + c));
+  const cacheKey = `${cleanName.toLowerCase()}_${String(pin || '').trim()}`;
+  const now = Date.now();
 
-    if (error || !Array.isArray(rows) || rows.length === 0) return null;
-
-    const existingHash = extractPinHashFromItem({
-      player_ids: rows.map((r) => r.player_id),
-    });
-
-    const remotePhoto = rows.find(
-      (r) => typeof r.avatar === 'string' && r.avatar.startsWith('data:image/')
-    )?.avatar;
-    const remoteAny =
-      rows.find((r) => r.avatar && r.avatar !== '👤' && r.avatar !== '👑')?.avatar ||
-      rows.find((r) => r.avatar)?.avatar;
-    const bestAvatar = remotePhoto || remoteAny || '👑';
-
-    // If PIN is provided and matches (or account has no PIN), also persist to localStorage
-    if (pin && /^\d{4}$/.test(String(pin).trim())) {
-      const myHash = hashProfilePin(cleanName, pin);
-      if (!existingHash || existingHash === myHash) {
-        saveLocalPlayerProfile({
-          name: rows[0]?.player_name || cleanName,
-          avatar: bestAvatar,
-          pin: String(pin).trim(),
-        });
-      }
+  if (!forceRefresh) {
+    const cached = SERVER_PROFILE_CACHE.get(cacheKey);
+    if (cached && now - cached.timestamp < 60000) {
+      return cached.data;
     }
-
-    return {
-      name: rows[0]?.player_name || cleanName,
-      avatar: bestAvatar,
-      hasPin: Boolean(existingHash),
-      pinHash: existingHash || null,
-    };
-  } catch {
-    return null;
+    if (SERVER_PROFILE_INFLIGHT.has(cacheKey)) {
+      return SERVER_PROFILE_INFLIGHT.get(cacheKey);
+    }
   }
+
+  const fetchPromise = (async () => {
+    try {
+      const { data: rows, error } = await supabase
+        .from('leaderboard')
+        .select('id, player_id, player_name, avatar, game_type, wins, games_played, score, last_played_at')
+        .ilike('player_name', cleanName.replace(/[\\%_]/g, (c) => '\\' + c));
+
+      if (error || !Array.isArray(rows) || rows.length === 0) return null;
+
+      const existingHash = extractPinHashFromItem({
+        player_ids: rows.map((r) => r.player_id),
+      });
+
+      const remotePhoto = rows.find(
+        (r) => typeof r.avatar === 'string' && r.avatar.startsWith('data:image/')
+      )?.avatar;
+      const remoteAny =
+        rows.find((r) => r.avatar && r.avatar !== '👤' && r.avatar !== '👑')?.avatar ||
+        rows.find((r) => r.avatar)?.avatar;
+      const bestAvatar = remotePhoto || remoteAny || '👑';
+
+      // Only update local profile if something actually differs
+      if (pin && /^\d{4}$/.test(String(pin).trim())) {
+        const myHash = hashProfilePin(cleanName, pin);
+        if (!existingHash || existingHash === myHash) {
+          const current = getLocalPlayerProfile();
+          if (current.avatar !== bestAvatar || current.pin !== String(pin).trim()) {
+            saveLocalPlayerProfile({
+              name: rows[0]?.player_name || cleanName,
+              avatar: bestAvatar,
+              pin: String(pin).trim(),
+            });
+          }
+        }
+      }
+
+      const result = {
+        name: rows[0]?.player_name || cleanName,
+        avatar: bestAvatar,
+        hasPin: Boolean(existingHash),
+        pinHash: existingHash || null,
+      };
+
+      SERVER_PROFILE_CACHE.set(cacheKey, { timestamp: Date.now(), data: result });
+      return result;
+    } catch {
+      return null;
+    } finally {
+      SERVER_PROFILE_INFLIGHT.delete(cacheKey);
+    }
+  })();
+
+  SERVER_PROFILE_INFLIGHT.set(cacheKey, fetchPromise);
+  return fetchPromise;
 }
 
 /**

@@ -219,31 +219,37 @@ export default function ModeSelectionScreen({
     loadHomepageLeaderboard(previewCategory);
   }, [previewCategory]);
 
-  // Keep profile synced with localStorage on mount, window focus, and avatar updates
+  // Keep profile synced with localStorage on mount and when local avatar changes
   useEffect(() => {
-    const syncProfile = async () => {
+    const updateLocalState = () => {
       const latest = getLocalPlayerProfile();
       setProfile((prev) =>
         prev.name !== latest.name || prev.avatar !== latest.avatar || prev.pin !== latest.pin
           ? latest
           : prev
       );
-      if (latest.name) {
-        const remote = await syncPlayerProfileFromServer(latest.name, latest.pin);
-        if (remote?.avatar && remote.avatar !== latest.avatar) {
-          // If server has a custom photo or local is still default emoji, sync from server
-          if (isImageAvatar(remote.avatar) || !isImageAvatar(latest.avatar)) {
-            setProfile((prev) => ({ ...prev, avatar: remote.avatar }));
-          }
-        }
-      }
     };
-    syncProfile();
-    window.addEventListener('focus', syncProfile);
-    window.addEventListener('profile_avatar_updated', syncProfile);
+
+    updateLocalState();
+
+    // Fetch remote profile ONCE on mount if name exists (with cache/inflight dedup)
+    const latest = getLocalPlayerProfile();
+    if (latest.name) {
+      syncPlayerProfileFromServer(latest.name, latest.pin)
+        .then((remote) => {
+          if (remote?.avatar && remote.avatar !== latest.avatar) {
+            if (isImageAvatar(remote.avatar) || !isImageAvatar(latest.avatar)) {
+              setProfile((prev) => ({ ...prev, avatar: remote.avatar }));
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
+    // Only update local React state when profile is saved locally (no re-fetching loop!)
+    window.addEventListener('profile_avatar_updated', updateLocalState);
     return () => {
-      window.removeEventListener('focus', syncProfile);
-      window.removeEventListener('profile_avatar_updated', syncProfile);
+      window.removeEventListener('profile_avatar_updated', updateLocalState);
     };
   }, []);
 
