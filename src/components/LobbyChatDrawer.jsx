@@ -29,6 +29,7 @@ import {
   searchRegisteredPlayers,
   extractRoomCodeFromMessage,
   syncLobbyChatHistory,
+  clearAllChatHistory,
 } from '../services/lobbyChatService';
 import {
   getFriendsList,
@@ -139,6 +140,8 @@ export default function LobbyChatDrawer({
   const [friendsList, setFriendsList] = useState([]);
   const [friendToDelete, setFriendToDelete] = useState(null);
   const [retractTarget, setRetractTarget] = useState(null); // { msg, scope }
+  const [showConfirmClear, setShowConfirmClear] = useState(false);
+  const [isClearingChat, setIsClearingChat] = useState(false);
 
   // If opened with initialDmPartner, switch to DM tab with that partner
   useEffect(() => {
@@ -167,6 +170,11 @@ export default function LobbyChatDrawer({
   // Subscribe to realtime global lobby chat & direct private messages
   useEffect(() => {
     const unsubscribe = subscribeToLobbyChat((newMsg) => {
+      if (newMsg.type === 'clear_all') {
+        setMessages([]);
+        setPmThreads({});
+        return;
+      }
       if (newMsg.type === 'retract') {
         if (newMsg.scope === 'private') {
           setPmThreads((prev) => {
@@ -427,14 +435,40 @@ export default function LobbyChatDrawer({
                 </div>
               </div>
 
-              <button
-                type="button"
-                className="btn-chat-close"
-                onClick={onToggleOpen}
-                aria-label="Tutup Obrolan"
-              >
-                <X size={16} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <button
+                  type="button"
+                  className="btn-chat-action"
+                  onClick={() => setShowConfirmClear(true)}
+                  title="Hapus Semua Riwayat Chat (Global & DM)"
+                  aria-label="Hapus Semua Riwayat Chat"
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    borderRadius: '8px',
+                    color: '#fca5a5',
+                    cursor: 'pointer',
+                    padding: '0.35rem 0.55rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.3rem',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    transition: 'all 0.18s ease',
+                  }}
+                >
+                  <Trash2 size={13} />
+                  <span>Clear Chat</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn-chat-close"
+                  onClick={onToggleOpen}
+                  aria-label="Tutup Obrolan"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
 
             {/* Channels / Tabs: Semua vs Cari Mabar vs Private (DM) */}
@@ -1186,6 +1220,71 @@ export default function LobbyChatDrawer({
                     >
                       <Trash2 size={13} />
                       <span>Ya, Hapus</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Popup Konfirmasi Hapus Seluruh Chat */}
+            {showConfirmClear && (
+              <div
+                className="friends-confirm-overlay"
+                onClick={() => !isClearingChat && setShowConfirmClear(false)}
+              >
+                <div
+                  className="friends-confirm-dialog"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div
+                    className="confirm-icon-box"
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.18)',
+                      borderColor: 'rgba(239, 68, 68, 0.45)',
+                    }}
+                  >
+                    <Trash2 size={22} style={{ color: '#ef4444' }} />
+                  </div>
+                  <h4
+                    className="confirm-title"
+                    style={{ fontSize: '1.05rem', margin: '0 0 0.5rem 0', color: '#f87171' }}
+                  >
+                    Hapus Semua Riwayat Chat?
+                  </h4>
+                  <p className="confirm-desc">
+                    Semua riwayat obrolan (Global, Cari Mabar, dan Direct Message/DM) akan dihapus secara permanen dari server database dan semua perangkat. Pesan baru yang masuk nantinya akan otomatis disimpan dalam kondisi terenkripsi.
+                  </p>
+                  <div className="confirm-btn-row">
+                    <button
+                      type="button"
+                      className="btn-confirm-cancel"
+                      disabled={isClearingChat}
+                      onClick={() => setShowConfirmClear(false)}
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-confirm-delete"
+                      disabled={isClearingChat}
+                      style={{
+                        background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                        opacity: isClearingChat ? 0.7 : 1,
+                      }}
+                      onClick={async () => {
+                        try {
+                          setIsClearingChat(true);
+                          await clearAllChatHistory();
+                          setMessages([]);
+                          setPmThreads({});
+                        } finally {
+                          setIsClearingChat(false);
+                          setShowConfirmClear(false);
+                        }
+                      }}
+                    >
+                      <Trash2 size={13} />
+                      <span>{isClearingChat ? 'Menghapus...' : 'Ya, Bersihkan Semua'}</span>
                     </button>
                   </div>
                 </div>

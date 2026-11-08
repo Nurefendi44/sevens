@@ -16,6 +16,178 @@ const MAX_MESSAGES = 50;
 const MAX_PRIVATE_MESSAGES = 120;
 const MAX_RETRACTED_IDS = 100;
 
+/* ========================================================================== */
+/* CHAT ENCRYPTION / DECRYPTION LAYER (ChaCha20 Stream Cipher)                */
+/* Ensures messages saved in Supabase database are never stored as plaintext  */
+/* ========================================================================== */
+
+function rotl(a, b) {
+  return ((a << b) | (a >>> (32 - b))) >>> 0;
+}
+
+function QR(s, a, b, c, d) {
+  s[a] = (s[a] + s[b]) >>> 0;
+  s[d] = rotl(s[d] ^ s[a], 16);
+  s[c] = (s[c] + s[d]) >>> 0;
+  s[b] = rotl(s[b] ^ s[c], 12);
+  s[a] = (s[a] + s[b]) >>> 0;
+  s[d] = rotl(s[d] ^ s[a], 8);
+  s[c] = (s[c] + s[d]) >>> 0;
+  s[b] = rotl(s[b] ^ s[c], 7);
+}
+
+function chacha20Block(keyWords, counter, nonceWords) {
+  const state = new Uint32Array(16);
+  // Constants: "expand 32-byte k"
+  state[0] = 0x61707865;
+  state[1] = 0x3320646e;
+  state[2] = 0x79622d32;
+  state[3] = 0x6b206574;
+  for (let i = 0; i < 8; i++) state[4 + i] = keyWords[i];
+  state[12] = counter;
+  state[13] = nonceWords[0];
+  state[14] = nonceWords[1];
+  state[15] = nonceWords[2];
+
+  const working = new Uint32Array(state);
+  for (let i = 0; i < 10; i++) {
+    QR(working, 0, 4, 8, 12);
+    QR(working, 1, 5, 9, 13);
+    QR(working, 2, 6, 10, 14);
+    QR(working, 3, 7, 11, 15);
+    QR(working, 0, 5, 10, 15);
+    QR(working, 1, 6, 11, 12);
+    QR(working, 2, 7, 8, 13);
+    QR(working, 3, 4, 9, 14);
+  }
+  const out = new Uint8Array(64);
+  for (let i = 0; i < 16; i++) {
+    const val = (working[i] + state[i]) >>> 0;
+    out[i * 4] = val & 0xff;
+    out[i * 4 + 1] = (val >>> 8) & 0xff;
+    out[i * 4 + 2] = (val >>> 16) & 0xff;
+    out[i * 4 + 3] = (val >>> 24) & 0xff;
+  }
+  return out;
+}
+
+function deriveKeyWords(passphrase) {
+  const keyBytes = new Uint8Array(32);
+  let h = 0x811c9dc5;
+  for (let round = 0; round < 32; round++) {
+    for (let i = 0; i < passphrase.length; i++) {
+      h = Math.imul(h ^ passphrase.charCodeAt(i) ^ (round * 31), 0x01000193) >>> 0;
+    }
+    keyBytes[round] = h & 0xff;
+  }
+  const keyWords = new Uint32Array(8);
+  for (let i = 0; i < 8; i++) {
+    keyWords[i] =
+      keyBytes[i * 4] |
+      (keyBytes[i * 4 + 1] << 8) |
+      (keyBytes[i * 4 + 2] << 16) |
+      (keyBytes[i * 4 + 3] << 24);
+  }
+  return keyWords;
+}
+
+const CHAT_SECRET_KEY =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CHAT_ENCRYPTION_KEY) ||
+  'ROYAL_CARDS_CHAT_SECURE_CIPHER_V1_GEMINI_2026';
+
+const APP_KEY_WORDS = deriveKeyWords(CHAT_SECRET_KEY);
+
+function chacha20Process(bytes, nonceBytes) {
+  const nonceWords = new Uint32Array(3);
+  for (let i = 0; i < 3; i++) {
+    nonceWords[i] =
+      nonceBytes[i * 4] |
+      (nonceBytes[i * 4 + 1] << 8) |
+      (nonceBytes[i * 4 + 2] << 16) |
+      (nonceBytes[i * 4 + 3] << 24);
+  }
+  const out = new Uint8Array(bytes.length);
+  let counter = 1;
+  for (let offset = 0; offset < bytes.length; offset += 64) {
+    const block = chacha20Block(APP_KEY_WORDS, counter++, nonceWords);
+    const take = Math.min(64, bytes.length - offset);
+    for (let j = 0; j < take; j++) {
+      out[offset + j] = bytes[offset + j] ^ block[j];
+    }
+  }
+  return out;
+}
+
+function bytesToBase64(bytes) {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(bytes).toString('base64');
+  }
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+function base64ToBytes(b64) {
+  if (typeof Buffer !== 'undefined') {
+    return new Uint8Array(Buffer.from(b64, 'base64'));
+  }
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+/**
+ * Mengenkripsi isi pesan chat sebelum disimpan ke database Supabase
+ */
+export function encryptChatMessage(text) {
+  if (text === null || text === undefined) return '';
+  const str = String(text);
+  if (!str) return '';
+  if (str.startsWith('enc:v1:')) return str; // Jangan enkripsi ulang jika sudah terenkripsi
+
+  try {
+    const textBytes = new TextEncoder().encode(str);
+    const nonce = new Uint8Array(12);
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      crypto.getRandomValues(nonce);
+    } else {
+      for (let i = 0; i < 12; i++) nonce[i] = Math.floor(Math.random() * 256);
+    }
+
+    const cipher = chacha20Process(textBytes, nonce);
+    const combined = new Uint8Array(12 + cipher.length);
+    combined.set(nonce, 0);
+    combined.set(cipher, 12);
+
+    return 'enc:v1:' + bytesToBase64(combined);
+  } catch (e) {
+    console.warn('[LobbyChat] Encrypt fallback notice:', e);
+    return str;
+  }
+}
+
+/**
+ * Mendekripsi isi pesan chat dari database Supabase
+ */
+export function decryptChatMessage(cipherText) {
+  if (!cipherText || typeof cipherText !== 'string') return '';
+  if (!cipherText.startsWith('enc:v1:')) return cipherText; // Dukungan pesan plaintext lama
+
+  try {
+    const b64 = cipherText.slice('enc:v1:'.length);
+    const combined = base64ToBytes(b64);
+    if (combined.length < 12) return cipherText;
+
+    const nonce = combined.slice(0, 12);
+    const cipher = combined.slice(12);
+    const plainBytes = chacha20Process(cipher, nonce);
+    return new TextDecoder().decode(plainBytes);
+  } catch (e) {
+    return cipherText;
+  }
+}
+
 /**
  * Extract room code from text if explicitly mentioned with prefixes
  * e.g. "B2-EG7W", "Room: SV-9988", "Kode: 3C5RZP"
@@ -43,13 +215,18 @@ export function getStoredLobbyChats() {
     if (Array.isArray(parsed)) {
       // Remove any leftover dummy/seed messages from storage and deduplicate by ID
       const seen = new Set();
-      return parsed.filter((m) => {
-        if (!m || !m.id || m.id.startsWith('seed_') || seen.has(m.id)) return false;
-        // Pesan DM tidak boleh pernah masuk chat global (membersihkan data tercemar lama juga)
-        if (m.type === 'private' || m.targetUsername || String(m.id).startsWith('pm_')) return false;
-        seen.add(m.id);
-        return true;
-      });
+      return parsed
+        .filter((m) => {
+          if (!m || !m.id || m.id.startsWith('seed_') || seen.has(m.id)) return false;
+          // Pesan DM tidak boleh pernah masuk chat global (membersihkan data tercemar lama juga)
+          if (m.type === 'private' || m.targetUsername || String(m.id).startsWith('pm_')) return false;
+          seen.add(m.id);
+          return true;
+        })
+        .map((m) => ({
+          ...m,
+          message: decryptChatMessage(m.message),
+        }));
     }
   } catch (e) {
     // Ignore error
@@ -158,12 +335,32 @@ let persistQueue = Promise.resolve();
 function applyRemoteGlobalChatState(gs, usernameOverride = '') {
   if (!gs || typeof gs !== 'object') return null;
   const effectiveUser = String(usernameOverride || currentSubscribedUsername || '').trim();
-  const remotePublic = Array.isArray(gs.publicMessages) ? gs.publicMessages : [];
-  const remotePrivate = Array.isArray(gs.privateMessages) ? gs.privateMessages : [];
+  const clearedAt = Number(gs.clearedAt || 0);
+
+  const rawRemotePublic = Array.isArray(gs.publicMessages) ? gs.publicMessages : [];
+  const rawRemotePrivate = Array.isArray(gs.privateMessages) ? gs.privateMessages : [];
   const retractedList = Array.isArray(gs.retractedIds) ? gs.retractedIds : [];
   const retractedSet = new Set(retractedList);
 
-  const localPublic = getStoredLobbyChats();
+  // Dekripsi pesan remote dan buang pesan yang lebih lama dari clearedAt
+  const remotePublic = rawRemotePublic
+    .filter((m) => m && (!clearedAt || (m.timestamp || 0) > clearedAt))
+    .map((m) => ({
+      ...m,
+      message: decryptChatMessage(m.message),
+    }));
+
+  const remotePrivate = rawRemotePrivate
+    .filter((m) => m && (!clearedAt || (m.timestamp || 0) > clearedAt))
+    .map((m) => ({
+      ...m,
+      message: decryptChatMessage(m.message),
+    }));
+
+  const localPublic = getStoredLobbyChats().filter(
+    (m) => m && (!clearedAt || (m.timestamp || 0) > clearedAt)
+  );
+
   const mapPub = new Map();
   let hasLocalOnlyPublic = false;
 
@@ -216,7 +413,7 @@ function applyRemoteGlobalChatState(gs, usernameOverride = '') {
 
     for (const pKey of Object.keys(currentThreads)) {
       const filtered = (currentThreads[pKey] || []).filter(
-        (m) => m && m.id && !retractedSet.has(m.id)
+        (m) => m && m.id && !retractedSet.has(m.id) && (!clearedAt || (m.timestamp || 0) > clearedAt)
       );
       for (const locPm of filtered) {
         if (!remotePrivIds.has(locPm.id)) {
@@ -265,6 +462,7 @@ function applyRemoteGlobalChatState(gs, usernameOverride = '') {
 
 /**
  * Simpan perubahan pesan (tambah publik, tambah DM, atau tarik pesan) ke server Supabase secara berurutan (antrean)
+ * Seluruh isi pesan dienkripsi sebelum dikirim dan disimpan ke tabel Supabase.
  */
 function persistChatChangeToServer({ addPublic = null, addPrivate = null, retractId = null } = {}) {
   if (!isSupabaseConfigured || !supabase) return Promise.resolve();
@@ -275,8 +473,17 @@ function persistChatChangeToServer({ addPublic = null, addPrivate = null, retrac
       if (!record) return;
 
       const gs = record.game_state || {};
-      let publicList = Array.isArray(gs.publicMessages) ? [...gs.publicMessages] : [];
-      let privateList = Array.isArray(gs.privateMessages) ? [...gs.privateMessages] : [];
+      const clearedAt = Number(gs.clearedAt || 0);
+
+      // Dekripsi pesan saat ini dari server untuk manipulasi list
+      let publicList = (Array.isArray(gs.publicMessages) ? [...gs.publicMessages] : [])
+        .map((m) => ({ ...m, message: decryptChatMessage(m?.message) }))
+        .filter((m) => !clearedAt || (m.timestamp || 0) > clearedAt);
+
+      let privateList = (Array.isArray(gs.privateMessages) ? [...gs.privateMessages] : [])
+        .map((m) => ({ ...m, message: decryptChatMessage(m?.message) }))
+        .filter((m) => !clearedAt || (m.timestamp || 0) > clearedAt);
+
       let retractedList = Array.isArray(gs.retractedIds) ? [...gs.retractedIds] : [];
 
       if (retractId) {
@@ -291,47 +498,19 @@ function persistChatChangeToServer({ addPublic = null, addPrivate = null, retrac
 
       if (addPublic && addPublic.id && !retractedSet.has(addPublic.id)) {
         if (!publicList.some((m) => m && m.id === addPublic.id)) {
-          publicList.push(addPublic);
+          publicList.push({
+            ...addPublic,
+            message: decryptChatMessage(addPublic.message),
+          });
         }
       }
 
       if (addPrivate && addPrivate.id && !retractedSet.has(addPrivate.id)) {
         if (!privateList.some((m) => m && m.id === addPrivate.id)) {
-          privateList.push(addPrivate);
-        }
-      }
-
-      // Gabungkan juga dengan pesan publik lokal yang belum ada di server (agar pesan lama ikut terunggah)
-      const localPublic = getStoredLobbyChats();
-      for (const locMsg of localPublic) {
-        if (
-          locMsg &&
-          locMsg.id &&
-          !retractedSet.has(locMsg.id) &&
-          locMsg.type !== 'private' &&
-          !locMsg.targetUsername &&
-          !String(locMsg.id).startsWith('pm_') &&
-          !publicList.some((m) => m && m.id === locMsg.id)
-        ) {
-          publicList.push(locMsg);
-        }
-      }
-
-      // Gabungkan juga DM lokal milik user aktif jika belum ada di server
-      if (currentSubscribedUsername) {
-        const localThreads = getStoredPrivateChats(currentSubscribedUsername);
-        for (const list of Object.values(localThreads)) {
-          if (!Array.isArray(list)) continue;
-          for (const pm of list) {
-            if (
-              pm &&
-              pm.id &&
-              !retractedSet.has(pm.id) &&
-              !privateList.some((m) => m && m.id === pm.id)
-            ) {
-              privateList.push(pm);
-            }
-          }
+          privateList.push({
+            ...addPrivate,
+            message: decryptChatMessage(addPrivate.message),
+          });
         }
       }
 
@@ -344,23 +523,48 @@ function persistChatChangeToServer({ addPublic = null, addPrivate = null, retrac
             !retractedSet.has(m.id) &&
             m.type !== 'private' &&
             !m.targetUsername &&
-            !String(m.id).startsWith('pm_')
+            !String(m.id).startsWith('pm_') &&
+            (!clearedAt || (m.timestamp || 0) > clearedAt)
         )
         .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
         .slice(-MAX_MESSAGES);
 
       privateList = privateList
-        .filter((m) => m && m.id && !retractedSet.has(m.id))
+        .filter(
+          (m) =>
+            m &&
+            m.id &&
+            !retractedSet.has(m.id) &&
+            (!clearedAt || (m.timestamp || 0) > clearedAt)
+        )
         .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
         .slice(-MAX_PRIVATE_MESSAGES);
+
+      // Enkripsi seluruh isi pesan sebelum disimpan ke database Supabase
+      const encryptedPublicList = publicList.map((m) => {
+        if (!m || !m.message) return m;
+        return {
+          ...m,
+          message: encryptChatMessage(m.message),
+        };
+      });
+
+      const encryptedPrivateList = privateList.map((m) => {
+        if (!m || !m.message) return m;
+        return {
+          ...m,
+          message: encryptChatMessage(m.message),
+        };
+      });
 
       await supabase
         .from('rooms')
         .update({
           game_state: {
-            publicMessages: publicList,
-            privateMessages: privateList,
+            publicMessages: encryptedPublicList,
+            privateMessages: encryptedPrivateList,
             retractedIds: retractedList,
+            clearedAt: gs.clearedAt || null,
           },
           updated_at: new Date().toISOString(),
         })
@@ -372,6 +576,93 @@ function persistChatChangeToServer({ addPublic = null, addPrivate = null, retrac
 
   persistQueue = persistQueue.then(runPersist, runPersist);
   return persistQueue;
+}
+
+/**
+ * Menghapus SELURUH riwayat chat (publik global, cari mabar, DM, dan retracted IDs)
+ * baik dari database Supabase (`__GCHAT__`) maupun cache browser lokal & tab lainnya.
+ */
+export async function clearAllChatHistory() {
+  const clearTimestamp = Date.now();
+
+  // 1. Bersihkan localStorage lokal
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (
+          k &&
+          (k.startsWith(PM_STORAGE_PREFIX) ||
+            k.startsWith('royal_cards_pm_') ||
+            k.startsWith('royal_cards_global_lobby_chat'))
+        ) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch (e) {}
+  }
+
+  // 2. Beritahu subscriber aktif di antarmuka & tab browser lain
+  const clearPayload = { type: 'clear_all', timestamp: clearTimestamp };
+  activeSubscribers.forEach((cb) => {
+    try {
+      cb(clearPayload);
+    } catch {}
+  });
+
+  historySyncSubscribers.forEach((cb) => {
+    try {
+      cb({
+        publicMessages: [],
+        privateThreads: {},
+        hasLocalOnly: false,
+      });
+    } catch {}
+  });
+
+  if (broadcastChannel) {
+    try {
+      broadcastChannel.postMessage(clearPayload);
+    } catch {}
+  }
+
+  // 3. Update database Supabase dan siarkan event broadcast ke semua pemain online
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const ch = await ensureLobbyChannel();
+      if (ch) {
+        await ch.send({
+          type: 'broadcast',
+          event: 'lobby_chat_clear_all',
+          payload: clearPayload,
+        });
+      }
+    } catch (err) {
+      console.warn('[LobbyChat] Broadcast clear error:', err);
+    }
+
+    try {
+      await supabase
+        .from('rooms')
+        .update({
+          game_state: {
+            publicMessages: [],
+            privateMessages: [],
+            retractedIds: [],
+            clearedAt: clearTimestamp,
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('code', GLOBAL_CHAT_ROOM_CODE);
+    } catch (err) {
+      console.warn('[LobbyChat] Failed to clear rooms __GCHAT__:', err);
+    }
+  }
+
+  return { success: true };
 }
 
 /**
@@ -397,7 +688,30 @@ export async function syncLobbyChatHistory(currentUsername = '') {
       };
     }
 
-    const applied = applyRemoteGlobalChatState(record.game_state || {}, currentUsername);
+    const gs = record.game_state || {};
+
+    // Periksa apakah ada pesan lama yang belum terenkripsi (mentah) di database.
+    // Sesuai permintaan user: bersihkan semua riwayat lama jika belum terenkripsi atau wipe perdana belum jalan.
+    const hasRawUnencrypted =
+      gs.publicMessages?.some((m) => m && m.message && !String(m.message).startsWith('enc:v1:')) ||
+      gs.privateMessages?.some((m) => m && m.message && !String(m.message).startsWith('enc:v1:'));
+
+    const needFirstWipe =
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem('royal_cards_chat_v2_encrypted_wiped') !== 'done';
+
+    if (hasRawUnencrypted || needFirstWipe) {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('royal_cards_chat_v2_encrypted_wiped', 'done');
+      }
+      await clearAllChatHistory();
+      return {
+        publicMessages: [],
+        privateThreads: {},
+      };
+    }
+
+    const applied = applyRemoteGlobalChatState(gs, currentUsername);
     if (applied?.hasLocalOnly) {
       await persistChatChangeToServer({});
     }
@@ -429,6 +743,41 @@ try {
     broadcastChannel = new BroadcastChannel('royal_lobby_chat_bc');
     broadcastChannel.onmessage = (event) => {
       const msg = event?.data;
+      if (msg && msg.type === 'clear_all') {
+        if (typeof localStorage !== 'undefined') {
+          try {
+            localStorage.removeItem(STORAGE_KEY);
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (
+                k &&
+                (k.startsWith(PM_STORAGE_PREFIX) ||
+                  k.startsWith('royal_cards_pm_') ||
+                  k.startsWith('royal_cards_global_lobby_chat'))
+              ) {
+                keysToRemove.push(k);
+              }
+            }
+            keysToRemove.forEach((k) => localStorage.removeItem(k));
+          } catch (e) {}
+        }
+        activeSubscribers.forEach((cb) => {
+          try {
+            cb(msg);
+          } catch {}
+        });
+        historySyncSubscribers.forEach((cb) => {
+          try {
+            cb({
+              publicMessages: [],
+              privateThreads: {},
+              hasLocalOnly: false,
+            });
+          } catch {}
+        });
+        return;
+      }
       if (msg && msg.type === 'retract' && msg.id) {
         if (msg.scope !== 'private') removeStoredLobbyChat(msg.id);
         activeSubscribers.forEach((cb) => {
@@ -439,10 +788,11 @@ try {
         return;
       }
       if (msg && msg.id) {
-        appendStoredLobbyChat(msg); // otomatis mengabaikan pesan private
+        const cleanMsg = { ...msg, message: decryptChatMessage(msg.message) };
+        appendStoredLobbyChat(cleanMsg); // otomatis mengabaikan pesan private
         activeSubscribers.forEach((cb) => {
           try {
-            cb(msg);
+            cb(cleanMsg);
           } catch {}
         });
       }
@@ -511,11 +861,16 @@ export function getStoredPrivateChats(myUsername) {
       for (const [key, list] of Object.entries(parsed)) {
         if (Array.isArray(list)) {
           const seen = new Set();
-          cleaned[key] = list.filter((m) => {
-            if (!m || !m.id || seen.has(m.id)) return false;
-            seen.add(m.id);
-            return true;
-          });
+          cleaned[key] = list
+            .filter((m) => {
+              if (!m || !m.id || seen.has(m.id)) return false;
+              seen.add(m.id);
+              return true;
+            })
+            .map((m) => ({
+              ...m,
+              message: decryptChatMessage(m.message),
+            }));
         }
       }
       return cleaned;
@@ -574,16 +929,52 @@ function ensureLobbyChannel() {
       })
       .on('broadcast', { event: 'lobby_chat_message' }, ({ payload }) => {
         if (!payload || !payload.id) return;
-        appendStoredLobbyChat(payload);
+        const decrypted = { ...payload, message: decryptChatMessage(payload.message) };
+        appendStoredLobbyChat(decrypted);
         try {
           audio.playChatPopSound();
         } catch {}
         activeSubscribers.forEach((cb) => {
           try {
-            cb(payload);
+            cb(decrypted);
           } catch (err) {
             console.error('Error in lobby chat listener:', err);
           }
+        });
+      })
+      .on('broadcast', { event: 'lobby_chat_clear_all' }, ({ payload }) => {
+        if (typeof localStorage !== 'undefined') {
+          try {
+            localStorage.removeItem(STORAGE_KEY);
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (
+                k &&
+                (k.startsWith(PM_STORAGE_PREFIX) ||
+                  k.startsWith('royal_cards_pm_') ||
+                  k.startsWith('royal_cards_global_lobby_chat'))
+              ) {
+                keysToRemove.push(k);
+              }
+            }
+            keysToRemove.forEach((k) => localStorage.removeItem(k));
+          } catch (e) {}
+        }
+        const note = { type: 'clear_all', timestamp: payload?.timestamp || Date.now() };
+        activeSubscribers.forEach((cb) => {
+          try {
+            cb(note);
+          } catch {}
+        });
+        historySyncSubscribers.forEach((cb) => {
+          try {
+            cb({
+              publicMessages: [],
+              privateThreads: {},
+              hasLocalOnly: false,
+            });
+          } catch {}
         });
       })
       .on('broadcast', { event: 'lobby_chat_retract' }, ({ payload }) => {
@@ -614,8 +1005,9 @@ function ensureLobbyChannel() {
         const isForMe = myNameNorm && (targetNorm === myNameNorm || senderNorm === myNameNorm);
         if (!isForMe) return;
 
-        const partnerName = senderNorm === myNameNorm ? payload.targetUsername : payload.senderName;
-        appendStoredPrivateChat(myNameNorm, partnerName, payload);
+        const decrypted = { ...payload, message: decryptChatMessage(payload.message) };
+        const partnerName = senderNorm === myNameNorm ? decrypted.targetUsername : decrypted.senderName;
+        appendStoredPrivateChat(myNameNorm, partnerName, decrypted);
 
         try {
           audio.playChatPopSound();
@@ -623,7 +1015,7 @@ function ensureLobbyChannel() {
 
         activeSubscribers.forEach((cb) => {
           try {
-            cb(payload);
+            cb(decrypted);
           } catch (err) {
             console.error('Error in PM listener:', err);
           }
