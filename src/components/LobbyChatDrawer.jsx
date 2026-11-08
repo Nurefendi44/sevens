@@ -71,7 +71,10 @@ export default function LobbyChatDrawer({
   const [dmSearchResults, setDmSearchResults] = useState([]);
   const [isSearchingDm, setIsSearchingDm] = useState(false);
 
-  const messagesEndRef = useRef(null);
+  const globalScrollAreaRef = useRef(null);
+  const dmScrollAreaRef = useRef(null);
+  const globalEndRef = useRef(null);
+  const dmEndRef = useRef(null);
 
   // Temporary guest nickname if player hasn't set one yet
   const guestName = useMemo(() => {
@@ -230,22 +233,46 @@ export default function LobbyChatDrawer({
     return () => clearTimeout(timer);
   }, [dmSearchQuery, currentDisplayName]);
 
-  // Reset unread count when opened
+  // Auto-scroll handler to ensure view is always at the latest chat bubble
+  const scrollToBottom = useCallback((smooth = false) => {
+    const doScroll = () => {
+      if (activeTab === 'private') {
+        if (dmScrollAreaRef.current) {
+          dmScrollAreaRef.current.scrollTop = dmScrollAreaRef.current.scrollHeight;
+        }
+        if (dmEndRef.current) {
+          dmEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
+        }
+      } else {
+        if (globalScrollAreaRef.current) {
+          globalScrollAreaRef.current.scrollTop = globalScrollAreaRef.current.scrollHeight;
+        }
+        if (globalEndRef.current) {
+          globalEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
+        }
+      }
+    };
+
+    doScroll();
+    requestAnimationFrame(doScroll);
+    setTimeout(doScroll, 40);
+    setTimeout(doScroll, 120);
+  }, [activeTab]);
+
+  // Reset unread count & auto-scroll when drawer opens or tab/partner changes
   useEffect(() => {
     if (isOpen) {
       setUnreadCount(0);
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+      scrollToBottom(false);
     }
-  }, [isOpen]);
+  }, [isOpen, activeTab, activeDmPartner, scrollToBottom]);
 
-  // Auto-scroll on new message if open
+  // Auto-scroll immediately when new chat bubbles arrive
   useEffect(() => {
     if (isOpen) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      scrollToBottom(false);
     }
-  }, [messages, isOpen]);
+  }, [messages, pmThreads, isOpen, scrollToBottom]);
 
   // Filter messages by tab
   const filteredMessages = useMemo(() => {
@@ -290,6 +317,7 @@ export default function LobbyChatDrawer({
       }
     } finally {
       setIsSending(false);
+      scrollToBottom(false);
     }
   };
 
@@ -616,7 +644,7 @@ export default function LobbyChatDrawer({
                     </div>
 
                     {/* Messages with this partner */}
-                    <div className="mlbb-chat-messages-area">
+                    <div className="mlbb-chat-messages-area" ref={dmScrollAreaRef}>
                       {(() => {
                         const rawThread = pmThreads[activeDmPartner.name.toLowerCase()] || [];
                         const seenIds = new Set();
@@ -712,7 +740,7 @@ export default function LobbyChatDrawer({
                           );
                         });
                       })()}
-                      <div ref={messagesEndRef} />
+                      <div ref={dmEndRef} />
                     </div>
                   </>
                 ) : (
@@ -864,7 +892,7 @@ export default function LobbyChatDrawer({
               </div>
             ) : (
               /* ================= VIEW: GLOBAL CHAT (SEMUA / REKRUTMEN) ================= */
-              <div className="mlbb-chat-messages-area">
+              <div className="mlbb-chat-messages-area" ref={globalScrollAreaRef}>
                 {filteredMessages.length === 0 ? (
                   <div className="chat-empty-state">
                     <MessageSquare size={30} className="chat-empty-icon" />
@@ -995,7 +1023,7 @@ export default function LobbyChatDrawer({
                     );
                   })
                 )}
-                <div ref={messagesEndRef} />
+                <div ref={globalEndRef} />
               </div>
             )}
 

@@ -384,3 +384,115 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ==========================================================================
+   ROOM CHAT HISTORY SCROLL (IN-ROOM CHAT WITH AUTO-SCROLL TO LATEST)
+   ========================================================================== */
+
+.live-chat-history-scroll {
+  max-height: 200px;
+  min-height: 90px;
+  overflow-y: auto;
+  padding: 0.7rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  background: rgba(6, 11, 22, 0.65);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  scroll-behavior: smooth;
+}
+
+.live-chat-history-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.live-chat-history-scroll::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.35);
+  border-radius: 999px;
+}
+
+.live-chat-empty-hint {
+  margin: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.74rem;
+  padding: 0.9rem 0.5rem;
+}
+
+.room-chat-msg-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.48rem;
+  animation: bubblePopIn 0.2s ease-out;
+}
+
+.room-chat-msg-row.is-me {
+  flex-direction: row-reverse;
+}
+
+.room-chat-avatar {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+}
+
+.room-chat-bubble-wrap {
+  display: flex;
+  flex-direction: column;
+  max-width: 82%;
+  gap: 0.15rem;
+}
+
+.room-chat-msg-row.is-me .room-chat-bubble-wrap {
+  align-items: flex-end;
+}
+
+.room-chat-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.room-chat-sender {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #38bdf8;
+}
+
+.room-chat-sender.sender-me {
+  color: #fbbf24;
+}
+
+.room-chat-time {
+  font-size: 0.58rem;
+  color: #64748b;
+}
+
+.room-chat-bubble-body {
+  padding: 0.42rem 0.7rem;
+  border-radius: 12px;
+  border-top-left-radius: 2px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.room-chat-msg-row.is-me .room-chat-bubble-body {
+  border-top-left-radius: 12px;
+  border-top-right-radius: 2px;
+  background: rgba(14, 116, 144, 0.32);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #f0f9ff;
+}
+

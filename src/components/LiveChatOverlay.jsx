@@ -21,6 +21,7 @@ export default function LiveChatOverlay({
   myPlayerName,
   myAvatar = '👤',
   activeMessages = [],
+  chatHistory = [],
   onSendMessage,
   isOpen: externalIsOpen,
   onToggleOpen,
@@ -35,13 +36,40 @@ export default function LiveChatOverlay({
 
   const [customText, setCustomText] = useState('');
   const inputRef = useRef(null);
+  const chatHistoryScrollRef = useRef(null);
+  const chatHistoryEndRef = useRef(null);
 
-  // Focus input when popover opens
+  // Auto-scroll handler to ensure view is always at the newest bubble
+  const scrollToBottom = (smooth = false) => {
+    if (chatHistoryScrollRef.current) {
+      chatHistoryScrollRef.current.scrollTop = chatHistoryScrollRef.current.scrollHeight;
+    }
+    if (chatHistoryEndRef.current) {
+      chatHistoryEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
+    }
+  };
+
+  // Focus input when popover opens and auto-scroll to latest message
   useEffect(() => {
-    if (isOpen && inputRef.current) {
-      setTimeout(() => inputRef.current?.focus(), 80);
+    if (isOpen) {
+      if (inputRef.current) {
+        setTimeout(() => inputRef.current?.focus(), 80);
+      }
+      scrollToBottom(false);
+      requestAnimationFrame(() => scrollToBottom(false));
+      setTimeout(() => scrollToBottom(false), 50);
+      setTimeout(() => scrollToBottom(false), 150);
     }
   }, [isOpen]);
+
+  // Auto-scroll whenever a new room chat bubble arrives
+  useEffect(() => {
+    if (isOpen) {
+      scrollToBottom(false);
+      requestAnimationFrame(() => scrollToBottom(false));
+      setTimeout(() => scrollToBottom(false), 50);
+    }
+  }, [chatHistory, isOpen]);
 
   const handleSend = (textToSend) => {
     const text = (textToSend || customText).trim();
@@ -50,7 +78,7 @@ export default function LiveChatOverlay({
       onSendMessage(text);
     }
     setCustomText('');
-    setIsOpen(false);
+    setTimeout(() => scrollToBottom(false), 40);
   };
 
   const handleKeyDown = (e) => {
@@ -117,7 +145,7 @@ export default function LiveChatOverlay({
             <div className="live-chat-header">
               <div className="live-chat-title-group">
                 <MessageSquare size={16} color="#38bdf8" />
-                <h4 className="live-chat-heading">Chat Cepat Mabar</h4>
+                <h4 className="live-chat-heading">Chat Meja Permainan</h4>
               </div>
               <button
                 type="button"
@@ -127,6 +155,51 @@ export default function LiveChatOverlay({
               >
                 <X size={18} />
               </button>
+            </div>
+
+            {/* Room Chat History Area (Auto-scrolls to the newest bubble) */}
+            <div className="live-chat-history-scroll" ref={chatHistoryScrollRef}>
+              {chatHistory.length === 0 ? (
+                <div className="live-chat-empty-hint">
+                  <Sparkles size={14} color="#38bdf8" />
+                  <span>Obrolan meja permainan. Ketik atau klik pesan kilat di bawah!</span>
+                </div>
+              ) : (
+                chatHistory.map((msg) => {
+                  const isMe = msg.senderId === myPlayerId;
+                  const timeStr = msg.timestamp
+                    ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : '';
+
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`room-chat-msg-row ${isMe ? 'is-me' : ''}`}
+                    >
+                      <div className="room-chat-avatar">
+                        <AvatarDisplay
+                          avatar={isMe ? myAvatar : msg.senderAvatar}
+                          fallback="👤"
+                          size={24}
+                          playerName={msg.senderName}
+                        />
+                      </div>
+                      <div className="room-chat-bubble-wrap">
+                        <div className="room-chat-meta">
+                          <span className={`room-chat-sender ${isMe ? 'sender-me' : ''}`}>
+                            {msg.senderName} {isMe ? '(Anda)' : ''}
+                          </span>
+                          {timeStr && <span className="room-chat-time">{timeStr}</span>}
+                        </div>
+                        <div className="room-chat-bubble-body">
+                          <span>{msg.message}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={chatHistoryEndRef} />
             </div>
 
             {/* Quick 1-Click Presets */}

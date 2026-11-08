@@ -219,6 +219,7 @@ export default function App() {
   const [copiedRoomCode, setCopiedRoomCode] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [activeChatMessages, setActiveChatMessages] = useState([]);
+  const [roomChatHistory, setRoomChatHistory] = useState([]);
   const [isReconnecting, setIsReconnecting] = useState(() => {
     if (typeof localStorage !== 'undefined') {
       const session = getActiveSession();
@@ -632,9 +633,11 @@ export default function App() {
     const newChat = {
       ...chat,
       id: chat.id || `chat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: chat.timestamp || Date.now(),
     };
 
-    setActiveChatMessages((prev) => [...prev.slice(-2), newChat]);
+    setRoomChatHistory((prev) => [...prev.slice(-49), newChat]);
+    setActiveChatMessages((prev) => [...prev.slice(-3), newChat]);
 
     // Auto-dismiss after 8.5 seconds (agar nyaman dan leluasa dibaca)
     setTimeout(() => {
@@ -4027,6 +4030,7 @@ export default function App() {
             '👤'
           }
           activeMessages={activeChatMessages}
+          chatHistory={roomChatHistory}
           onSendMessage={handleSendChatMessage}
           isOpen={isChatOpen}
           onToggleOpen={setIsChatOpen}
