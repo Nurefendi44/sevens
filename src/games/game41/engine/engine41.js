@@ -88,6 +88,7 @@ export function initGame41(config = DEFAULT_CONFIG_41, customPlayers = null) {
 
   const initialState = {
     gameType: 'game41',
+    matchId: `g41_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     config: { ...config, playerCount, firstPlayerId },
     players,
     hands,

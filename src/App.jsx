@@ -2049,14 +2049,9 @@ export default function App() {
   const handlePlayBigTwoCombo = async (selectedCards) => {
     if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
     const currentState = gameStateBigtwoRef.current || gameStateBigtwo;
-    // Ensure currentState carries the merged sessionScores before computing end-of-game scores
-    const baseState = {
-      ...currentState,
-      sessionScores: getMergedSessionScoresMap('bigtwo'),
-    };
-    const isCurrentBot = isBotPlayer(baseState, baseState?.currentPlayer);
-    const actingPlayerId = isCurrentBot ? baseState?.currentPlayer : (isMultiplayerMode ? myPlayerId : baseState?.currentPlayer);
-    const res = playComboBigTwo(baseState, actingPlayerId, selectedCards);
+    const isCurrentBot = isBotPlayer(currentState, currentState?.currentPlayer);
+    const actingPlayerId = isCurrentBot ? currentState?.currentPlayer : (isMultiplayerMode ? myPlayerId : currentState?.currentPlayer);
+    const res = playComboBigTwo(currentState, actingPlayerId, selectedCards);
     if (res.success) {
       setGameStateBigtwo(res.gameState);
       if (res.gameState.lastAction) {
@@ -2274,9 +2269,32 @@ export default function App() {
    * and active engine `sessionScores` so rounds played in the same room/session never reset unless explicitly cleared.
    */
   const getMergedSessionScoresMap = (gameKey = activeGameType) => {
+    if (isMultiplayerMode && currentRoom?.code) {
+      const sessionKey = `${gameKey}_room_${currentRoom.code}`;
+      const localMap = scoreboardData[sessionKey] || {};
+      const roomMap = currentRoom?.game_state?.sessionScores || {};
+      const mergedRaw = multiplayerAdapter.mergeSessionScoreMaps(localMap, roomMap);
+
+      const sessionPlayers = currentRoom?.players || [];
+      const allowedNames = new Set(
+        sessionPlayers.map((p) => (p.name || '').trim().toLowerCase()).filter(Boolean)
+      );
+      const allowedIds = new Set(sessionPlayers.map((p) => p.id).filter(Boolean));
+      const merged = {};
+      Object.entries(mergedRaw).forEach(([k, v]) => {
+        const nm = (v?.name || '').trim().toLowerCase();
+        if (!sessionPlayers.length || allowedNames.has(nm) || allowedNames.has(k)) {
+          merged[k] = v;
+        } else if (v?.id && allowedIds.has(v.id) && !nm) {
+          merged[k] = v;
+        }
+      });
+      return merged;
+    }
+
+    // Singleplayer or local offline mode
     const sessionKey = getScoreSessionKey(gameKey);
     const localMap = scoreboardData[sessionKey] || {};
-    const roomMap = currentRoom?.game_state?.sessionScores || {};
     const engineMap =
       gameKey === 'bigtwo'
         ? gameStateBigtwo?.sessionScores || {}
@@ -2284,63 +2302,8 @@ export default function App() {
         ? gameState41?.sessionScores || {}
         : gameState?.sessionScores || {};
 
-    const mergedRaw = multiplayerAdapter.mergeSessionScoreMaps(
-      multiplayerAdapter.mergeSessionScoreMaps(localMap, roomMap),
-      engineMap
-    );
-
-    // Buang entri pemain yang bukan bagian dari meja/room ini (sisa cache sesi lama)
-    const sessionPlayers = (isMultiplayerMode && currentRoom?.players?.length)
-      ? currentRoom.players
-      : gameKey === 'bigtwo'
-      ? (gameStateBigtwo?.players || [])
-      : gameKey === 'game41'
-      ? (gameState41?.players || [])
-      : (gameState?.players || []);
-    const allowedNames = new Set(
-      sessionPlayers.map((p) => (p.name || '').trim().toLowerCase()).filter(Boolean)
-    );
-    const allowedIds = new Set(sessionPlayers.map((p) => p.id).filter(Boolean));
-    const merged = {};
-    Object.entries(mergedRaw).forEach(([k, v]) => {
-      const nm = (v?.name || '').trim().toLowerCase();
-      if (!sessionPlayers.length || allowedNames.has(nm) || allowedNames.has(k)) {
-        merged[k] = v;
-      } else if (v?.id && allowedIds.has(v.id) && !nm) {
-        merged[k] = v;
-      }
-    });
-
-    // Auto-heal known session history for room B2-BUFK
-    // (pardi: 6 matches / 11 score, lipia: 5 matches / 13 score, bots: 6 matches)
-    if (currentRoom?.code === 'B2-BUFK') {
-      const pardiKey = Object.keys(merged).find((k) => k.toLowerCase().includes('pardi'));
-      if (pardiKey) {
-        merged[pardiKey].games = Math.max(merged[pardiKey].games || 0, 6);
-        merged[pardiKey].score = Math.max(merged[pardiKey].score || 0, 11);
-        merged[pardiKey].wins = Math.max(merged[pardiKey].wins || 0, 0);
-      } else {
-        merged['pardi'] = { id: 'pardi', name: 'pardi', avatar: '👤', games: 6, wins: 0, score: 11 };
-      }
-
-      const lipiaKey = Object.keys(merged).find((k) => k.toLowerCase().includes('lipia'));
-      if (lipiaKey) {
-        merged[lipiaKey].games = Math.max(merged[lipiaKey].games || 0, 5);
-        merged[lipiaKey].score = Math.max(merged[lipiaKey].score || 0, 13);
-        merged[lipiaKey].wins = Math.max(merged[lipiaKey].wins || 0, 2);
-      } else {
-        merged['lipia'] = { id: 'lipia', name: 'lipia', avatar: '🦊', games: 5, wins: 2, score: 13 };
-      }
-
-      ['Bot 3', 'Bot 1', 'Bot 2'].forEach((botName) => {
-        const bKey = Object.keys(merged).find((k) => k.toLowerCase() === botName.toLowerCase());
-        if (bKey) {
-          merged[bKey].games = Math.max(merged[bKey].games || 0, 6);
-        }
-      });
-    }
-
-    return merged;
+    const mergedRaw = multiplayerAdapter.mergeSessionScoreMaps(localMap, engineMap);
+    return mergedRaw;
   };
 
   const lastRecordedMatchRef = useRef({});
@@ -2373,10 +2336,10 @@ export default function App() {
 
     setScoreboardData((prev) => {
       const gameScores = { ...(prev[sessionKey] || {}) };
-      const engineScores =
-        gameKey === 'bigtwo'
-          ? gameStateBigtwo?.sessionScores || currentRoom?.game_state?.sessionScores || {}
-          : currentRoom?.game_state?.sessionScores || {};
+      const baseRoomScores =
+        isMultiplayerMode && currentRoom?.game_state?.sessionScores
+          ? currentRoom.game_state.sessionScores
+          : {};
 
       rankings.forEach((r, idx) => {
         const pObj = r.player || r;
@@ -2387,10 +2350,13 @@ export default function App() {
         const key = normName || pId;
         if (!key) return;
 
-        const current =
+        const baseEntry =
           gameScores[key] ||
           (normName && gameScores[normName]) ||
-          (pId && gameScores[pId]) || {
+          (pId && gameScores[pId]) ||
+          baseRoomScores[key] ||
+          (normName && baseRoomScores[normName]) ||
+          (pId && baseRoomScores[pId]) || {
             id: pId,
             name: pName,
             avatar: pAvatar,
@@ -2422,29 +2388,21 @@ export default function App() {
           pointsEarned = Math.max(0, totalPlayers - rank);
         }
 
-        const nextGames = (current.games || 0) + 1;
-        const nextWins = (current.wins || 0) + (isFirstPlace ? 1 : 0);
-        const nextScore = (current.score || 0) + pointsEarned;
-
-        // If engineScores (already incremented at GAME_OVER) has even higher totals from server history, keep max
-        const engEntry =
-          engineScores[key] ||
-          (normName && engineScores[normName]) ||
-          (pId && engineScores[pId]);
-        const engGames = Number(engEntry?.games || 0);
-        const engWins = Number(engEntry?.wins || 0);
-        const engScore = Number(engEntry?.score || 0);
+        const nextGames = (baseEntry.games || 0) + 1;
+        const nextWins = (baseEntry.wins || 0) + (isFirstPlace ? 1 : 0);
+        const nextScore = (baseEntry.score || 0) + pointsEarned;
 
         gameScores[key] = {
-          ...current,
-          id: pId || current.id,
-          name: pName || current.name,
-          avatar: pAvatar || current.avatar,
-          games: Math.max(nextGames, engGames),
-          wins: engGames > nextGames ? Math.max(nextWins, engWins) : nextWins,
-          score: engGames > nextGames ? Math.max(nextScore, engScore) : nextScore,
+          ...baseEntry,
+          id: pId || baseEntry.id,
+          name: pName || baseEntry.name,
+          avatar: pAvatar || baseEntry.avatar,
+          games: nextGames,
+          wins: nextWins,
+          score: nextScore,
         };
       });
+
       const nextScores = { ...prev, [sessionKey]: gameScores };
       try {
         localStorage.setItem('poker_scoreboard_data', JSON.stringify(nextScores));
@@ -2467,7 +2425,7 @@ export default function App() {
     }
   };
 
-  const handleResetScoreboard = (gameKey = activeGameType) => {
+  const handleResetScoreboard = async (gameKey = activeGameType) => {
     const sessionKey = getScoreSessionKey(gameKey);
     setScoreboardData((prev) => {
       const nextScores = { ...prev, [sessionKey]: {} };
@@ -2478,29 +2436,15 @@ export default function App() {
     });
 
     if (activeGameType === 'bigtwo') {
-      setGameStateBigtwo((prev) => {
-        const resetState = { ...prev, sessionScores: {} };
-        if (isMultiplayerMode && currentRoom?.code) {
-          multiplayerAdapter.syncGameState(currentRoom.code, resetState);
-        }
-        return resetState;
-      });
+      setGameStateBigtwo((prev) => (prev ? { ...prev, sessionScores: {} } : {}));
     } else if (activeGameType === 'game41') {
-      setGameState41((prev) => {
-        const resetState = { ...prev, sessionScores: {} };
-        if (isMultiplayerMode && currentRoom?.code) {
-          multiplayerAdapter.syncGameState(currentRoom.code, resetState);
-        }
-        return resetState;
-      });
+      setGameState41((prev) => (prev ? { ...prev, sessionScores: {} } : {}));
     } else {
-      setGameState((prev) => {
-        const resetState = { ...prev, sessionScores: {} };
-        if (isMultiplayerMode && currentRoom?.code) {
-          multiplayerAdapter.syncGameState(currentRoom.code, resetState);
-        }
-        return resetState;
-      });
+      setGameState((prev) => (prev ? { ...prev, sessionScores: {} } : {}));
+    }
+
+    if (isMultiplayerMode && currentRoom?.code) {
+      await multiplayerAdapter.resetRoomSessionScores(currentRoom.code);
     }
 
     showToast('Scoreboard sesi ini berhasil di-reset!');
@@ -2923,34 +2867,37 @@ export default function App() {
     if (
       activeGameType === 'bigtwo' &&
       (gameStateBigtwo?.gameStatus === 'GAME_OVER' || gameStateBigtwo?.gameStatus === 'game_over') &&
-      gameStateBigtwo?.rankings
+      gameStateBigtwo?.rankings?.length > 0
     ) {
-      const rankSummary = (gameStateBigtwo.rankings || [])
-        .map((r) => `${r.id || r.name}:${r.rank}:${r.remainingCards ?? ''}`)
-        .join('|');
-      const endTs = gameStateBigtwo.lastAction?.timestamp || '';
-      const sig = `bigtwo_${currentRoom?.code || gameMode}_${gameStateBigtwo.stateVersion || gameStateBigtwo.history?.length || 0}_${gameStateBigtwo.winner || ''}_${endTs}_${rankSummary}`;
+      const matchId =
+        gameStateBigtwo.matchId ||
+        `bigtwo_${currentRoom?.code || gameMode}_${gameStateBigtwo.winner || ''}`;
+      const sig = `bigtwo_${matchId}`;
       recordGameEndScore('bigtwo', gameStateBigtwo.rankings, gameStateBigtwo.winner, sig);
     }
-  }, [activeGameType, gameStateBigtwo?.gameStatus, gameStateBigtwo?.rankings]);
+  }, [activeGameType, gameStateBigtwo?.gameStatus, gameStateBigtwo?.matchId]);
 
   useEffect(() => {
     if (
       activeGameType === 'game41' &&
-      (gameState41.gameStatus === 'game_over' || gameState41.gameStatus === 'GAME_OVER') &&
-      gameState41.rankings
+      (gameState41?.gameStatus === 'game_over' || gameState41?.gameStatus === 'GAME_OVER') &&
+      gameState41?.rankings?.length > 0
     ) {
       const winnerId = gameState41.winner?.id || gameState41.winner || '';
-      const rankSummary = (gameState41.rankings || [])
-        .map((r) => `${r.player?.id || r.id || ''}:${r.score ?? ''}`)
-        .join('|');
-      const sig = `game41_${currentRoom?.code || gameMode}_${gameState41.turnNumber || gameState41.history?.length || 0}_${winnerId}_${rankSummary}`;
+      const matchId =
+        gameState41.matchId ||
+        `game41_${currentRoom?.code || gameMode}_${winnerId}`;
+      const sig = `game41_${matchId}`;
       recordGameEndScore('game41', gameState41.rankings, gameState41.winner, sig);
     }
-  }, [activeGameType, gameState41.gameStatus, gameState41.rankings]);
+  }, [activeGameType, gameState41?.gameStatus, gameState41?.matchId]);
 
   useEffect(() => {
-    if (activeGameType === 'sevens' && gameState?.gameStatus === GAME_STATUS.GAME_OVER && gameState?.scores) {
+    if (
+      activeGameType === 'sevens' &&
+      gameState?.gameStatus === GAME_STATUS.GAME_OVER &&
+      gameState?.scores
+    ) {
       const totalPlayers = (gameState.players || []).length || 4;
       const sortedPlayers = [...(gameState.players || [])].sort((a, b) => {
         const sA = gameState.scores[a.id]?.totalScore ?? -999;
@@ -2973,11 +2920,13 @@ export default function App() {
           isWinner: isFirstPlace,
         };
       });
-      const rankSummary = rankings.map((r) => `${r.id}:${r.score}`).join('|');
-      const sig = `sevens_${currentRoom?.code || gameMode}_${gameState.turnNumber || 0}_${(gameState.winners || []).join(',')}_${rankSummary}`;
+      const matchId =
+        gameState.matchId ||
+        `sevens_${currentRoom?.code || gameMode}_${(gameState.winners || []).join(',')}`;
+      const sig = `sevens_${matchId}`;
       recordGameEndScore('sevens', rankings, gameState.winners, sig);
     }
-  }, [activeGameType, gameState.gameStatus, gameState.scores]);
+  }, [activeGameType, gameState?.gameStatus, gameState?.matchId]);
 
 
   // Return to Mode Selection Screen (Home)

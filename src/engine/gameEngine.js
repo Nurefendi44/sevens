@@ -116,6 +116,8 @@ export function initGame(configOverrides = {}, customPlayers = null) {
   }
 
   const initialState = {
+    gameType: 'sevens',
+    matchId: `sev_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     config: { ...config, playerCount },
     players,
     hands,

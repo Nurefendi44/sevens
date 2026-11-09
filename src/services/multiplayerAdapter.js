@@ -1828,6 +1828,39 @@ export const multiplayerAdapter = {
   },
 
   /**
+   * Clears accumulated session scores for the current room in Supabase and broadcasts to all peers
+   */
+  async resetRoomSessionScores(roomCode) {
+    if (!supabase || !roomCode) return { success: false };
+    const code = roomCode.trim().toUpperCase();
+    const { room, error } = await this.getRoom(code);
+    if (error || !room) return { success: false, error: error || 'Room tidak ditemukan.' };
+
+    const nextGameState = {
+      ...(room.game_state || {}),
+      sessionScores: {},
+    };
+    const nowIso = new Date().toISOString();
+    const { error: updateErr } = await supabase
+      .from('rooms')
+      .update({
+        game_state: nextGameState,
+        updated_at: nowIso,
+      })
+      .eq('code', code);
+
+    if (updateErr) return { success: false, error: updateErr.message };
+
+    const updatedRoom = hydrateRoomRecord({
+      ...room,
+      game_state: nextGameState,
+      updated_at: nowIso,
+    });
+    this.broadcastRoomState(code, updatedRoom);
+    return { success: true, room: updatedRoom };
+  },
+
+  /**
    * Force resets an abandoned or stuck room and joins directly as the new Host
    */
   async forceResetAndJoinRoom(roomCode, playerName) {
