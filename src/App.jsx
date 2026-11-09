@@ -635,8 +635,13 @@ export default function App() {
   const handleIncomingChatMessage = (chat) => {
     if (!chat || !chat.message) return;
     audio.playChatPopSound();
+    const resolvedAvatar = (chat.senderAvatar && !chat.senderAvatar.startsWith('data:image/'))
+      ? (getCachedPlayerAvatar(chat.senderName) || getCachedPlayerAvatar(chat.senderId) || chat.senderAvatar)
+      : (chat.senderAvatar || '👤');
+
     const newChat = {
       ...chat,
+      senderAvatar: resolvedAvatar,
       id: chat.id || `chat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       timestamp: chat.timestamp || Date.now(),
     };
@@ -673,13 +678,13 @@ export default function App() {
     const chatPayload = {
       senderId,
       senderName,
-      senderAvatar,
+      senderAvatar: (typeof senderAvatar === 'string' && senderAvatar.startsWith('data:image/')) ? '👤' : senderAvatar,
       message: text.trim(),
       timestamp: Date.now(),
     };
 
     // Optimistic local display
-    handleIncomingChatMessage(chatPayload);
+    handleIncomingChatMessage({ ...chatPayload, senderAvatar });
 
     // Broadcast to other players in room (if online)
     if (isMultiplayerMode && currentRoom?.code) {
@@ -693,8 +698,13 @@ export default function App() {
   const handleIncomingReaction = (reaction) => {
     if (!reaction || !reaction.emoji) return;
     audio.playReactionSound();
+    const resolvedAvatar = (reaction.senderAvatar && !reaction.senderAvatar.startsWith('data:image/'))
+      ? (getCachedPlayerAvatar(reaction.senderName) || getCachedPlayerAvatar(reaction.senderId) || reaction.senderAvatar)
+      : (reaction.senderAvatar || '👤');
+
     const newReact = {
       ...reaction,
+      senderAvatar: resolvedAvatar,
       id: reaction.id || `react_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       startX: reaction.startX || (40 + (Math.random() - 0.5) * 35),
       driftX: (Math.random() - 0.5) * 70,
@@ -721,12 +731,12 @@ export default function App() {
     const payload = {
       senderId,
       senderName,
-      senderAvatar,
+      senderAvatar: (typeof senderAvatar === 'string' && senderAvatar.startsWith('data:image/')) ? '👤' : senderAvatar,
       emoji,
       startX: startX || (40 + (Math.random() - 0.5) * 30),
       timestamp: Date.now(),
     };
-    handleIncomingReaction(payload);
+    handleIncomingReaction({ ...payload, senderAvatar });
     if (isMultiplayerMode && currentRoom?.code) {
       await multiplayerAdapter.sendRoomReaction(currentRoom.code, payload);
     }
@@ -748,9 +758,14 @@ export default function App() {
     // Play sound effect through audioService (respects isMuted toggle)
     audio.playSoundboard(soundData.soundFile);
 
+    const resolvedAvatar = (soundData.senderAvatar && !soundData.senderAvatar.startsWith('data:image/'))
+      ? (getCachedPlayerAvatar(soundData.senderName) || getCachedPlayerAvatar(soundData.senderId) || soundData.senderAvatar)
+      : (soundData.senderAvatar || '👤');
+
     // Show floating toast badge
     const newToast = {
       ...soundData,
+      senderAvatar: resolvedAvatar,
       id: soundData.id || `toast_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     };
     setActiveSoundboardToasts((prev) => [...prev.slice(-3), newToast]);
@@ -780,14 +795,14 @@ export default function App() {
     const payload = {
       senderId,
       senderName,
-      senderAvatar,
+      senderAvatar: (typeof senderAvatar === 'string' && senderAvatar.startsWith('data:image/')) ? '👤' : senderAvatar,
       soundId: track.id,
       soundTitle: track.title,
       soundFile: track.file,
       soundIcon: track.icon,
       timestamp: Date.now(),
     };
-    handleIncomingSoundboard(payload);
+    handleIncomingSoundboard({ ...payload, senderAvatar });
     if (isMultiplayerMode && currentRoom?.code) {
       await multiplayerAdapter.sendRoomSoundboard(currentRoom.code, payload);
     }
@@ -879,8 +894,162 @@ export default function App() {
   };
 
   // ---------------------------------------------------------------------------
-  // 2. SUPABASE REALTIME SUBSCRIPTION
+  // 2. SUPABASE REALTIME SUBSCRIPTION & DELTA HANDLING
   // ---------------------------------------------------------------------------
+  const handleIncomingGameActionDelta = useCallback((delta) => {
+    if (!delta || !delta.type) return;
+
+    // Ignore echoes of actions initiated by this client
+    if (delta.actorClientId && delta.actorClientId === myPlayerId) return;
+
+    if (delta.gameType === 'bigtwo' || delta.type === 'PLAY_COMBO' || delta.type === 'PASS_TURN') {
+      const currentState = gameStateBigtwoRef.current;
+      if (!currentState || !currentState.players) return;
+
+      if (delta.type === 'PLAY_COMBO') {
+        const res = playComboBigTwo(currentState, delta.playerId, delta.cards);
+        if (res.success) {
+          setGameStateBigtwo(res.gameState);
+          if (res.gameState.lastAction) {
+            setRecentActionPopup(res.gameState.lastAction);
+          }
+          audio.playCardSound();
+          if (res.gameState.gameStatus === 'GAME_OVER') {
+            audio.victorySound();
+          }
+        } else if (currentRoom?.code) {
+          multiplayerAdapter.requestRoomStateSync(currentRoom.code, myPlayerId);
+        }
+      } else if (delta.type === 'PASS_TURN') {
+        const res = passTurnBigTwo(currentState, delta.playerId);
+        if (res.success) {
+          setGameStateBigtwo(res.gameState);
+          if (res.gameState.lastAction) {
+            setRecentActionPopup(res.gameState.lastAction);
+          }
+          audio.closeCardSound();
+        } else if (currentRoom?.code) {
+          multiplayerAdapter.requestRoomStateSync(currentRoom.code, myPlayerId);
+        }
+      }
+    } else if (delta.gameType === 'game41' || delta.type === 'DRAW_41' || delta.type === 'DISCARD_41' || delta.type === 'CLOSE_HAND_41') {
+      const currentState = gameState41Ref.current;
+      if (!currentState || !currentState.players) return;
+
+      if (delta.type === 'DRAW_41') {
+        const res = drawCard41(currentState, delta.playerId, delta.source);
+        if (res.success) {
+          setGameState41(res.state);
+          audio.playCardSound();
+        } else if (currentRoom?.code) {
+          multiplayerAdapter.requestRoomStateSync(currentRoom.code, myPlayerId);
+        }
+      } else if (delta.type === 'DISCARD_41') {
+        const res = discardCard41(currentState, delta.playerId, delta.card);
+        if (res.success) {
+          setGameState41(res.state);
+          const actorName = currentState.players.find((p) => p.id === delta.playerId)?.name || 'Pemain';
+          const actorAvatar = currentState.players.find((p) => p.id === delta.playerId)?.avatar || '🃏';
+          setRecentActionPopup({
+            type: 'DISCARD',
+            playerId: delta.playerId,
+            playerName: actorName,
+            avatar: actorAvatar,
+            card: delta.card,
+            message: `${actorName} membuang ${delta.card.label}${delta.card.symbol}`,
+          });
+          if (res.is41) audio.victorySound();
+          else audio.closeCardSound();
+        } else if (currentRoom?.code) {
+          multiplayerAdapter.requestRoomStateSync(currentRoom.code, myPlayerId);
+        }
+      } else if (delta.type === 'CLOSE_HAND_41') {
+        const res = closeHand41(currentState, delta.playerId, delta.card);
+        if (res.success) {
+          setGameState41(res.state);
+          const actorName = currentState.players.find((p) => p.id === delta.playerId)?.name || 'Pemain';
+          const actorAvatar = currentState.players.find((p) => p.id === delta.playerId)?.avatar || '🃏';
+          setRecentActionPopup({
+            type: 'CLOSE_HAND',
+            playerId: delta.playerId,
+            playerName: actorName,
+            avatar: actorAvatar,
+            card: delta.card,
+            message: `${actorName} MENUTUP KARTU!`,
+          });
+          if (res.isBusted) audio.closeCardSound?.();
+          else audio.victorySound?.();
+        } else if (currentRoom?.code) {
+          multiplayerAdapter.requestRoomStateSync(currentRoom.code, myPlayerId);
+        }
+      }
+    } else {
+      // Sevens
+      const currentState = gameStateRef.current;
+      if (!currentState || !currentState.players) return;
+
+      if (delta.type === 'PLAY_CARD') {
+        const res = enginePlayCard(currentState, delta.playerId, delta.card, delta.chosenDirection);
+        if (res.success) {
+          setGameState(res.state);
+          const actorName = currentState.players.find((p) => p.id === delta.playerId)?.name || 'Pemain';
+          const actorAvatar = currentState.players.find((p) => p.id === delta.playerId)?.avatar || '♠';
+          setRecentActionPopup({
+            type: 'PLAY',
+            playerId: delta.playerId,
+            playerName: actorName,
+            avatar: actorAvatar,
+            card: delta.card,
+            message: `${actorName} memainkan ${delta.card.label}${delta.card.symbol}`,
+          });
+          if (delta.card.rank === 7) audio.sevenChime();
+          else audio.playCardSound();
+        } else if (currentRoom?.code) {
+          multiplayerAdapter.requestRoomStateSync(currentRoom.code, myPlayerId);
+        }
+      } else if (delta.type === 'CLOSE_CARD') {
+        const res = engineCloseCard(currentState, delta.playerId, delta.card);
+        if (res.success) {
+          setGameState(res.state);
+          const actorName = currentState.players.find((p) => p.id === delta.playerId)?.name || 'Pemain';
+          const actorAvatar = currentState.players.find((p) => p.id === delta.playerId)?.avatar || '🔒';
+          setRecentActionPopup({
+            type: 'PASS',
+            playerId: delta.playerId,
+            playerName: actorName,
+            avatar: actorAvatar,
+            card: delta.card,
+            message: `${actorName} menutup kartu ${delta.card.label}${delta.card.symbol}`,
+          });
+          audio.closeCardSound();
+        } else if (res.fault) {
+          setGameState(res.state);
+          audio.faultSound();
+        } else if (currentRoom?.code) {
+          multiplayerAdapter.requestRoomStateSync(currentRoom.code, myPlayerId);
+        }
+      }
+    }
+  }, [myPlayerId, currentRoom?.code]);
+
+  const handleRequestStateSync = useCallback((req) => {
+    if (!req || !isHost || !currentRoom?.code) return;
+    const activeState =
+      activeGameType === 'bigtwo'
+        ? gameStateBigtwoRef.current
+        : activeGameType === 'game41'
+        ? gameState41Ref.current
+        : gameStateRef.current;
+
+    if (activeState && activeState.players) {
+      multiplayerAdapter.broadcastRoomState(currentRoom.code, {
+        ...currentRoom,
+        game_state: activeState,
+        updated_at: new Date().toISOString(),
+      });
+    }
+  }, [isHost, currentRoom, activeGameType]);
+
   const shouldApplyIncomingBigTwoState = (prev, next) => {
     if (!next || !next.players || !next.hands) return false;
     if (!prev || !prev.players || !prev.hands) return true;
@@ -1016,14 +1185,16 @@ export default function App() {
       handleIncomingChatMessage,
       handleIncomingReaction,
       handleIncomingVoiceSignal,
-      handleIncomingSoundboard
+      handleIncomingSoundboard,
+      handleIncomingGameActionDelta,
+      handleRequestStateSync
     );
 
     return () => {
       unsubscribe();
       voiceChat.leaveRoom();
     };
-  }, [gameMode, currentRoom?.code]);
+  }, [gameMode, currentRoom?.code, handleIncomingGameActionDelta, handleRequestStateSync]);
 
   // Toast Helper
   const showToast = (msg) => {
@@ -1604,7 +1775,15 @@ export default function App() {
       }
 
       if (isMultiplayerMode && currentRoom?.code) {
-        await multiplayerAdapter.syncGameState(currentRoom.code, result.state);
+        const delta = {
+          type: 'PLAY_CARD',
+          gameType: 'sevens',
+          playerId: actingPlayerId,
+          card,
+          chosenDirection,
+          actorClientId: myPlayerId,
+        };
+        await multiplayerAdapter.syncGameState(currentRoom.code, result.state, delta);
       }
     } else {
       // Rejection: generic feedback with no hints on valid cards
@@ -1644,7 +1823,14 @@ export default function App() {
       });
 
       if (isMultiplayerMode && currentRoom?.code) {
-        await multiplayerAdapter.syncGameState(currentRoom.code, result.state);
+        const delta = {
+          type: 'CLOSE_CARD',
+          gameType: 'sevens',
+          playerId: actingPlayerId,
+          card,
+          actorClientId: myPlayerId,
+        };
+        await multiplayerAdapter.syncGameState(currentRoom.code, result.state, delta);
       }
     } else if (result.fault) {
       // Game engine detected FAULT (player had valid moves)
@@ -1653,7 +1839,14 @@ export default function App() {
       setGameState(result.state);
 
       if (isMultiplayerMode && currentRoom?.code) {
-        await multiplayerAdapter.syncGameState(currentRoom.code, result.state);
+        const delta = {
+          type: 'CLOSE_CARD',
+          gameType: 'sevens',
+          playerId: actingPlayerId,
+          card,
+          actorClientId: myPlayerId,
+        };
+        await multiplayerAdapter.syncGameState(currentRoom.code, result.state, delta);
       }
     } else {
       setActiveFault({
@@ -1685,7 +1878,14 @@ export default function App() {
       setGameState41(res.state);
       audio.playCardSound();
       if (isMultiplayerMode && currentRoom?.code) {
-        await multiplayerAdapter.syncGameState(currentRoom.code, res.state);
+        const delta = {
+          type: 'DRAW_41',
+          gameType: 'game41',
+          playerId: actingPlayerId,
+          source,
+          actorClientId: myPlayerId,
+        };
+        await multiplayerAdapter.syncGameState(currentRoom.code, res.state, delta);
       }
     } else {
       showToast(res.error);
@@ -1719,7 +1919,14 @@ export default function App() {
         audio.closeCardSound();
       }
       if (isMultiplayerMode && currentRoom?.code) {
-        await multiplayerAdapter.syncGameState(currentRoom.code, res.state);
+        const delta = {
+          type: 'DISCARD_41',
+          gameType: 'game41',
+          playerId: actingPlayerId,
+          card,
+          actorClientId: myPlayerId,
+        };
+        await multiplayerAdapter.syncGameState(currentRoom.code, res.state, delta);
       }
     } else {
       showToast(res.error);
@@ -1753,7 +1960,14 @@ export default function App() {
         audio.victorySound?.();
       }
       if (isMultiplayerMode && currentRoom?.code) {
-        await multiplayerAdapter.syncGameState(currentRoom.code, res.state);
+        const delta = {
+          type: 'CLOSE_HAND_41',
+          gameType: 'game41',
+          playerId: actingPlayerId,
+          card,
+          actorClientId: myPlayerId,
+        };
+        await multiplayerAdapter.syncGameState(currentRoom.code, res.state, delta);
       }
     } else {
       showToast(res.error);
@@ -1853,7 +2067,14 @@ export default function App() {
         audio.victorySound();
       }
       if (isMultiplayerMode && currentRoom?.code) {
-        await multiplayerAdapter.syncGameState(currentRoom.code, res.gameState);
+        const delta = {
+          type: 'PLAY_COMBO',
+          gameType: 'bigtwo',
+          playerId: actingPlayerId,
+          cards: selectedCards,
+          actorClientId: myPlayerId,
+        };
+        await multiplayerAdapter.syncGameState(currentRoom.code, res.gameState, delta);
       }
     } else {
       showToast(res.error);
@@ -1873,7 +2094,13 @@ export default function App() {
       }
       audio.closeCardSound();
       if (isMultiplayerMode && currentRoom?.code) {
-        await multiplayerAdapter.syncGameState(currentRoom.code, res.gameState);
+        const delta = {
+          type: 'PASS_TURN',
+          gameType: 'bigtwo',
+          playerId: actingPlayerId,
+          actorClientId: myPlayerId,
+        };
+        await multiplayerAdapter.syncGameState(currentRoom.code, res.gameState, delta);
       }
     } else {
       showToast(res.error);

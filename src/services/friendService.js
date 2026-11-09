@@ -543,6 +543,13 @@ export async function sendFriendRequest(myUsername, myProfile, targetUser) {
     }
   } catch {}
 
+  const senderSafeAvatar = (typeof myProfile?.avatar === 'string' && myProfile.avatar.startsWith('data:image/'))
+    ? '👑'
+    : (myProfile?.avatar || '👑');
+  const targetSafeAvatar = (typeof targetUser?.avatar === 'string' && targetUser.avatar.startsWith('data:image/'))
+    ? '👤'
+    : (targetUser?.avatar || '👤');
+
   const payload = {
     id: `freq_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     type: 'friend_request_send',
@@ -550,14 +557,14 @@ export async function sendFriendRequest(myUsername, myProfile, targetUser) {
     to: targetUser.name.trim(),
     senderProfile: {
       name: myUsername.trim(),
-      avatar: myProfile?.avatar || '👑',
+      avatar: senderSafeAvatar,
       tier: myProfile?.tier || null,
       score: myProfile?.score || 0,
       wins: myProfile?.wins || 0,
     },
     targetProfile: {
       name: targetUser.name.trim(),
-      avatar: targetUser.avatar || '👤',
+      avatar: targetSafeAvatar,
     },
     timestamp: Date.now(),
   };
@@ -640,6 +647,10 @@ export async function acceptFriendRequest(myUsername, myProfile, targetSender) {
   cleanPendingRequests(myNorm, targetNorm);
   cleanPendingRequests(targetNorm, myNorm);
 
+  const accepterSafeAvatar = (typeof myProfile?.avatar === 'string' && myProfile.avatar.startsWith('data:image/'))
+    ? '👑'
+    : (myProfile?.avatar || '👑');
+
   const payload = {
     id: `facc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     type: 'friend_request_accept',
@@ -647,7 +658,7 @@ export async function acceptFriendRequest(myUsername, myProfile, targetSender) {
     to: targetSender.name.trim(),
     accepterProfile: {
       name: myUsername.trim(),
-      avatar: myProfile?.avatar || '👑',
+      avatar: accepterSafeAvatar,
       tier: myProfile?.tier || null,
       score: myProfile?.score || 0,
       wins: myProfile?.wins || 0,

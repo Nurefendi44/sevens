@@ -83,6 +83,7 @@ export default function ScoreboardModal({
   };
 
   useEffect(() => {
+    if (!isOpen) return;
     refreshFriends();
     if (effectiveMyName) {
       const unsub = subscribeToFriendEvents(effectiveMyName, () => {

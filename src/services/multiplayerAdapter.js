@@ -9,6 +9,7 @@ import { initGame } from '../engine/gameEngine.js';
 import { GAME_STATUS } from '../engine/constants.js';
 import { initGame41 } from '../games/game41/engine/engine41.js';
 import { initBigTwo } from '../games/bigtwo/engine/bigtwoEngine.js';
+import { cachePlayerAvatar, getCachedPlayerAvatar } from './leaderboardService.js';
 
 export const AVATARS = ['👤', '🦊', '🐼', '🦁', '🐯', '🐨'];
 export const SEAT_POSITIONS = ['bottom', 'left', 'top', 'right', 'top_left', 'top_right'];
@@ -239,7 +240,7 @@ export function getRelativeSeats(players = [], viewerPlayerId) {
 const ROOM_SELECT_COLS = 'id, code, host_id, status, players, game_state, updated_at';
 const ROOM_META_COLS = 'id, code, host_id, status, players, updated_at';
 
-// In-memory avatar cache to avoid sending 20-40KB Base64 strings inside game_state on every card play
+// In-memory avatar cache to avoid sending 20-150KB Base64 strings inside rooms.players or game_state
 const playerAvatarCache = new Map();
 const inflightGetRoom = new Map();
 
@@ -247,18 +248,44 @@ function cacheAvatarsFromPlayers(players = []) {
   if (!Array.isArray(players)) return;
   for (const p of players) {
     if (!p || !p.avatar || p.avatar === '__CACHED__') continue;
-    if (p.id) playerAvatarCache.set(`id:${p.id}`, p.avatar);
-    if (p.name) playerAvatarCache.set(`name:${String(p.name).trim().toLowerCase()}`, p.avatar);
+    const isCustomImg = typeof p.avatar === 'string' && (p.avatar.startsWith('data:image/') || p.avatar.startsWith('http'));
+    const normName = p.name ? String(p.name).trim().toLowerCase() : '';
+    if (p.id) {
+      const existing = playerAvatarCache.get(`id:${p.id}`);
+      if (isCustomImg || !existing || !String(existing).startsWith('data:image/')) {
+        playerAvatarCache.set(`id:${p.id}`, p.avatar);
+      }
+      if (isCustomImg) cachePlayerAvatar(p.id, p.avatar);
+    }
+    if (normName) {
+      const existing = playerAvatarCache.get(`name:${normName}`);
+      if (isCustomImg || !existing || !String(existing).startsWith('data:image/')) {
+        playerAvatarCache.set(`name:${normName}`, p.avatar);
+      }
+      if (isCustomImg) cachePlayerAvatar(normName, p.avatar);
+    }
   }
 }
 
 function resolveCachedAvatar(p, roomPlayers = []) {
   if (!p) return '👤';
-  if (p.avatar && p.avatar !== '__CACHED__') {
+  if (typeof p.avatar === 'string' && p.avatar.startsWith('data:image/')) {
     cacheAvatarsFromPlayers([p]);
     return p.avatar;
   }
   const normName = p.name ? String(p.name).trim().toLowerCase() : '';
+  if (p.id && playerAvatarCache.has(`id:${p.id}`)) {
+    const cached = playerAvatarCache.get(`id:${p.id}`);
+    if (cached && cached !== '__CACHED__') return cached;
+  }
+  if (normName && playerAvatarCache.has(`name:${normName}`)) {
+    const cached = playerAvatarCache.get(`name:${normName}`);
+    if (cached && cached !== '__CACHED__') return cached;
+  }
+  const fromGlobalCache = (normName && getCachedPlayerAvatar(normName)) || (p.id && getCachedPlayerAvatar(p.id));
+  if (fromGlobalCache && fromGlobalCache !== '__CACHED__') {
+    return fromGlobalCache;
+  }
   if (Array.isArray(roomPlayers)) {
     const match = roomPlayers.find(
       (rp) =>
@@ -270,13 +297,33 @@ function resolveCachedAvatar(p, roomPlayers = []) {
       return match.avatar;
     }
   }
-  if (p.id && playerAvatarCache.has(`id:${p.id}`)) {
-    return playerAvatarCache.get(`id:${p.id}`);
-  }
-  if (normName && playerAvatarCache.has(`name:${normName}`)) {
-    return playerAvatarCache.get(`name:${normName}`);
+  if (p.avatar && p.avatar !== '__CACHED__') {
+    return p.avatar;
   }
   return '👤';
+}
+
+function compactPlayersForWire(players = []) {
+  if (!Array.isArray(players)) return players;
+  cacheAvatarsFromPlayers(players);
+  return players.map((p, idx) => {
+    if (typeof p?.avatar === 'string' && p.avatar.startsWith('data:image/')) {
+      return {
+        ...p,
+        avatar: AVATARS[(p.seatIndex ?? idx) % AVATARS.length] || '👤',
+      };
+    }
+    return p;
+  });
+}
+
+function hydratePlayersAvatars(players = []) {
+  if (!Array.isArray(players)) return players;
+  cacheAvatarsFromPlayers(players);
+  return players.map((p) => ({
+    ...p,
+    avatar: resolveCachedAvatar(p, players),
+  }));
 }
 
 function hydrateGameStateAvatars(gameState, roomPlayers = []) {
@@ -318,21 +365,24 @@ function hydrateGameStateAvatars(gameState, roomPlayers = []) {
 
 function hydrateRoomRecord(room, fallbackPlayers = []) {
   if (!room || typeof room !== 'object') return room;
-  const effectivePlayers = Array.isArray(room.players) && room.players.length > 0 ? room.players : fallbackPlayers;
-  cacheAvatarsFromPlayers(effectivePlayers);
+  const rawPlayers = Array.isArray(room.players) && room.players.length > 0 ? room.players : fallbackPlayers;
+  const hydratedPlayers = hydratePlayersAvatars(rawPlayers);
   if (room.game_state && typeof room.game_state === 'object') {
     return {
       ...room,
-      game_state: hydrateGameStateAvatars(room.game_state, effectivePlayers),
+      ...(Array.isArray(room.players) ? { players: hydratedPlayers } : {}),
+      game_state: hydrateGameStateAvatars(room.game_state, hydratedPlayers),
     };
   }
-  return room;
+  return {
+    ...room,
+    ...(Array.isArray(room.players) ? { players: hydratedPlayers } : {}),
+  };
 }
 
 /**
  * Strips heavy Base64 data:image strings & trims unbounded history from game_state
- * before broadcasting / updating on every card move (reduces payload by ~95% and prevents Postgres TOAST).
- * Avatars remain safely stored in `rooms.players` and `playerAvatarCache` and are re-hydrated on receipt.
+ * before broadcasting / updating on checkpoints (reduces payload by ~95% and prevents Postgres TOAST).
  */
 function compactGameStateForWire(gameState) {
   if (!gameState || typeof gameState !== 'object') return gameState;
@@ -342,9 +392,9 @@ function compactGameStateForWire(gameState) {
   }
 
   const compactPlayers = Array.isArray(gameState.players)
-    ? gameState.players.map((p) => {
+    ? gameState.players.map((p, idx) => {
         if (typeof p?.avatar === 'string' && p.avatar.startsWith('data:image/')) {
-          return { ...p, avatar: '__CACHED__' };
+          return { ...p, avatar: AVATARS[idx % AVATARS.length] || '__CACHED__' };
         }
         return p;
       })
@@ -364,15 +414,38 @@ function compactGameStateForWire(gameState) {
     : gameState.rankings;
 
   const compactHistory =
-    Array.isArray(gameState.history) && gameState.history.length > 20
-      ? gameState.history.slice(-20)
+    Array.isArray(gameState.history) && gameState.history.length > 15
+      ? gameState.history.slice(-15)
       : gameState.history;
+
+  let compactWheel = gameState.firstTurnWheel;
+  if (compactWheel && Array.isArray(compactWheel.players)) {
+    compactWheel = {
+      ...compactWheel,
+      players: compactPlayersForWire(compactWheel.players),
+    };
+  }
+
+  let compactSessionScores = gameState.sessionScores;
+  if (compactSessionScores && typeof compactSessionScores === 'object') {
+    const nextScores = {};
+    for (const [k, v] of Object.entries(compactSessionScores)) {
+      if (v && typeof v === 'object' && typeof v.avatar === 'string' && v.avatar.startsWith('data:image/')) {
+        nextScores[k] = { ...v, avatar: '__CACHED__' };
+      } else {
+        nextScores[k] = v;
+      }
+    }
+    compactSessionScores = nextScores;
+  }
 
   return {
     ...gameState,
     ...(compactPlayers ? { players: compactPlayers } : {}),
     ...(compactRankings ? { rankings: compactRankings } : {}),
     ...(compactHistory ? { history: compactHistory } : {}),
+    ...(compactWheel ? { firstTurnWheel: compactWheel } : {}),
+    ...(compactSessionScores ? { sessionScores: compactSessionScores } : {}),
   };
 }
 
@@ -478,13 +551,14 @@ export const multiplayerAdapter = {
     };
     const nowIso = new Date().toISOString();
 
+    const compactPlayers = compactPlayersForWire([hostPlayer]);
     const { data, error } = await supabase
       .from('rooms')
       .insert({
         code,
         host_id: playerId,
         status: 'lobby',
-        players: [hostPlayer],
+        players: compactPlayers,
         game_state: initialGameState,
         updated_at: nowIso,
       })
@@ -596,11 +670,12 @@ export const multiplayerAdapter = {
         gameType: targetType,
       };
 
+      const compactPlayers = compactPlayersForWire([newHostPlayer]);
       const { error: updateErr } = await supabase
         .from('rooms')
         .update({
           host_id: playerId,
-          players: [newHostPlayer],
+          players: compactPlayers,
           status: 'lobby',
           game_state: nextGs,
           updated_at: nowIso,
@@ -646,13 +721,14 @@ export const multiplayerAdapter = {
     cacheAvatarsFromPlayers([newPlayer]);
 
     const updatedPlayers = [...players, newPlayer];
+    const compactPlayers = compactPlayersForWire(updatedPlayers);
     const nowIso = new Date().toISOString();
 
     // Optimistic lock: hanya ambil kolom `id` untuk mengecek apakah update berhasil (hemat egress)
     const { data: updatedRows, error: updateErr } = await supabase
       .from('rooms')
       .update({
-        players: updatedPlayers,
+        players: compactPlayers,
         updated_at: nowIso,
       })
       .eq('id', room.id)
@@ -694,10 +770,15 @@ export const multiplayerAdapter = {
     const playerId = getLocalPlayerId();
 
     const myAvatar = getLocalPlayerAvatar(AVATARS[0]);
+    const wireAvatar = (typeof myAvatar === 'string' && myAvatar.startsWith('data:image/'))
+      ? '👤'
+      : (myAvatar || '👤');
+    cachePlayerAvatar(playerId, myAvatar);
+    if (name) cachePlayerAvatar(name, myAvatar);
 
     const { data, error } = await supabase.rpc('matchmake', {
       p_game_type: gameType || 'sevens',
-      p_player: { id: playerId, name, avatar: myAvatar, joinedAt: Date.now() },
+      p_player: { id: playerId, name, avatar: wireAvatar, joinedAt: Date.now() },
     });
 
     if (error) {
@@ -837,11 +918,12 @@ export const multiplayerAdapter = {
       }
       return p;
     });
+    const compactPlayers = compactPlayersForWire(updatedPlayers);
 
     const { data: rows } = await supabase
       .from('rooms')
       .update({
-        players: updatedPlayers,
+        players: compactPlayers,
         updated_at: new Date().toISOString(),
       })
       .eq('code', code)
@@ -1203,7 +1285,7 @@ export const multiplayerAdapter = {
   async broadcastRoomState(roomCode, roomRecord) {
     if (!supabase || !roomCode || !roomRecord) return;
     const code = roomCode.trim().toUpperCase();
-    const ch = this.activeChannels[code];
+    const ch = this.getOrCreateRoomChannel(code);
     if (!ch) return;
     try {
       const compactPayload = roomRecord.game_state
@@ -1218,9 +1300,55 @@ export const multiplayerAdapter = {
   },
 
   /**
-   * Synchronizes updated Game Engine state to Supabase
+   * Broadcasts a minimal game action delta (e.g. CARD_PLAYED, PASS_TURN) without sending full state
    */
-  async syncGameState(roomCode, nextGameState) {
+  async sendGameActionDelta(roomCode, deltaPayload) {
+    if (!supabase || !roomCode || !deltaPayload) return;
+    const code = roomCode.trim().toUpperCase();
+    const ch = this.getOrCreateRoomChannel(code);
+    if (!ch) return;
+    try {
+      await ch.send({
+        type: 'broadcast',
+        event: 'game_action_delta',
+        payload: {
+          ...deltaPayload,
+          roomCode: code,
+          timestamp: Date.now(),
+        },
+      });
+    } catch (e) {
+      console.warn('[multiplayerAdapter] Failed to send game action delta:', e);
+    }
+  },
+
+  /**
+   * Request state snapshot from host or peers when client desyncs or reconnects
+   */
+  async requestRoomStateSync(roomCode, requesterId) {
+    if (!supabase || !roomCode) return;
+    const code = roomCode.trim().toUpperCase();
+    const ch = this.getOrCreateRoomChannel(code);
+    if (!ch) return;
+    try {
+      await ch.send({
+        type: 'broadcast',
+        event: 'request_state_sync',
+        payload: {
+          roomCode: code,
+          requesterId,
+          timestamp: Date.now(),
+        },
+      });
+    } catch (e) {}
+  },
+
+  /**
+   * Synchronizes updated Game Engine state to Supabase
+   * Optimization: If actionDelta is provided and game is still playing, ONLY broadcast delta (~150 bytes)
+   * instead of full state (~15KB) and skip database write.
+   */
+  async syncGameState(roomCode, nextGameState, actionDelta = null) {
     if (!supabase) return { success: false };
     const code = roomCode.trim().toUpperCase();
     const isOver =
@@ -1229,9 +1357,22 @@ export const multiplayerAdapter = {
       nextGameState.gameStatus === 'game_over';
     const nextStatus = isOver ? 'game_over' : 'playing';
     const nowIso = new Date().toISOString();
+
+    // 1. If game is in progress and an action delta is provided, broadcast delta only
+    if (!isOver && actionDelta) {
+      await this.sendGameActionDelta(code, actionDelta);
+      return { success: true };
+    }
+
+    // 2. If Game Over or full checkpoint sync requested
     const compactState = compactGameStateForWire(nextGameState);
 
-    // Broadcast immediately via WebSocket with compacted state (<8KB)
+    // If an actionDelta accompanies the Game Over transition, broadcast delta first so peers animate immediately
+    if (actionDelta) {
+      this.sendGameActionDelta(code, actionDelta).catch(() => {});
+    }
+
+    // Broadcast snapshot via WebSocket with compacted state
     this.broadcastRoomState(code, {
       code,
       status: nextStatus,
@@ -1751,18 +1892,38 @@ export const multiplayerAdapter = {
   activeChannels: {},
 
   /**
+   * Helper to get or create a room channel with self: false to avoid echo traffic
+   */
+  getOrCreateRoomChannel(roomCode) {
+    if (!supabase || !roomCode) return null;
+    const code = roomCode.trim().toUpperCase();
+    if (this.activeChannels[code]) {
+      return this.activeChannels[code];
+    }
+    const channelName = `room_channel_${code}`;
+    const channel = supabase.channel(channelName, {
+      config: {
+        broadcast: { self: false },
+      },
+    });
+    this.activeChannels[code] = channel;
+    channel.subscribe();
+    return channel;
+  },
+
+  /**
    * Sends an ephemeral live chat / quick emote message via Realtime Broadcast
    */
   async sendRoomChat(roomCode, chatPayload) {
     if (!supabase) return { success: false, error: 'Supabase offline' };
     const code = roomCode.trim().toUpperCase();
-    const channelName = `room_channel_${code}`;
-    let channel = this.activeChannels[code];
-    if (!channel) {
-      channel = supabase.channel(channelName);
-      this.activeChannels[code] = channel;
-      channel.subscribe();
-    }
+    const channel = this.getOrCreateRoomChannel(code);
+    if (!channel) return { success: false, error: 'Channel offline' };
+
+    // Strip heavy base64 photo from senderAvatar to save egress
+    const safeAvatar = (typeof chatPayload?.senderAvatar === 'string' && chatPayload.senderAvatar.startsWith('data:image/'))
+      ? '👤'
+      : (chatPayload?.senderAvatar || '👤');
 
     try {
       await channel.send({
@@ -1770,6 +1931,7 @@ export const multiplayerAdapter = {
         event: 'room_chat',
         payload: {
           ...chatPayload,
+          senderAvatar: safeAvatar,
           id: `chat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           timestamp: Date.now(),
         },
@@ -1787,13 +1949,12 @@ export const multiplayerAdapter = {
   async sendRoomReaction(roomCode, reactionPayload) {
     if (!supabase) return { success: false, error: 'Supabase offline' };
     const code = roomCode.trim().toUpperCase();
-    const channelName = `room_channel_${code}`;
-    let channel = this.activeChannels[code];
-    if (!channel) {
-      channel = supabase.channel(channelName);
-      this.activeChannels[code] = channel;
-      channel.subscribe();
-    }
+    const channel = this.getOrCreateRoomChannel(code);
+    if (!channel) return { success: false, error: 'Channel offline' };
+
+    const safeAvatar = (typeof reactionPayload?.senderAvatar === 'string' && reactionPayload.senderAvatar.startsWith('data:image/'))
+      ? '👤'
+      : (reactionPayload?.senderAvatar || '👤');
 
     try {
       await channel.send({
@@ -1801,6 +1962,7 @@ export const multiplayerAdapter = {
         event: 'room_reaction',
         payload: {
           ...reactionPayload,
+          senderAvatar: safeAvatar,
           id: `react_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           timestamp: Date.now(),
         },
@@ -1818,13 +1980,12 @@ export const multiplayerAdapter = {
   async sendRoomSoundboard(roomCode, soundboardPayload) {
     if (!supabase) return { success: false, error: 'Supabase offline' };
     const code = roomCode.trim().toUpperCase();
-    const channelName = `room_channel_${code}`;
-    let channel = this.activeChannels[code];
-    if (!channel) {
-      channel = supabase.channel(channelName);
-      this.activeChannels[code] = channel;
-      channel.subscribe();
-    }
+    const channel = this.getOrCreateRoomChannel(code);
+    if (!channel) return { success: false, error: 'Channel offline' };
+
+    const safeAvatar = (typeof soundboardPayload?.senderAvatar === 'string' && soundboardPayload.senderAvatar.startsWith('data:image/'))
+      ? '👤'
+      : (soundboardPayload?.senderAvatar || '👤');
 
     try {
       await channel.send({
@@ -1832,6 +1993,7 @@ export const multiplayerAdapter = {
         event: 'room_soundboard',
         payload: {
           ...soundboardPayload,
+          senderAvatar: safeAvatar,
           id: `sb_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           timestamp: Date.now(),
         },
@@ -1849,14 +2011,8 @@ export const multiplayerAdapter = {
   async sendVoiceSignal(roomCode, signalPayload) {
     if (!supabase) return { success: false };
     const code = roomCode.trim().toUpperCase();
-    const channelName = `room_channel_${code}`;
-
-    let channel = this.activeChannels[code];
-    if (!channel) {
-      channel = supabase.channel(channelName);
-      this.activeChannels[code] = channel;
-      channel.subscribe();
-    }
+    const channel = this.getOrCreateRoomChannel(code);
+    if (!channel) return { success: false };
 
     try {
       const res = await channel.send({
@@ -1872,7 +2028,7 @@ export const multiplayerAdapter = {
   },
 
   /**
-   * Subscribes to Realtime updates, live chat, reactions, voice signaling, and soundboard for a specific room
+   * Subscribes to Realtime updates, live chat, reactions, voice signaling, soundboard, and game deltas
    */
   subscribeToRoom(
     roomCode,
@@ -1881,7 +2037,9 @@ export const multiplayerAdapter = {
     onChatMessage = null,
     onReaction = null,
     onVoiceSignal = null,
-    onSoundboard = null
+    onSoundboard = null,
+    onGameActionDelta = null,
+    onRequestStateSync = null
   ) {
     if (!supabase) return () => {};
     const code = roomCode.trim().toUpperCase();
@@ -1899,7 +2057,11 @@ export const multiplayerAdapter = {
     let cachedPlayers = [];
 
     const channel = supabase
-      .channel(channelName)
+      .channel(channelName, {
+        config: {
+          broadcast: { self: false },
+        },
+      })
       .on(
         'postgres_changes',
         {
@@ -1949,6 +2111,16 @@ export const multiplayerAdapter = {
             players: payload.players || cachedPlayers,
           });
           onRoomUpdate(hydrated);
+        }
+      })
+      .on('broadcast', { event: 'game_action_delta' }, ({ payload }) => {
+        if (onGameActionDelta && payload) {
+          onGameActionDelta(payload);
+        }
+      })
+      .on('broadcast', { event: 'request_state_sync' }, ({ payload }) => {
+        if (onRequestStateSync && payload) {
+          onRequestStateSync(payload);
         }
       })
       .on('broadcast', { event: 'room_chat' }, ({ payload }) => {

@@ -233,17 +233,8 @@ class VoiceChatService {
         }
       }, 1200);
 
-      // Start periodic 20-second presence heartbeat (reduced from 4s to prevent Realtime Egress drain)
-      if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = setInterval(() => {
-        if (this.isConnected && this.roomCode) {
-          this.sendSignal({
-            type: 'voice_ping',
-            senderId: this.myPlayerId,
-            sessionId: this.sessionId,
-          });
-        }
-      }, 20000);
+      // Voice chat presence is maintained via WebRTC peer connectionState.
+      // (heartbeatTimer removed to eliminate periodic Realtime broadcast egress)
 
       return true;
     } catch (err) {
@@ -894,7 +885,7 @@ class VoiceChatService {
           }
         } else {
           silentCounter++;
-          if (silentCounter >= 12 && this.isSpeaking) {
+          if (silentCounter >= 35 && this.isSpeaking) {
             this.isSpeaking = false;
             speakingCounter = 0;
             if (this.onSpeakingChange) this.onSpeakingChange(this.myPlayerId, false);
@@ -911,8 +902,26 @@ class VoiceChatService {
     }
   }
 
+  lastSpeakingBroadcastTime = 0;
+
   async broadcastSpeaking(isSpeaking) {
     if (!this.isConnected || !this.roomCode) return;
+    // Don't broadcast speaking events if no WebRTC peers are currently connected
+    let hasConnectedPeer = false;
+    for (const pc of this.peerConnections.values()) {
+      if (pc.connectionState === 'connected') {
+        hasConnectedPeer = true;
+        break;
+      }
+    }
+    if (!hasConnectedPeer) return;
+
+    const now = Date.now();
+    if (isSpeaking && now - this.lastSpeakingBroadcastTime < 1000) {
+      return;
+    }
+    this.lastSpeakingBroadcastTime = now;
+
     try {
       await this.sendSignal({
         type: 'voice_speaking',
