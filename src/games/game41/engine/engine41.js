@@ -89,6 +89,7 @@ export function initGame41(config = DEFAULT_CONFIG_41, customPlayers = null) {
   const initialState = {
     gameType: 'game41',
     matchId: `g41_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    stateVersion: 1,
     config: { ...config, playerCount, firstPlayerId },
     players,
     hands,
@@ -214,6 +215,8 @@ export function drawCard41(gameState, playerId, source = DRAW_SOURCE_41.STOCK) {
 
   const nextState = {
     ...gameState,
+    stateVersion: (gameState.stateVersion || 1) + 1,
+    firstTurnWheel: null,
     drawPile: nextDrawPile,
     discardPile: nextDiscardPile,
     graveyard: nextGraveyard,
@@ -305,6 +308,8 @@ export function discardCard41(gameState, playerId, cardToDiscard) {
 
     const nextState = {
       ...gameState,
+      stateVersion: (gameState.stateVersion || 1) + 1,
+      firstTurnWheel: null,
       hands: nextHands,
       discardPile: nextDiscardPile,
       playerDiscardHistory: nextPlayerDiscardHistory,
@@ -337,6 +342,8 @@ export function discardCard41(gameState, playerId, cardToDiscard) {
 
     const nextState = {
       ...gameState,
+      stateVersion: (gameState.stateVersion || 1) + 1,
+      firstTurnWheel: null,
       hands: nextHands,
       discardPile: nextDiscardPile,
       playerDiscardHistory: nextPlayerDiscardHistory,
@@ -386,6 +393,8 @@ export function discardCard41(gameState, playerId, cardToDiscard) {
 
   const nextState = {
     ...gameState,
+    stateVersion: (gameState.stateVersion || 1) + 1,
+    firstTurnWheel: null,
     hands: nextHands,
     discardPile: nextDiscardPile,
     playerDiscardHistory: nextPlayerDiscardHistory,
@@ -485,6 +494,8 @@ export function closeHand41(gameState, playerId, cardToDiscard = null) {
 
   const nextState = {
     ...gameState,
+    stateVersion: (gameState.stateVersion || 1) + 1,
+    firstTurnWheel: null,
     hands: nextHands,
     discardPile: nextDiscardPile,
     playerDiscardHistory: nextPlayerDiscardHistory,
@@ -545,6 +556,7 @@ export function setBotTakeoverGame41(gameState, playerId, isTakeover = true) {
 
   return {
     ...gameState,
+    stateVersion: (gameState.stateVersion || 1) + 1,
     players: updatedPlayers,
     turnStartedAt: Date.now(),
     history: [

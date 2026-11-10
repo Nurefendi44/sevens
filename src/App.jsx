@@ -12,6 +12,7 @@ import { DEFAULT_CONFIG } from './engine/config.js';
 import { audio } from './services/audioService.js';
 import {
   multiplayerAdapter,
+  shouldApplyIncomingGameState,
   getRelativeSeats,
   getActiveSession,
   setLocalSession,
@@ -374,6 +375,10 @@ export default function App() {
   const gameStateRef = useRef(gameState);
   const gameState41Ref = useRef(gameState41);
   const gameStateBigtwoRef = useRef(gameStateBigtwo);
+  const currentRoomRef = useRef(currentRoom);
+  const isHostRef = useRef(isHost);
+  const activeGameTypeRef = useRef(activeGameType);
+  const myPlayerIdRef = useRef(myPlayerId);
 
   useEffect(() => {
     gameStateRef.current = gameState;
@@ -384,6 +389,18 @@ export default function App() {
   useEffect(() => {
     gameStateBigtwoRef.current = gameStateBigtwo;
   }, [gameStateBigtwo]);
+  useEffect(() => {
+    currentRoomRef.current = currentRoom;
+  }, [currentRoom]);
+  useEffect(() => {
+    isHostRef.current = isHost;
+  }, [isHost]);
+  useEffect(() => {
+    activeGameTypeRef.current = activeGameType;
+  }, [activeGameType]);
+  useEffect(() => {
+    myPlayerIdRef.current = myPlayerId;
+  }, [myPlayerId]);
 
 
   // Cumulative Scoreboard Data (Games Played & Point Score, persisted in localStorage)
@@ -494,19 +511,48 @@ export default function App() {
               if (Array.isArray(room.players)) {
                 room.players = room.players.map((p) => (p.id === matchedPlayer.id ? { ...p, avatar: localAvatar } : p));
               }
-              multiplayerAdapter.syncPlayerAvatarInRoom(room.code, matchedPlayer.id, localAvatar).catch(() => {});
+              // Only sync emoji avatars to DB; keep Base64 photos cached locally
+              if (!String(localAvatar).startsWith('data:image/')) {
+                multiplayerAdapter.syncPlayerAvatarInRoom(room.code, matchedPlayer.id, localAvatar).catch(() => {});
+              }
             }
-            setCurrentRoom(room);
+            currentRoomRef.current = room;
+            setCurrentRoom((prevRoom) => {
+              if (!prevRoom || prevRoom.code !== room.code) return room;
+              const bestGameState =
+                room.status === 'lobby'
+                  ? room.game_state
+                  : shouldApplyIncomingGameState(prevRoom.game_state, room.game_state)
+                  ? room.game_state
+                  : prevRoom.game_state || room.game_state;
+              return { ...prevRoom, ...room, game_state: bestGameState };
+            });
             setGameMode('multiplayer');
+            myPlayerIdRef.current = matchedPlayer.id;
             setMyPlayerId(matchedPlayer.id);
             setLocalSession(matchedPlayer.id, matchedPlayer.name, room.code);
-            if (room.game_state) {
-              if (room.game_state.gameType === 'bigtwo') {
-                if (room.game_state.players) setGameStateBigtwo(room.game_state);
-              } else if (room.game_state.gameType === 'game41') {
-                if (room.game_state.players) setGameState41(room.game_state);
+            if (room.status === 'lobby') {
+              setGameStateBigtwo({});
+              setGameState41({});
+            } else if (room.game_state?.players) {
+              if (roomGameType === 'bigtwo') {
+                setGameStateBigtwo((prev) => {
+                  const next = shouldApplyIncomingGameState(prev, room.game_state) ? room.game_state : prev;
+                  gameStateBigtwoRef.current = next;
+                  return next;
+                });
+              } else if (roomGameType === 'game41') {
+                setGameState41((prev) => {
+                  const next = shouldApplyIncomingGameState(prev, room.game_state) ? room.game_state : prev;
+                  gameState41Ref.current = next;
+                  return next;
+                });
               } else {
-                if (room.game_state.players) setGameState(room.game_state);
+                setGameState((prev) => {
+                  const next = shouldApplyIncomingGameState(prev, room.game_state) ? room.game_state : prev;
+                  gameStateRef.current = next;
+                  return next;
+                });
               }
             }
             showToast(`Terhubung kembali ke Room ${room.code}`);
@@ -589,14 +635,42 @@ export default function App() {
 
         multiplayerAdapter.getRoom(currentRoom.code).then(({ room, error }) => {
           if (room && !error) {
-            setCurrentRoom(room);
-            if (room.game_state) {
-              if (room.game_state.gameType === 'bigtwo' && room.game_state.players) {
-                setGameStateBigtwo(room.game_state);
-              } else if (room.game_state.gameType === 'game41' && room.game_state.players) {
-                setGameState41(room.game_state);
-              } else if (room.game_state.players) {
-                setGameState(room.game_state);
+            setCurrentRoom((prevRoom) => {
+              if (!prevRoom || prevRoom.code !== room.code) return room;
+              const bestGameState =
+                room.status === 'lobby'
+                  ? room.game_state
+                  : shouldApplyIncomingGameState(prevRoom.game_state, room.game_state)
+                  ? room.game_state
+                  : prevRoom.game_state || room.game_state;
+              return { ...prevRoom, ...room, game_state: bestGameState };
+            });
+            if (room.status === 'lobby') {
+              setGameStateBigtwo({});
+              setGameState41({});
+              return;
+            }
+            if (room.game_state?.players) {
+              const incomingType =
+                room.game_state.gameType || getGameTypeFromRoomCode(room.code) || activeGameTypeRef.current;
+              if (incomingType === 'bigtwo') {
+                setGameStateBigtwo((prev) => {
+                  const next = shouldApplyIncomingGameState(prev, room.game_state) ? room.game_state : prev;
+                  gameStateBigtwoRef.current = next;
+                  return next;
+                });
+              } else if (incomingType === 'game41') {
+                setGameState41((prev) => {
+                  const next = shouldApplyIncomingGameState(prev, room.game_state) ? room.game_state : prev;
+                  gameState41Ref.current = next;
+                  return next;
+                });
+              } else {
+                setGameState((prev) => {
+                  const next = shouldApplyIncomingGameState(prev, room.game_state) ? room.game_state : prev;
+                  gameStateRef.current = next;
+                  return next;
+                });
               }
             }
           }
@@ -774,11 +848,6 @@ export default function App() {
     }, 3500);
   }, []);
 
-  const currentRoomRef = useRef(currentRoom);
-  useEffect(() => {
-    currentRoomRef.current = currentRoom;
-  }, [currentRoom]);
-
   const handlePlaySoundboard = useCallback(async (track) => {
     if (!track) return;
     let senderName = getLocalPlayerName() || 'Anda';
@@ -899,17 +968,42 @@ export default function App() {
   const handleIncomingGameActionDelta = useCallback((delta) => {
     if (!delta || !delta.type) return;
 
+    const myId = myPlayerIdRef.current;
+    const roomCode = currentRoomRef.current?.code;
+
     // Ignore echoes of actions initiated by this client
-    if (delta.actorClientId && delta.actorClientId === myPlayerId) return;
+    if (delta.actorClientId && delta.actorClientId === myId) return;
+
+    const isDeltaOutdatedOrSkipped = (currentState) => {
+      if (delta.matchId && currentState.matchId && delta.matchId !== currentState.matchId) {
+        return 'ignore';
+      }
+      if (delta.stateVersion && currentState.stateVersion) {
+        const curV = Number(currentState.stateVersion);
+        const delV = Number(delta.stateVersion);
+        if (delV <= curV) return 'ignore';
+        if (delV > curV + 1) return 'resync';
+      }
+      return 'apply';
+    };
 
     if (delta.gameType === 'bigtwo' || delta.type === 'PLAY_COMBO' || delta.type === 'PASS_TURN') {
       const currentState = gameStateBigtwoRef.current;
       if (!currentState || !currentState.players) return;
 
+      const check = isDeltaOutdatedOrSkipped(currentState);
+      if (check === 'ignore') return;
+      if (check === 'resync') {
+        if (roomCode) multiplayerAdapter.requestRoomStateSync(roomCode, myId);
+        return;
+      }
+
       if (delta.type === 'PLAY_COMBO') {
         const res = playComboBigTwo(currentState, delta.playerId, delta.cards);
         if (res.success) {
+          gameStateBigtwoRef.current = res.gameState;
           setGameStateBigtwo(res.gameState);
+          setPendingBigTwoWheel(null);
           if (res.gameState.lastAction) {
             setRecentActionPopup(res.gameState.lastAction);
           }
@@ -917,37 +1011,50 @@ export default function App() {
           if (res.gameState.gameStatus === 'GAME_OVER') {
             audio.victorySound();
           }
-        } else if (currentRoom?.code) {
-          multiplayerAdapter.requestRoomStateSync(currentRoom.code, myPlayerId);
+        } else if (roomCode) {
+          multiplayerAdapter.requestRoomStateSync(roomCode, myId);
         }
       } else if (delta.type === 'PASS_TURN') {
         const res = passTurnBigTwo(currentState, delta.playerId);
         if (res.success) {
+          gameStateBigtwoRef.current = res.gameState;
           setGameStateBigtwo(res.gameState);
+          setPendingBigTwoWheel(null);
           if (res.gameState.lastAction) {
             setRecentActionPopup(res.gameState.lastAction);
           }
           audio.closeCardSound();
-        } else if (currentRoom?.code) {
-          multiplayerAdapter.requestRoomStateSync(currentRoom.code, myPlayerId);
+        } else if (roomCode) {
+          multiplayerAdapter.requestRoomStateSync(roomCode, myId);
         }
       }
     } else if (delta.gameType === 'game41' || delta.type === 'DRAW_41' || delta.type === 'DISCARD_41' || delta.type === 'CLOSE_HAND_41') {
       const currentState = gameState41Ref.current;
       if (!currentState || !currentState.players) return;
 
+      const check = isDeltaOutdatedOrSkipped(currentState);
+      if (check === 'ignore') return;
+      if (check === 'resync') {
+        if (roomCode) multiplayerAdapter.requestRoomStateSync(roomCode, myId);
+        return;
+      }
+
       if (delta.type === 'DRAW_41') {
         const res = drawCard41(currentState, delta.playerId, delta.source);
         if (res.success) {
+          gameState41Ref.current = res.state;
           setGameState41(res.state);
+          setPendingBigTwoWheel(null);
           audio.playCardSound();
-        } else if (currentRoom?.code) {
-          multiplayerAdapter.requestRoomStateSync(currentRoom.code, myPlayerId);
+        } else if (roomCode) {
+          multiplayerAdapter.requestRoomStateSync(roomCode, myId);
         }
       } else if (delta.type === 'DISCARD_41') {
         const res = discardCard41(currentState, delta.playerId, delta.card);
         if (res.success) {
+          gameState41Ref.current = res.state;
           setGameState41(res.state);
+          setPendingBigTwoWheel(null);
           const actorName = currentState.players.find((p) => p.id === delta.playerId)?.name || 'Pemain';
           const actorAvatar = currentState.players.find((p) => p.id === delta.playerId)?.avatar || '🃏';
           setRecentActionPopup({
@@ -960,13 +1067,15 @@ export default function App() {
           });
           if (res.is41) audio.victorySound();
           else audio.closeCardSound();
-        } else if (currentRoom?.code) {
-          multiplayerAdapter.requestRoomStateSync(currentRoom.code, myPlayerId);
+        } else if (roomCode) {
+          multiplayerAdapter.requestRoomStateSync(roomCode, myId);
         }
       } else if (delta.type === 'CLOSE_HAND_41') {
         const res = closeHand41(currentState, delta.playerId, delta.card);
         if (res.success) {
+          gameState41Ref.current = res.state;
           setGameState41(res.state);
+          setPendingBigTwoWheel(null);
           const actorName = currentState.players.find((p) => p.id === delta.playerId)?.name || 'Pemain';
           const actorAvatar = currentState.players.find((p) => p.id === delta.playerId)?.avatar || '🃏';
           setRecentActionPopup({
@@ -979,8 +1088,8 @@ export default function App() {
           });
           if (res.isBusted) audio.closeCardSound?.();
           else audio.victorySound?.();
-        } else if (currentRoom?.code) {
-          multiplayerAdapter.requestRoomStateSync(currentRoom.code, myPlayerId);
+        } else if (roomCode) {
+          multiplayerAdapter.requestRoomStateSync(roomCode, myId);
         }
       }
     } else {
@@ -988,10 +1097,19 @@ export default function App() {
       const currentState = gameStateRef.current;
       if (!currentState || !currentState.players) return;
 
+      const check = isDeltaOutdatedOrSkipped(currentState);
+      if (check === 'ignore') return;
+      if (check === 'resync') {
+        if (roomCode) multiplayerAdapter.requestRoomStateSync(roomCode, myId);
+        return;
+      }
+
       if (delta.type === 'PLAY_CARD') {
         const res = enginePlayCard(currentState, delta.playerId, delta.card, delta.chosenDirection);
         if (res.success) {
+          gameStateRef.current = res.state;
           setGameState(res.state);
+          setPendingBigTwoWheel(null);
           const actorName = currentState.players.find((p) => p.id === delta.playerId)?.name || 'Pemain';
           const actorAvatar = currentState.players.find((p) => p.id === delta.playerId)?.avatar || '♠';
           setRecentActionPopup({
@@ -1004,13 +1122,15 @@ export default function App() {
           });
           if (delta.card.rank === 7) audio.sevenChime();
           else audio.playCardSound();
-        } else if (currentRoom?.code) {
-          multiplayerAdapter.requestRoomStateSync(currentRoom.code, myPlayerId);
+        } else if (roomCode) {
+          multiplayerAdapter.requestRoomStateSync(roomCode, myId);
         }
       } else if (delta.type === 'CLOSE_CARD') {
         const res = engineCloseCard(currentState, delta.playerId, delta.card);
         if (res.success) {
+          gameStateRef.current = res.state;
           setGameState(res.state);
+          setPendingBigTwoWheel(null);
           const actorName = currentState.players.find((p) => p.id === delta.playerId)?.name || 'Pemain';
           const actorAvatar = currentState.players.find((p) => p.id === delta.playerId)?.avatar || '🔒';
           setRecentActionPopup({
@@ -1023,49 +1143,35 @@ export default function App() {
           });
           audio.closeCardSound();
         } else if (res.fault) {
+          gameStateRef.current = res.state;
           setGameState(res.state);
           audio.faultSound();
-        } else if (currentRoom?.code) {
-          multiplayerAdapter.requestRoomStateSync(currentRoom.code, myPlayerId);
+        } else if (roomCode) {
+          multiplayerAdapter.requestRoomStateSync(roomCode, myId);
         }
       }
     }
-  }, [myPlayerId, currentRoom?.code]);
+  }, []);
 
   const handleRequestStateSync = useCallback((req) => {
-    if (!req || !isHost || !currentRoom?.code) return;
+    const room = currentRoomRef.current;
+    if (!req || !isHostRef.current || !room?.code) return;
+    const activeType = activeGameTypeRef.current;
     const activeState =
-      activeGameType === 'bigtwo'
+      activeType === 'bigtwo'
         ? gameStateBigtwoRef.current
-        : activeGameType === 'game41'
+        : activeType === 'game41'
         ? gameState41Ref.current
         : gameStateRef.current;
 
     if (activeState && activeState.players) {
-      multiplayerAdapter.broadcastRoomState(currentRoom.code, {
-        ...currentRoom,
+      multiplayerAdapter.broadcastRoomState(room.code, {
+        ...room,
         game_state: activeState,
         updated_at: new Date().toISOString(),
       });
     }
-  }, [isHost, currentRoom, activeGameType]);
-
-  const shouldApplyIncomingBigTwoState = (prev, next) => {
-    if (!next || !next.players || !next.hands) return false;
-    if (!prev || !prev.players || !prev.hands) return true;
-    // Jika ID match berbeda atau game baru di-restart dari GAME_OVER
-    if (next.matchId && prev.matchId && next.matchId !== prev.matchId) return true;
-    if (prev.gameStatus === 'GAME_OVER' && next.gameStatus === 'PLAYING') return true;
-    if ((next.stateVersion || 0) === 1 && (prev.stateVersion || prev.history?.length || 0) > 2) return true;
-
-    const prevVersion = Number(prev.stateVersion || prev.history?.length || 0);
-    const nextVersion = Number(next.stateVersion || next.history?.length || 0);
-    if (nextVersion > 0 && prevVersion > 0 && nextVersion < prevVersion) {
-      // Abaikan paket lama (out-of-order) agar kartu di tangan tidak pernah mundur / bertambah kembali
-      return false;
-    }
-    return true;
-  };
+  }, []);
 
   useEffect(() => {
     if (gameMode !== 'multiplayer' || !currentRoom?.code) return;
@@ -1075,15 +1181,26 @@ export default function App() {
       (updatedRoom) => {
         setCurrentRoom((prevRoom) => {
           if (!prevRoom || prevRoom.code !== updatedRoom.code) return updatedRoom;
-          return {
+          const bestGameState =
+            updatedRoom.status === 'lobby'
+              ? updatedRoom.game_state
+              : shouldApplyIncomingGameState(prevRoom.game_state, updatedRoom.game_state)
+              ? updatedRoom.game_state
+              : prevRoom.game_state || updatedRoom.game_state;
+          const merged = {
             ...prevRoom,
             ...updatedRoom,
             players: updatedRoom.players || prevRoom.players,
+            game_state: bestGameState,
           };
+          currentRoomRef.current = merged;
+          return merged;
         });
 
         if (updatedRoom.status === 'lobby') {
           // Reset local in-game state when returning to lobby
+          gameStateBigtwoRef.current = {};
+          gameState41Ref.current = {};
           setGameStateBigtwo({});
           setGameState41({});
           completedWheelKeyRef.current = null;
@@ -1096,13 +1213,15 @@ export default function App() {
         const detectedType =
           nextState?.gameType ||
           getGameTypeFromRoomCode(updatedRoom.code) ||
-          activeGameType;
+          activeGameTypeRef.current;
 
-        if (nextState?.firstTurnWheel?.isOpen && (nextState?.stateVersion || nextState?.history?.length || 0) <= 1) {
+        if (nextState?.firstTurnWheel?.isOpen && (nextState?.stateVersion || 1) <= 1) {
           const wheelKey = `${nextState.firstTurnWheel.targetPlayerId}_${nextState.gameType || detectedType}`;
           if (completedWheelKeyRef.current !== wheelKey) {
             setPendingBigTwoWheel(nextState.firstTurnWheel);
           }
+        } else if (nextState && (!nextState.firstTurnWheel || (nextState.stateVersion || 1) > 1)) {
+          setPendingBigTwoWheel(null);
         }
 
         // Do NOT re-fetch from PostgREST here; multiplayerAdapter.subscribeToRoom already handles
@@ -1111,62 +1230,65 @@ export default function App() {
           return;
         }
 
-        if (nextState) {
-          if (detectedType === 'bigtwo') {
-            setActiveGameType('bigtwo');
-            if (nextState.players && nextState.hands) {
-              setGameStateBigtwo((prev) => {
-                if (!shouldApplyIncomingBigTwoState(prev, nextState)) return prev;
-                if (nextState.lastAction) {
-                  setRecentActionPopup(nextState.lastAction);
-                  if (nextState.lastAction.type === 'PLAY_COMBO') audio.playCardSound();
-                  else if (nextState.lastAction.type === 'PASS') audio.closeCardSound();
-                }
-                if (nextState.gameStatus === 'GAME_OVER') {
-                  audio.victorySound();
-                }
-                return nextState;
-              });
-              setCurrentRoom((prevRoom) => ({
-                ...(prevRoom || {}),
-                ...updatedRoom,
-                players: updatedRoom.players || prevRoom?.players || nextState.players,
-              }));
+        if (detectedType === 'bigtwo') {
+          setActiveGameType('bigtwo');
+          if (nextState.players && nextState.hands) {
+            const prev = gameStateBigtwoRef.current;
+            if (!shouldApplyIncomingGameState(prev, nextState)) return;
+            gameStateBigtwoRef.current = nextState;
+            setGameStateBigtwo(nextState);
+            if (nextState.lastAction) {
+              setRecentActionPopup(nextState.lastAction);
+              if (nextState.lastAction.type === 'PLAY_COMBO') audio.playCardSound();
+              else if (nextState.lastAction.type === 'PASS') audio.closeCardSound();
             }
-            return;
-          }
-
-          if (nextState.gameType === 'game41') {
-            setActiveGameType('game41');
-            if (nextState.players) {
-              if (nextState.lastAction) {
-                setRecentActionPopup(nextState.lastAction);
-              }
-              if (nextState.turnNumber !== prevTurnNumberRef.current && nextState.lastAction) {
-                const action = nextState.lastAction;
-                if (action.type === 'DRAW') {
-                  audio.playCardSound();
-                } else if (action.type === 'DISCARD') {
-                  if (action.is41) audio.victorySound();
-                  else audio.closeCardSound();
-                }
-              }
-              prevTurnNumberRef.current = nextState.turnNumber;
-              setGameState41(nextState);
+            if (nextState.gameStatus === 'GAME_OVER') {
+              audio.victorySound();
             }
-            return;
           }
+          return;
+        }
 
-          // If turn is 1 and game newly started or restarted, trigger dealing animation
-          if (nextState.turnNumber === 1 && !nextState.firstMoveMade && prevTurnNumberRef.current !== 1) {
+        if (detectedType === 'game41') {
+          setActiveGameType('game41');
+          if (nextState.players && nextState.hands) {
+            const prev = gameState41Ref.current;
+            if (!shouldApplyIncomingGameState(prev, nextState)) return;
+            gameState41Ref.current = nextState;
+            setGameState41(nextState);
+            if (nextState.lastAction) {
+              setRecentActionPopup(nextState.lastAction);
+              const action = nextState.lastAction;
+              if (action.type === 'DRAW') {
+                audio.playCardSound();
+              } else if (action.type === 'DISCARD') {
+                if (action.is41) audio.victorySound();
+                else audio.closeCardSound();
+              } else if (action.type === 'CLOSE_HAND') {
+                if (action.isBusted) audio.closeCardSound?.();
+                else audio.victorySound?.();
+              }
+            }
+            prevTurnNumberRef.current = nextState.turnNumber;
+          }
+          return;
+        }
+
+        // Sevens
+        if (nextState.players && nextState.hands) {
+          const prev = gameStateRef.current;
+          if (!shouldApplyIncomingGameState(prev, nextState)) return;
+          const isNewRound =
+            nextState.turnNumber === 1 &&
+            !nextState.firstMoveMade &&
+            (!prev || (nextState.matchId && prev.matchId !== nextState.matchId));
+          if (isNewRound) {
             setIsDealingAnimationActive(true);
           }
-
-          // Play audio feedback if a move was made by other players
+          gameStateRef.current = nextState;
+          setGameState(nextState);
           if (nextState.lastAction) {
             setRecentActionPopup(nextState.lastAction);
-          }
-          if (nextState.turnNumber !== prevTurnNumberRef.current && nextState.lastAction) {
             const action = nextState.lastAction;
             if (action.type === 'PLAY') {
               if (action.card?.rank === 7) audio.sevenChime();
@@ -1178,7 +1300,6 @@ export default function App() {
             }
           }
           prevTurnNumberRef.current = nextState.turnNumber;
-          setGameState(nextState);
         }
       },
       null,
@@ -1194,7 +1315,7 @@ export default function App() {
       unsubscribe();
       voiceChat.leaveRoom();
     };
-  }, [gameMode, currentRoom?.code, handleIncomingGameActionDelta, handleRequestStateSync]);
+  }, [gameMode, currentRoom?.code]);
 
   // Toast Helper
   const showToast = (msg) => {
@@ -1266,18 +1387,27 @@ export default function App() {
   const handleCreateRoom = async (username, maxPlayers = 4, gameType = activeGameType, options = {}) => {
     const res = await multiplayerAdapter.createRoom(username, maxPlayers, gameType, options);
     if (res.success) {
+      currentRoomRef.current = res.room;
       setCurrentRoom(res.room);
+      myPlayerIdRef.current = res.player.id;
       setMyPlayerId(res.player.id);
       // Clean reset game engine states for fresh waiting room (jangan buat kartu lokal palsu saat di lobby)
       if (gameType === 'bigtwo') {
+        activeGameTypeRef.current = 'bigtwo';
         setActiveGameType('bigtwo');
+        gameStateBigtwoRef.current = {};
         setGameStateBigtwo({});
       } else if (gameType === 'game41') {
+        activeGameTypeRef.current = 'game41';
         setActiveGameType('game41');
+        gameState41Ref.current = {};
         setGameState41({});
       } else {
+        activeGameTypeRef.current = 'sevens';
         setActiveGameType('sevens');
-        setGameState(initGame({ ...gameConfig, playerCount: maxPlayers }));
+        const nextSev = initGame({ ...gameConfig, playerCount: maxPlayers });
+        gameStateRef.current = nextSev;
+        setGameState(nextSev);
       }
       setBigTwoWheelPicker(null);
       setPendingBigTwoWheel(null);
@@ -1319,31 +1449,41 @@ export default function App() {
   };
 
   const enterJoinedRoom = (res, toastMessage) => {
+    currentRoomRef.current = res.room;
     setCurrentRoom(res.room);
+    myPlayerIdRef.current = res.player.id;
     setMyPlayerId(res.player.id);
     const roomGame =
       res.room.game_state?.gameType ||
       getGameTypeFromRoomCode(res.room.code) ||
       activeGameType;
+    activeGameTypeRef.current = roomGame;
     setActiveGameType(roomGame);
 
     if (res.room.game_state?.players) {
       if (roomGame === 'bigtwo') {
+        gameStateBigtwoRef.current = res.room.game_state;
         setGameStateBigtwo(res.room.game_state);
       } else if (roomGame === 'game41') {
+        gameState41Ref.current = res.room.game_state;
         setGameState41(res.room.game_state);
       } else {
+        gameStateRef.current = res.room.game_state;
         setGameState(res.room.game_state);
       }
     } else {
       // Room still in lobby: biarkan state meja kosong sampai Host benar-benar memulai permainan
       const capacity = res.room.game_state?.config?.playerCount || 4;
       if (roomGame === 'bigtwo') {
+        gameStateBigtwoRef.current = {};
         setGameStateBigtwo({});
       } else if (roomGame === 'game41') {
+        gameState41Ref.current = {};
         setGameState41({});
       } else {
-        setGameState(initGame({ ...gameConfig, playerCount: capacity }));
+        const nextSev = initGame({ ...gameConfig, playerCount: capacity });
+        gameStateRef.current = nextSev;
+        setGameState(nextSev);
       }
     }
     setBigTwoWheelPicker(null);
@@ -1463,16 +1603,23 @@ export default function App() {
         setPendingBigTwoWheel(res.gameState.firstTurnWheel);
       }
       if (isBigTwo) {
+        activeGameTypeRef.current = 'bigtwo';
         setActiveGameType('bigtwo');
+        gameStateBigtwoRef.current = res.gameState;
         setGameStateBigtwo(res.gameState);
       } else if (isGame41) {
+        activeGameTypeRef.current = 'game41';
         setActiveGameType('game41');
+        gameState41Ref.current = res.gameState;
         setGameState41(res.gameState);
       } else {
+        activeGameTypeRef.current = 'sevens';
         setActiveGameType('sevens');
+        gameStateRef.current = res.gameState;
         setGameState(res.gameState);
       }
       setIsDealingAnimationActive(true);
+      currentRoomRef.current = res.room;
       setCurrentRoom(res.room);
       showToast('Permainan dimulai!');
     } else {
@@ -1727,39 +1874,46 @@ export default function App() {
   // ---------------------------------------------------------------------------
   const handlePlayCard = async (card, chosenDirection = null) => {
     if (!card) return;
-    if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
+    if (isMultiplayerMode && currentRoomRef.current?.status !== 'playing') return;
 
-    const isCurrentBot = isBotPlayer(gameState, gameState.currentPlayer);
-    if (isMultiplayerMode && !isMyTurn && !isCurrentBot) {
+    const currentState = gameStateRef.current || gameState;
+    const isCurrentBot = isBotPlayer(currentState, currentState.currentPlayer);
+    const isActuallyMyTurn = isMultiplayerMode
+      ? currentState.currentPlayer === myPlayerIdRef.current
+      : isSingleMode
+      ? currentState.currentPlayer === SINGLE_HUMAN_ID
+      : true;
+    if (isMultiplayerMode && !isActuallyMyTurn && !isCurrentBot) {
       setActiveFault({ message: 'Bukan giliran Anda! Tunggu giliran Anda bermain.' });
       return;
     }
 
-    const actingPlayerId = isCurrentBot ? gameState.currentPlayer : (isMultiplayerMode ? myPlayerId : gameState.currentPlayer);
+    const actingPlayerId = isCurrentBot ? currentState.currentPlayer : (isMultiplayerMode ? myPlayerIdRef.current : currentState.currentPlayer);
 
     // Check Ace closure choice condition (both 2 and K open, direction not locked)
     if (card.rank === 1 && !chosenDirection) {
-      const suitBoard = gameState.board[card.suit];
+      const suitBoard = currentState.board[card.suit];
       const canCapTop =
         suitBoard.maxRank === 13 &&
-        (!gameState.globalAceDirection || gameState.globalAceDirection === 'top');
+        (!currentState.globalAceDirection || currentState.globalAceDirection === 'top');
       const canCapBottom =
         suitBoard.minRank === 2 &&
-        (!gameState.globalAceDirection || gameState.globalAceDirection === 'bottom');
+        (!currentState.globalAceDirection || currentState.globalAceDirection === 'bottom');
 
-      if (canCapTop && canCapBottom && !gameState.globalAceDirection) {
+      if (canCapTop && canCapBottom && !currentState.globalAceDirection) {
         setPendingAceChoiceCard(card);
         return;
       }
     }
 
-    const result = enginePlayCard(gameState, actingPlayerId, card, chosenDirection);
+    const result = enginePlayCard(currentState, actingPlayerId, card, chosenDirection);
     if (result.success) {
+      gameStateRef.current = result.state;
       setGameState(result.state);
       setSelectedCard(null);
       setPendingAceChoiceCard(null);
-      const actorName = gameState.players.find((p) => p.id === actingPlayerId)?.name || 'Pemain';
-      const actorAvatar = gameState.players.find((p) => p.id === actingPlayerId)?.avatar || '♠';
+      const actorName = currentState.players.find((p) => p.id === actingPlayerId)?.name || 'Pemain';
+      const actorAvatar = currentState.players.find((p) => p.id === actingPlayerId)?.avatar || '♠';
       setRecentActionPopup({
         type: 'PLAY',
         playerId: actingPlayerId,
@@ -1774,16 +1928,16 @@ export default function App() {
         audio.playCardSound();
       }
 
-      if (isMultiplayerMode && currentRoom?.code) {
+      if (isMultiplayerMode && currentRoomRef.current?.code) {
         const delta = {
           type: 'PLAY_CARD',
           gameType: 'sevens',
           playerId: actingPlayerId,
           card,
           chosenDirection,
-          actorClientId: myPlayerId,
+          actorClientId: myPlayerIdRef.current,
         };
-        await multiplayerAdapter.syncGameState(currentRoom.code, result.state, delta);
+        await multiplayerAdapter.syncGameState(currentRoomRef.current.code, result.state, delta);
       }
     } else {
       // Rejection: generic feedback with no hints on valid cards
@@ -1796,23 +1950,30 @@ export default function App() {
 
   const handleCloseCard = async (card) => {
     if (!card) return;
-    if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
+    if (isMultiplayerMode && currentRoomRef.current?.status !== 'playing') return;
 
-    const isCurrentBot = isBotPlayer(gameState, gameState.currentPlayer);
-    if (isMultiplayerMode && !isMyTurn && !isCurrentBot) {
+    const currentState = gameStateRef.current || gameState;
+    const isCurrentBot = isBotPlayer(currentState, currentState.currentPlayer);
+    const isActuallyMyTurn = isMultiplayerMode
+      ? currentState.currentPlayer === myPlayerIdRef.current
+      : isSingleMode
+      ? currentState.currentPlayer === SINGLE_HUMAN_ID
+      : true;
+    if (isMultiplayerMode && !isActuallyMyTurn && !isCurrentBot) {
       setActiveFault({ message: 'Bukan giliran Anda! Tunggu giliran Anda bermain.' });
       return;
     }
 
-    const actingPlayerId = isCurrentBot ? gameState.currentPlayer : (isMultiplayerMode ? myPlayerId : gameState.currentPlayer);
+    const actingPlayerId = isCurrentBot ? currentState.currentPlayer : (isMultiplayerMode ? myPlayerIdRef.current : currentState.currentPlayer);
 
-    const result = engineCloseCard(gameState, actingPlayerId, card);
+    const result = engineCloseCard(currentState, actingPlayerId, card);
     if (result.success) {
+      gameStateRef.current = result.state;
       setGameState(result.state);
       setSelectedCard(null);
       audio.closeCardSound();
-      const actorName = gameState.players.find((p) => p.id === actingPlayerId)?.name || 'Pemain';
-      const actorAvatar = gameState.players.find((p) => p.id === actingPlayerId)?.avatar || '🔒';
+      const actorName = currentState.players.find((p) => p.id === actingPlayerId)?.name || 'Pemain';
+      const actorAvatar = currentState.players.find((p) => p.id === actingPlayerId)?.avatar || '🔒';
       setRecentActionPopup({
         type: 'PASS',
         playerId: actingPlayerId,
@@ -1822,31 +1983,32 @@ export default function App() {
         message: `${actorName} menutup kartu ${card.label}${card.symbol}`,
       });
 
-      if (isMultiplayerMode && currentRoom?.code) {
+      if (isMultiplayerMode && currentRoomRef.current?.code) {
         const delta = {
           type: 'CLOSE_CARD',
           gameType: 'sevens',
           playerId: actingPlayerId,
           card,
-          actorClientId: myPlayerId,
+          actorClientId: myPlayerIdRef.current,
         };
-        await multiplayerAdapter.syncGameState(currentRoom.code, result.state, delta);
+        await multiplayerAdapter.syncGameState(currentRoomRef.current.code, result.state, delta);
       }
     } else if (result.fault) {
       // Game engine detected FAULT (player had valid moves)
       setActiveFault(result.fault);
       audio.faultSound();
+      gameStateRef.current = result.state;
       setGameState(result.state);
 
-      if (isMultiplayerMode && currentRoom?.code) {
+      if (isMultiplayerMode && currentRoomRef.current?.code) {
         const delta = {
           type: 'CLOSE_CARD',
           gameType: 'sevens',
           playerId: actingPlayerId,
           card,
-          actorClientId: myPlayerId,
+          actorClientId: myPlayerIdRef.current,
         };
-        await multiplayerAdapter.syncGameState(currentRoom.code, result.state, delta);
+        await multiplayerAdapter.syncGameState(currentRoomRef.current.code, result.state, delta);
       }
     } else {
       setActiveFault({
@@ -1866,26 +2028,33 @@ export default function App() {
     : true;
 
   const handleDrawCard41 = async (source) => {
-    if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
-    const isCurrentBot = isBotPlayer(gameState41, gameState41.currentPlayer);
-    if (!isCurrentBot && !isMyTurn41) {
+    if (isMultiplayerMode && currentRoomRef.current?.status !== 'playing') return;
+    const currentState = gameState41Ref.current || gameState41;
+    const isCurrentBot = isBotPlayer(currentState, currentState.currentPlayer);
+    const isActuallyMyTurn = isMultiplayerMode
+      ? currentState.currentPlayer === myPlayerIdRef.current
+      : isSingleMode
+      ? currentState.currentPlayer === SINGLE_HUMAN_ID
+      : true;
+    if (!isCurrentBot && !isActuallyMyTurn) {
       showToast('Bukan giliran Anda!');
       return;
     }
-    const actingPlayerId = isCurrentBot ? gameState41.currentPlayer : (isMultiplayerMode ? myPlayerId : gameState41.currentPlayer);
-    const res = drawCard41(gameState41, actingPlayerId, source);
+    const actingPlayerId = isCurrentBot ? currentState.currentPlayer : (isMultiplayerMode ? myPlayerIdRef.current : currentState.currentPlayer);
+    const res = drawCard41(currentState, actingPlayerId, source);
     if (res.success) {
+      gameState41Ref.current = res.state;
       setGameState41(res.state);
       audio.playCardSound();
-      if (isMultiplayerMode && currentRoom?.code) {
+      if (isMultiplayerMode && currentRoomRef.current?.code) {
         const delta = {
           type: 'DRAW_41',
           gameType: 'game41',
           playerId: actingPlayerId,
           source,
-          actorClientId: myPlayerId,
+          actorClientId: myPlayerIdRef.current,
         };
-        await multiplayerAdapter.syncGameState(currentRoom.code, res.state, delta);
+        await multiplayerAdapter.syncGameState(currentRoomRef.current.code, res.state, delta);
       }
     } else {
       showToast(res.error);
@@ -1893,18 +2062,25 @@ export default function App() {
   };
 
   const handleDiscardCard41 = async (card) => {
-    if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
-    const isCurrentBot = isBotPlayer(gameState41, gameState41.currentPlayer);
-    if (!isCurrentBot && !isMyTurn41) {
+    if (isMultiplayerMode && currentRoomRef.current?.status !== 'playing') return;
+    const currentState = gameState41Ref.current || gameState41;
+    const isCurrentBot = isBotPlayer(currentState, currentState.currentPlayer);
+    const isActuallyMyTurn = isMultiplayerMode
+      ? currentState.currentPlayer === myPlayerIdRef.current
+      : isSingleMode
+      ? currentState.currentPlayer === SINGLE_HUMAN_ID
+      : true;
+    if (!isCurrentBot && !isActuallyMyTurn) {
       showToast('Bukan giliran Anda!');
       return;
     }
-    const actingPlayerId = isCurrentBot ? gameState41.currentPlayer : (isMultiplayerMode ? myPlayerId : gameState41.currentPlayer);
-    const res = discardCard41(gameState41, actingPlayerId, card);
+    const actingPlayerId = isCurrentBot ? currentState.currentPlayer : (isMultiplayerMode ? myPlayerIdRef.current : currentState.currentPlayer);
+    const res = discardCard41(currentState, actingPlayerId, card);
     if (res.success) {
+      gameState41Ref.current = res.state;
       setGameState41(res.state);
-      const actorName = gameState41.players.find((p) => p.id === actingPlayerId)?.name || 'Pemain';
-      const actorAvatar = gameState41.players.find((p) => p.id === actingPlayerId)?.avatar || '🃏';
+      const actorName = currentState.players.find((p) => p.id === actingPlayerId)?.name || 'Pemain';
+      const actorAvatar = currentState.players.find((p) => p.id === actingPlayerId)?.avatar || '🃏';
       setRecentActionPopup({
         type: 'DISCARD',
         playerId: actingPlayerId,
@@ -1918,15 +2094,15 @@ export default function App() {
       } else {
         audio.closeCardSound();
       }
-      if (isMultiplayerMode && currentRoom?.code) {
+      if (isMultiplayerMode && currentRoomRef.current?.code) {
         const delta = {
           type: 'DISCARD_41',
           gameType: 'game41',
           playerId: actingPlayerId,
           card,
-          actorClientId: myPlayerId,
+          actorClientId: myPlayerIdRef.current,
         };
-        await multiplayerAdapter.syncGameState(currentRoom.code, res.state, delta);
+        await multiplayerAdapter.syncGameState(currentRoomRef.current.code, res.state, delta);
       }
     } else {
       showToast(res.error);
@@ -1934,18 +2110,25 @@ export default function App() {
   };
 
   const handleCloseHand41 = async (card = null) => {
-    if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
-    const isCurrentBot = isBotPlayer(gameState41, gameState41.currentPlayer);
-    if (!isCurrentBot && !isMyTurn41) {
+    if (isMultiplayerMode && currentRoomRef.current?.status !== 'playing') return;
+    const currentState = gameState41Ref.current || gameState41;
+    const isCurrentBot = isBotPlayer(currentState, currentState.currentPlayer);
+    const isActuallyMyTurn = isMultiplayerMode
+      ? currentState.currentPlayer === myPlayerIdRef.current
+      : isSingleMode
+      ? currentState.currentPlayer === SINGLE_HUMAN_ID
+      : true;
+    if (!isCurrentBot && !isActuallyMyTurn) {
       showToast('Bukan giliran Anda!');
       return;
     }
-    const actingPlayerId = isCurrentBot ? gameState41.currentPlayer : (isMultiplayerMode ? myPlayerId : gameState41.currentPlayer);
-    const res = closeHand41(gameState41, actingPlayerId, card);
+    const actingPlayerId = isCurrentBot ? currentState.currentPlayer : (isMultiplayerMode ? myPlayerIdRef.current : currentState.currentPlayer);
+    const res = closeHand41(currentState, actingPlayerId, card);
     if (res.success) {
+      gameState41Ref.current = res.state;
       setGameState41(res.state);
-      const actorName = gameState41.players.find((p) => p.id === actingPlayerId)?.name || 'Pemain';
-      const actorAvatar = gameState41.players.find((p) => p.id === actingPlayerId)?.avatar || '🃏';
+      const actorName = currentState.players.find((p) => p.id === actingPlayerId)?.name || 'Pemain';
+      const actorAvatar = currentState.players.find((p) => p.id === actingPlayerId)?.avatar || '🃏';
       setRecentActionPopup({
         type: 'CLOSE_HAND',
         playerId: actingPlayerId,
@@ -1959,15 +2142,15 @@ export default function App() {
       } else {
         audio.victorySound?.();
       }
-      if (isMultiplayerMode && currentRoom?.code) {
+      if (isMultiplayerMode && currentRoomRef.current?.code) {
         const delta = {
           type: 'CLOSE_HAND_41',
           gameType: 'game41',
           playerId: actingPlayerId,
           card,
-          actorClientId: myPlayerId,
+          actorClientId: myPlayerIdRef.current,
         };
-        await multiplayerAdapter.syncGameState(currentRoom.code, res.state, delta);
+        await multiplayerAdapter.syncGameState(currentRoomRef.current.code, res.state, delta);
       }
     } else {
       showToast(res.error);
@@ -2047,12 +2230,13 @@ export default function App() {
   }, [activeIsMyTurn, isMultiplayerMode, isSingleMode]);
 
   const handlePlayBigTwoCombo = async (selectedCards) => {
-    if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
+    if (isMultiplayerMode && currentRoomRef.current?.status !== 'playing') return;
     const currentState = gameStateBigtwoRef.current || gameStateBigtwo;
     const isCurrentBot = isBotPlayer(currentState, currentState?.currentPlayer);
-    const actingPlayerId = isCurrentBot ? currentState?.currentPlayer : (isMultiplayerMode ? myPlayerId : currentState?.currentPlayer);
+    const actingPlayerId = isCurrentBot ? currentState?.currentPlayer : (isMultiplayerMode ? myPlayerIdRef.current : currentState?.currentPlayer);
     const res = playComboBigTwo(currentState, actingPlayerId, selectedCards);
     if (res.success) {
+      gameStateBigtwoRef.current = res.gameState;
       setGameStateBigtwo(res.gameState);
       if (res.gameState.lastAction) {
         setRecentActionPopup(res.gameState.lastAction);
@@ -2061,15 +2245,15 @@ export default function App() {
       if (res.gameState.gameStatus === 'GAME_OVER') {
         audio.victorySound();
       }
-      if (isMultiplayerMode && currentRoom?.code) {
+      if (isMultiplayerMode && currentRoomRef.current?.code) {
         const delta = {
           type: 'PLAY_COMBO',
           gameType: 'bigtwo',
           playerId: actingPlayerId,
           cards: selectedCards,
-          actorClientId: myPlayerId,
+          actorClientId: myPlayerIdRef.current,
         };
-        await multiplayerAdapter.syncGameState(currentRoom.code, res.gameState, delta);
+        await multiplayerAdapter.syncGameState(currentRoomRef.current.code, res.gameState, delta);
       }
     } else {
       showToast(res.error);
@@ -2077,25 +2261,26 @@ export default function App() {
   };
 
   const handlePassBigTwo = async () => {
-    if (isMultiplayerMode && currentRoom?.status !== 'playing') return;
+    if (isMultiplayerMode && currentRoomRef.current?.status !== 'playing') return;
     const currentState = gameStateBigtwoRef.current || gameStateBigtwo;
     const isCurrentBot = isBotPlayer(currentState, currentState?.currentPlayer);
-    const actingPlayerId = isCurrentBot ? currentState?.currentPlayer : (isMultiplayerMode ? myPlayerId : currentState?.currentPlayer);
+    const actingPlayerId = isCurrentBot ? currentState?.currentPlayer : (isMultiplayerMode ? myPlayerIdRef.current : currentState?.currentPlayer);
     const res = passTurnBigTwo(currentState, actingPlayerId);
     if (res.success) {
+      gameStateBigtwoRef.current = res.gameState;
       setGameStateBigtwo(res.gameState);
       if (res.gameState.lastAction) {
         setRecentActionPopup(res.gameState.lastAction);
       }
       audio.closeCardSound();
-      if (isMultiplayerMode && currentRoom?.code) {
+      if (isMultiplayerMode && currentRoomRef.current?.code) {
         const delta = {
           type: 'PASS_TURN',
           gameType: 'bigtwo',
           playerId: actingPlayerId,
-          actorClientId: myPlayerId,
+          actorClientId: myPlayerIdRef.current,
         };
-        await multiplayerAdapter.syncGameState(currentRoom.code, res.gameState, delta);
+        await multiplayerAdapter.syncGameState(currentRoomRef.current.code, res.gameState, delta);
       }
     } else {
       showToast(res.error);
@@ -2116,24 +2301,29 @@ export default function App() {
       afkTriggeredTurnRef.current.clear();
     }
 
-    if (activeGameType === 'bigtwo') {
-      const nextState = setBotTakeoverBigTwo(gameStateBigtwo, playerId, isTakeover);
+    const activeType = activeGameTypeRef.current;
+    let currentPlayers = null;
+    if (activeType === 'bigtwo') {
+      const base = gameStateBigtwoRef.current || gameStateBigtwo;
+      const nextState = setBotTakeoverBigTwo(base, playerId, isTakeover);
+      gameStateBigtwoRef.current = nextState;
       setGameStateBigtwo(nextState);
-    } else if (activeGameType === 'game41') {
-      const nextState = setBotTakeoverGame41(gameState41, playerId, isTakeover);
+      currentPlayers = nextState?.players;
+    } else if (activeType === 'game41') {
+      const base = gameState41Ref.current || gameState41;
+      const nextState = setBotTakeoverGame41(base, playerId, isTakeover);
+      gameState41Ref.current = nextState;
       setGameState41(nextState);
+      currentPlayers = nextState?.players;
     } else {
       // Sevens
-      const nextState = setBotTakeoverSevens(gameState, playerId, isTakeover);
+      const base = gameStateRef.current || gameState;
+      const nextState = setBotTakeoverSevens(base, playerId, isTakeover);
+      gameStateRef.current = nextState;
       setGameState(nextState);
+      currentPlayers = nextState?.players;
     }
 
-    const currentPlayers =
-      activeGameType === 'bigtwo'
-        ? gameStateBigtwo?.players
-        : activeGameType === 'game41'
-        ? gameState41?.players
-        : gameState?.players;
     const pObj = currentPlayers?.find((p) => p.id === playerId);
 
     if (isTakeover) {
@@ -2142,8 +2332,8 @@ export default function App() {
       showToast('✨ Anda telah mengambil alih kendali kartu kembali!');
     }
 
-    if (isMultiplayerMode && currentRoom?.code) {
-      await multiplayerAdapter.toggleBotTakeover(currentRoom.code, playerId, isTakeover);
+    if (isMultiplayerMode && currentRoomRef.current?.code) {
+      await multiplayerAdapter.toggleBotTakeover(currentRoomRef.current.code, playerId, isTakeover);
     }
   };
 
@@ -2536,9 +2726,10 @@ export default function App() {
             turnStartedAt: Date.now(),
             firstTurnWheel: null,
           };
+      gameStateBigtwoRef.current = updatedState;
       setGameStateBigtwo(updatedState);
-      if (isMultiplayerMode && currentRoom?.code && isHost && !hasMovesPlayed) {
-        await multiplayerAdapter.syncGameState(currentRoom.code, updatedState);
+      if (isMultiplayerMode && currentRoomRef.current?.code && isHostRef.current && !hasMovesPlayed) {
+        await multiplayerAdapter.syncGameState(currentRoomRef.current.code, updatedState);
       }
     } else if (targetGame === 'game41') {
       const latest41 = gameState41Ref.current || gameState41;
@@ -2552,13 +2743,15 @@ export default function App() {
           }
         : {
             ...latest41,
+            stateVersion: (latest41.stateVersion || 1) + 1,
             currentPlayer: selectedPlayerId,
             turnStartedAt: Date.now(),
             firstTurnWheel: null,
           };
+      gameState41Ref.current = updatedState;
       setGameState41(updatedState);
-      if (isMultiplayerMode && currentRoom?.code && isHost && !hasMovesPlayed) {
-        await multiplayerAdapter.syncGameState(currentRoom.code, updatedState);
+      if (isMultiplayerMode && currentRoomRef.current?.code && isHostRef.current && !hasMovesPlayed) {
+        await multiplayerAdapter.syncGameState(currentRoomRef.current.code, updatedState);
       }
     } else {
       const latestSevens = gameStateRef.current || gameState;
@@ -2572,13 +2765,15 @@ export default function App() {
           }
         : {
             ...latestSevens,
+            stateVersion: (latestSevens.stateVersion || 1) + 1,
             currentPlayer: selectedPlayerId,
             turnStartedAt: Date.now(),
             firstTurnWheel: null,
           };
+      gameStateRef.current = updatedState;
       setGameState(updatedState);
-      if (isMultiplayerMode && currentRoom?.code && isHost && !hasMovesPlayed) {
-        await multiplayerAdapter.syncGameState(currentRoom.code, updatedState);
+      if (isMultiplayerMode && currentRoomRef.current?.code && isHostRef.current && !hasMovesPlayed) {
+        await multiplayerAdapter.syncGameState(currentRoomRef.current.code, updatedState);
       }
     }
   };

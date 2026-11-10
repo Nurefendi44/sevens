@@ -10,6 +10,7 @@ import { GAME_STATUS } from '../engine/constants.js';
 import { initGame41 } from '../games/game41/engine/engine41.js';
 import { initBigTwo } from '../games/bigtwo/engine/bigtwoEngine.js';
 import { cachePlayerAvatar, getCachedPlayerAvatar } from './leaderboardService.js';
+export { shouldApplyIncomingGameState } from '../utils/gameStateSync.js';
 
 export const AVATARS = ['👤', '🦊', '🐼', '🦁', '🐯', '🐨'];
 export const SEAT_POSITIONS = ['bottom', 'left', 'top', 'right', 'top_left', 'top_right'];
@@ -356,10 +357,26 @@ function hydrateGameStateAvatars(gameState, roomPlayers = []) {
     });
   }
 
+  let nextLastAction = gameState.lastAction;
+  if (nextLastAction && typeof nextLastAction === 'object' && nextLastAction.playerId) {
+    const resolvedActionAvatar = resolveCachedAvatar(
+      {
+        id: nextLastAction.playerId,
+        name: nextLastAction.playerName,
+        avatar: nextLastAction.avatar,
+      },
+       nextPlayers || roomPlayers
+    );
+    if (resolvedActionAvatar && nextLastAction.avatar !== resolvedActionAvatar) {
+      nextLastAction = { ...nextLastAction, avatar: resolvedActionAvatar };
+    }
+  }
+
   return {
     ...gameState,
     ...(nextPlayers ? { players: nextPlayers } : {}),
     ...(nextRankings ? { rankings: nextRankings } : {}),
+    ...(nextLastAction ? { lastAction: nextLastAction } : {}),
   };
 }
 
@@ -414,9 +431,24 @@ function compactGameStateForWire(gameState) {
     : gameState.rankings;
 
   const compactHistory =
-    Array.isArray(gameState.history) && gameState.history.length > 15
-      ? gameState.history.slice(-15)
+    Array.isArray(gameState.history) && gameState.history.length > 8
+      ? gameState.history.slice(-8)
       : gameState.history;
+
+  const compactActionLog =
+    Array.isArray(gameState.actionLog) && gameState.actionLog.length > 8
+      ? gameState.actionLog.slice(0, 8)
+      : gameState.actionLog;
+
+  let compactLastAction = gameState.lastAction;
+  if (
+    compactLastAction &&
+    typeof compactLastAction === 'object' &&
+    typeof compactLastAction.avatar === 'string' &&
+    compactLastAction.avatar.startsWith('data:image/')
+  ) {
+    compactLastAction = { ...compactLastAction, avatar: '__CACHED__' };
+  }
 
   let compactWheel = gameState.firstTurnWheel;
   if (compactWheel && Array.isArray(compactWheel.players)) {
@@ -444,14 +476,23 @@ function compactGameStateForWire(gameState) {
     ...(compactPlayers ? { players: compactPlayers } : {}),
     ...(compactRankings ? { rankings: compactRankings } : {}),
     ...(compactHistory ? { history: compactHistory } : {}),
+    ...(compactActionLog ? { actionLog: compactActionLog } : {}),
+    ...(compactLastAction ? { lastAction: compactLastAction } : {}),
     ...(compactWheel ? { firstTurnWheel: compactWheel } : {}),
     ...(compactSessionScores ? { sessionScores: compactSessionScores } : {}),
   };
 }
 
+const syncWriteQueue = new Map();
+const syncLatestVersion = new Map();
+
 export const multiplayerAdapter = {
   isConfigured() {
     return isSupabaseConfigured;
+  },
+
+  hydrateGameState(gameState, roomPlayers = []) {
+    return hydrateGameStateAvatars(gameState, roomPlayers);
   },
 
   /**
@@ -626,8 +667,10 @@ export const multiplayerAdapter = {
       if (localAvatar && existingPlayer.avatar !== localAvatar && !existingPlayer.isBot) {
         existingPlayer.avatar = localAvatar;
         cacheAvatarsFromPlayers([existingPlayer]);
-        // Non-blocking sync to database
-        this.syncPlayerAvatarInRoom(code, existingPlayer.id, localAvatar).catch(() => {});
+        // Only sync non-Base64 emoji avatars to database (Base64 stays local-only to save egress)
+        if (!String(localAvatar).startsWith('data:image/')) {
+          this.syncPlayerAvatarInRoom(code, existingPlayer.id, localAvatar).catch(() => {});
+        }
       }
 
       return {
@@ -812,8 +855,8 @@ export const multiplayerAdapter = {
 
     setLocalSession(playerId, name, returnedRoom.code);
 
-    // Sync avatar update to database if RPC created/joined with default emoji
-    if (myAvatar && data.player.avatar !== myAvatar) {
+    // Sync non-Base64 emoji avatar update to database if RPC created/joined with default emoji
+    if (myAvatar && !String(myAvatar).startsWith('data:image/') && data.player.avatar !== myAvatar) {
       this.syncPlayerAvatarInRoom(returnedRoom.code, playerId, myAvatar).catch(() => {});
     }
 
@@ -1344,12 +1387,13 @@ export const multiplayerAdapter = {
   },
 
   /**
-   * Synchronizes updated Game Engine state to Supabase
-   * Optimization: If actionDelta is provided and game is still playing, ONLY broadcast delta (~150 bytes)
-   * instead of full state (~15KB) and skip database write.
+   * Synchronizes updated Game Engine state to Supabase.
+   * Sends minimal actionDelta over WebSocket Broadcast for instant peer animation,
+   * and persists compacted game_state (~2-3KB without Base64) to Supabase sequentially per room
+   * so page refresh/reconnect never resets to Turn 1 and missed deltas self-heal automatically.
    */
   async syncGameState(roomCode, nextGameState, actionDelta = null) {
-    if (!supabase) return { success: false };
+    if (!supabase || !roomCode || !nextGameState) return { success: false };
     const code = roomCode.trim().toUpperCase();
     const isOver =
       nextGameState.gameStatus === GAME_STATUS.GAME_OVER ||
@@ -1357,44 +1401,76 @@ export const multiplayerAdapter = {
       nextGameState.gameStatus === 'game_over';
     const nextStatus = isOver ? 'game_over' : 'playing';
     const nowIso = new Date().toISOString();
+    const stateVersion = Number(nextGameState.stateVersion || 0);
+    const matchId = nextGameState.matchId || null;
 
-    // 1. If game is in progress and an action delta is provided, broadcast delta only
-    if (!isOver && actionDelta) {
-      await this.sendGameActionDelta(code, actionDelta);
-      return { success: true };
+    // 1. Broadcast minimal delta immediately for instant peer responsiveness
+    if (actionDelta) {
+      this.sendGameActionDelta(code, {
+        ...actionDelta,
+        ...(stateVersion ? { stateVersion } : {}),
+        ...(matchId ? { matchId } : {}),
+      }).catch(() => {});
     }
 
-    // 2. If Game Over or full checkpoint sync requested
     const compactState = compactGameStateForWire(nextGameState);
 
-    // If an actionDelta accompanies the Game Over transition, broadcast delta first so peers animate immediately
-    if (actionDelta) {
-      this.sendGameActionDelta(code, actionDelta).catch(() => {});
-    }
-
-    // Broadcast snapshot via WebSocket with compacted state
-    this.broadcastRoomState(code, {
-      code,
-      status: nextStatus,
-      game_state: compactState,
-      updated_at: nowIso,
-    });
-
-    const { error } = await supabase
-      .from('rooms')
-      .update({
-        game_state: compactState,
+    // 2. For full checkpoint syncs (no delta: e.g. wheel complete) or Game Over, also broadcast full snapshot
+    if (isOver || !actionDelta) {
+      this.broadcastRoomState(code, {
+        code,
         status: nextStatus,
+        game_state: compactState,
         updated_at: nowIso,
-      })
-      .eq('code', code)
-      .neq('status', 'lobby');
-
-    if (error) {
-      console.error('Failed to sync game state:', error);
-      return { success: false, error: error.message };
+      });
     }
-    return { success: true };
+
+    // Track highest version seen for this room+matchId so out-of-order queued writes are skipped
+    const prevLatest = syncLatestVersion.get(code);
+    if (
+      prevLatest &&
+      prevLatest.matchId === matchId &&
+      stateVersion > 0 &&
+      prevLatest.version > stateVersion
+    ) {
+      return { success: true };
+    }
+    syncLatestVersion.set(code, { matchId, version: stateVersion });
+
+    // Serialize DB writes per room so consecutive moves (e.g. rapid bots) never commit out of order
+    const prevWrite = syncWriteQueue.get(code) || Promise.resolve();
+    const nextWrite = prevWrite
+      .catch(() => {})
+      .then(async () => {
+        const latest = syncLatestVersion.get(code);
+        if (
+          latest &&
+          latest.matchId === matchId &&
+          stateVersion > 0 &&
+          latest.version > stateVersion
+        ) {
+          return { success: true };
+        }
+
+        const { error } = await supabase
+          .from('rooms')
+          .update({
+            game_state: compactState,
+            status: nextStatus,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('code', code)
+          .neq('status', 'lobby');
+
+        if (error) {
+          console.error('Failed to sync game state:', error);
+          return { success: false, error: error.message };
+        }
+        return { success: true };
+      });
+
+    syncWriteQueue.set(code, nextWrite);
+    return nextWrite;
   },
 
   /**
@@ -1704,10 +1780,14 @@ export const multiplayerAdapter = {
   },
 
   /**
-   * Synchronizes the player's latest profile (custom photo / avatar) in the active room (players array and game_state.players)
+   * Synchronizes the player's emoji avatar in the active room (Base64 photos stay local-only to avoid egress & state clobbering)
    */
   async syncPlayerAvatarInRoom(roomCode, playerId, newAvatar) {
     if (!supabase || !roomCode || !playerId || !newAvatar) return { success: false };
+    if (String(newAvatar).startsWith('data:image/')) {
+      playerAvatarCache.set(playerId, newAvatar);
+      return { success: true };
+    }
     const code = roomCode.trim().toUpperCase();
     try {
       const { room } = await this.getRoom(code);
@@ -1724,30 +1804,13 @@ export const multiplayerAdapter = {
         return p;
       });
 
-      let updatedGameState = room.game_state;
-      if (updatedGameState && Array.isArray(updatedGameState.players)) {
-        updatedGameState = {
-          ...updatedGameState,
-          players: updatedGameState.players.map((p) => {
-            if (p.id === playerId && !p.isBot && p.avatar !== newAvatar) {
-              changed = true;
-              return { ...p, avatar: newAvatar };
-            }
-            return p;
-          }),
-        };
-      }
-
       if (!changed) return { success: true, room };
 
       const nowIso = new Date().toISOString();
-      const compactState = compactGameStateForWire(updatedGameState);
-
       const { error: updateErr } = await supabase
         .from('rooms')
         .update({
-          players: updatedPlayers,
-          game_state: compactState,
+          players: compactPlayersForWire(updatedPlayers),
           updated_at: nowIso,
         })
         .eq('code', code);
@@ -1756,13 +1819,6 @@ export const multiplayerAdapter = {
         const updatedRoom = hydrateRoomRecord({
           ...room,
           players: updatedPlayers,
-          game_state: updatedGameState,
-          updated_at: nowIso,
-        });
-        this.broadcastRoomState(code, {
-          ...room,
-          players: updatedPlayers,
-          game_state: compactState,
           updated_at: nowIso,
         });
         return { success: true, room: updatedRoom };

@@ -118,6 +118,7 @@ export function initGame(configOverrides = {}, customPlayers = null) {
   const initialState = {
     gameType: 'sevens',
     matchId: `sev_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    stateVersion: 1,
     config: { ...config, playerCount },
     players,
     hands,
@@ -461,6 +462,8 @@ export function playCard(gameState, playerId, card, chosenDirection = null) {
 
   let nextState = {
     ...gameState,
+    stateVersion: (gameState.stateVersion || 1) + 1,
+    firstTurnWheel: null,
     globalAceDirection: nextGlobalAceDirection,
     closureDirection: nextGlobalAceDirection, // sync for backwards compatibility
     rule6Penalties: nextRule6Penalties,
@@ -533,6 +536,8 @@ export function closeCard(gameState, playerId, card) {
 
     const nextState = {
       ...gameState,
+      stateVersion: (gameState.stateVersion || 1) + 1,
+      firstTurnWheel: null,
       faults: nextFaults,
       actionLog: nextLog,
       lastAction: {
@@ -574,6 +579,8 @@ export function closeCard(gameState, playerId, card) {
 
   let nextState = {
     ...gameState,
+    stateVersion: (gameState.stateVersion || 1) + 1,
+    firstTurnWheel: null,
     hands: {
       ...gameState.hands,
       [playerId]: nextHand,
@@ -620,6 +627,7 @@ export function setBotTakeoverSevens(gameState, playerId, isTakeover = true) {
 
   return {
     ...gameState,
+    stateVersion: (gameState.stateVersion || 1) + 1,
     players: updatedPlayers,
     turnStartedAt: Date.now(),
     actionLog: [
