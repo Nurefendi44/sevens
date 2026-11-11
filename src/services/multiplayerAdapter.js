@@ -681,11 +681,11 @@ export const multiplayerAdapter = {
       };
     }
 
-    // Reuse scenario: Room empty, no real humans, or game was abandoned/stale (> 2 mins without moves)
+    // Reuse scenario: Room empty, no real humans, or game was abandoned/stale (> 15 mins without moves)
     const humanPlayers = players.filter((p) => !p.isBot);
     const isStaleGame =
       room.updated_at &&
-      Date.now() - new Date(room.updated_at).getTime() > 120000;
+      Date.now() - new Date(room.updated_at).getTime() > 900000;
 
     if (players.length === 0 || humanPlayers.length === 0 || (room.status !== 'lobby' && isStaleGame)) {
       const newHostPlayer = {

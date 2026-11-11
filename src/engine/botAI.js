@@ -275,15 +275,10 @@ export function chooseBigTwoBotMove(gameState, botId) {
   const hand = sortBigTwoCards(gameState.hands?.[botId] || []);
   if (hand.length === 0) return { action: 'pass' };
 
-  // If bot already passed in this trick, it cannot move (Rule 2)
-  if (gameState.passedPlayers?.includes(botId)) {
-    return { action: 'pass' };
-  }
-
   const tableCombo = gameState.currentTrick?.combo || null;
   const isFreeTurn = !tableCombo || !gameState.currentTrick?.cards?.length;
 
-  // FREE TURN:
+  // FREE TURN (Meja Bebas): Pemain wajib mengeluarkan kartu (Rule 2: Pass tidak diperbolehkan pada giliran bebas)
   if (isFreeTurn) {
     // If bot has a 2 and other non-2 cards, and hand is very small (2-3 cards),
     // prioritize getting rid of the 2 so it is NOT the last card!
@@ -319,6 +314,12 @@ export function chooseBigTwoBotMove(gameState, botId) {
     }
 
     return { action: 'play', cards: [anchor] };
+  }
+
+  // RESPOND: Hanya berlaku jika bukan giliran bebas
+  // If bot already passed in this trick, it cannot move (Rule 2)
+  if (gameState.passedPlayers?.includes(botId)) {
+    return { action: 'pass' };
   }
 
   // RESPOND: same size, must beat table, choose the weakest that beats it

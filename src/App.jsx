@@ -215,7 +215,10 @@ export default function App() {
   const [myPlayerId, setMyPlayerId] = useState(() => getLocalPlayerId());
   const isSingleMode = gameMode === 'single';
   const isMultiplayerMode = gameMode === 'multiplayer';
-  const isHost = isMultiplayerMode && currentRoom?.host_id === myPlayerId;
+  const isHost =
+    isMultiplayerMode &&
+    (currentRoom?.host_id === myPlayerId ||
+      Boolean((currentRoom?.players || []).find((p) => p.id === myPlayerId)?.isHost));
 
   const [copiedRoomCode, setCopiedRoomCode] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
@@ -493,9 +496,13 @@ export default function App() {
           setActiveGameType(roomGameType);
 
           const localName = (session.playerName || getLocalPlayerName() || '').trim().toLowerCase();
+          const roomPlayersList =
+            Array.isArray(room.players) && room.players.length > 0
+              ? room.players
+              : room.game_state?.players || [];
 
           // Check if viewer is ALREADY a participant in this room (by ID OR by saved player Name)
-          const matchedPlayer = (room.players || []).find(
+          const matchedPlayer = roomPlayersList.find(
             (p) =>
               p.id === currentMyId ||
               p.id === session.playerId ||
@@ -504,6 +511,9 @@ export default function App() {
           );
 
           if (matchedPlayer) {
+            if (!Array.isArray(room.players) || room.players.length === 0) {
+              room.players = roomPlayersList;
+            }
             // Already registered in room: reconnect seamlessly
             const localAvatar = getLocalPlayerAvatar();
             if (localAvatar && matchedPlayer.avatar !== localAvatar && !matchedPlayer.isBot) {
@@ -2283,6 +2293,15 @@ export default function App() {
         await multiplayerAdapter.syncGameState(currentRoomRef.current.code, res.gameState, delta);
       }
     } else {
+      if (isCurrentBot) {
+        // Fallback: If bot attempted to pass illegally (e.g. table is free/empty), play its lowest card so it never freezes
+        const botHand = currentState?.hands?.[actingPlayerId] || [];
+        if (botHand.length > 0) {
+          console.warn('[BigTwo Bot] Pass rejected on free turn, falling back to playing lowest card:', botHand[0]);
+          await handlePlayBigTwoCombo([botHand[0]]);
+          return;
+        }
+      }
       showToast(res.error);
     }
   };
@@ -2501,28 +2520,33 @@ export default function App() {
   const recordGameEndScore = (gameKey, rankings = [], winnerId = null, matchSignature = '') => {
     if (!rankings || rankings.length === 0) return;
 
+    const resolvedWinnerId =
+      winnerId && typeof winnerId === 'object' && !Array.isArray(winnerId)
+        ? winnerId.id || winnerId.player?.id || winnerId.name
+        : winnerId;
+
+    const effectiveSig =
+      matchSignature ||
+      `${gameKey}_${currentRoomRef.current?.code || currentRoom?.code || gameMode}_${
+        resolvedWinnerId || 'nowin'
+      }_${rankings.map((r) => r.id || r.player?.id || r.name).sort().join('_')}`;
+
     // Prevent recording the exact same finished game twice (e.g. on page refresh or realtime resync)
     const sigKey = `poker_last_recorded_match_${gameKey}`;
-    if (matchSignature) {
-      if (lastRecordedMatchRef.current[gameKey] === matchSignature) return;
-      try {
-        if (typeof localStorage !== 'undefined' && localStorage.getItem(sigKey) === matchSignature) {
-          lastRecordedMatchRef.current[gameKey] = matchSignature;
-          return;
-        }
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem(sigKey, matchSignature);
-        }
-      } catch (e) {}
-      lastRecordedMatchRef.current[gameKey] = matchSignature;
-    }
+    if (lastRecordedMatchRef.current[gameKey] === effectiveSig) return;
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage.getItem(sigKey) === effectiveSig) {
+        lastRecordedMatchRef.current[gameKey] = effectiveSig;
+        return;
+      }
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(sigKey, effectiveSig);
+      }
+    } catch (e) {}
+    lastRecordedMatchRef.current[gameKey] = effectiveSig;
 
     const sessionKey = getScoreSessionKey(gameKey);
     const totalPlayers = rankings.length;
-    const resolvedWinnerId =
-      winnerId && typeof winnerId === 'object' && !Array.isArray(winnerId)
-        ? winnerId.id || winnerId.player?.id
-        : winnerId;
 
     setScoreboardData((prev) => {
       const gameScores = { ...(prev[sessionKey] || {}) };
@@ -2607,10 +2631,12 @@ export default function App() {
       recordMultiplayerGameStats({
         gameType: gameKey,
         rankings,
-        winnerId,
+        winnerId: resolvedWinnerId,
         isMultiplayer: isMultiplayerMode,
         myPlayerId,
         isHost,
+        matchSignature: effectiveSig,
+        roomCode: currentRoomRef.current?.code || currentRoom?.code || null,
       });
     }
   };
@@ -2623,6 +2649,20 @@ export default function App() {
         localStorage.setItem('poker_scoreboard_data', JSON.stringify(nextScores));
       } catch (e) {}
       return nextScores;
+    });
+
+    if (currentRoomRef.current?.game_state) {
+      currentRoomRef.current.game_state.sessionScores = {};
+    }
+    setCurrentRoom((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        game_state: {
+          ...(prev.game_state || {}),
+          sessionScores: {},
+        },
+      };
     });
 
     if (activeGameType === 'bigtwo') {
@@ -2884,9 +2924,14 @@ export default function App() {
   useEffect(() => {
     const isMultiplayerHost =
       isMultiplayerMode &&
-      currentRoom?.host_id === myPlayerId &&
+      (currentRoom?.host_id === myPlayerId ||
+        Boolean((currentRoom?.players || []).find((p) => p.id === myPlayerId)?.isHost)) &&
       currentRoom?.status === 'playing';
-    const canDriveBots = isSingleMode || isMultiplayerHost || gameMode === 'local';
+    const isFirstActiveHuman =
+      isMultiplayerMode &&
+      !(currentRoom?.players || []).some((p) => (p.id === currentRoom?.host_id || p.isHost) && !p.isBot) &&
+      (currentRoom?.players || []).find((p) => !p.isBot)?.id === myPlayerId;
+    const canDriveBots = isSingleMode || isMultiplayerHost || isFirstActiveHuman || gameMode === 'local';
     const isPreGameOverlay =
       isDealingAnimationActive ||
       Boolean(pendingBigTwoWheel) ||
@@ -4226,15 +4271,21 @@ export default function App() {
       )}
 
       {/* Sevens Game Over Modal */}
-      {activeGameType === 'sevens' && gameState?.gameStatus === GAME_STATUS.GAME_OVER && (
+      {activeGameType === 'sevens' &&
+        (gameState?.gameStatus === GAME_STATUS.GAME_OVER ||
+          gameState?.gameStatus === 'GAME_OVER' ||
+          gameState?.gameStatus === 'game_over' ||
+          Boolean(gameState?.winners?.length > 0 && gameState?.scores)) && (
         <GameOverModal
           gameState={gameState}
           results={gameState}
           onRestart={() => handleRestart()}
+          onPlayAgain={() => handleRestart()}
           onBackToMenu={handleBackToModeSelect}
           onOpenScoreboard={() => setShowScoreboardModal(true)}
           isMultiplayer={isMultiplayerMode}
           isHost={isHost}
+          currentRoomCode={isMultiplayerMode ? currentRoom?.code : null}
           myPlayerId={myPlayerId}
           myPlayerName={
             (currentRoom?.players || []).find((p) => p.id === myPlayerId)?.name ||
@@ -4244,7 +4295,10 @@ export default function App() {
       )}
 
       {/* Game 41 Game Over Modal */}
-      {activeGameType === 'game41' && (gameState41?.gameStatus === 'game_over' || gameState41?.gameStatus === 'GAME_OVER') && (
+      {activeGameType === 'game41' &&
+        (gameState41?.gameStatus === 'game_over' ||
+          gameState41?.gameStatus === 'GAME_OVER' ||
+          Boolean(gameState41?.winner && gameState41?.rankings?.length > 0)) && (
         <GameOver41Modal
           gameState={gameState41}
           results={gameState41}
@@ -4254,6 +4308,7 @@ export default function App() {
           onOpenScoreboard={() => setShowScoreboardModal(true)}
           isMultiplayer={isMultiplayerMode}
           isHost={isHost}
+          currentRoomCode={isMultiplayerMode ? currentRoom?.code : null}
           myPlayerId={myPlayerId}
           myPlayerName={
             (currentRoom?.players || []).find((p) => p.id === myPlayerId)?.name ||

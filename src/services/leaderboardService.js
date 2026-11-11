@@ -912,6 +912,9 @@ export async function fetchGlobalLeaderboard(gameType = 'all', limit = 50, force
   return { ...finalRes, data: (finalRes.data || []).slice(0, limit) };
 }
 
+const RECORDED_MATCH_CACHE = new Set();
+const RECORDING_INFLIGHT_MAP = new Map();
+
 /**
  * Record player results from a finished multiplayer game
  * (Excludes solo vs bot games to keep global integrity)
@@ -928,6 +931,8 @@ export async function fetchGlobalLeaderboard(gameType = 'all', limit = 50, force
  * @param {boolean} params.isMultiplayer - Only record if multiplayer
  * @param {string} params.myPlayerId - Current client's player ID (prevents duplicate recording across clients)
  * @param {boolean} params.isHost - Whether current client is room host
+ * @param {string} params.matchSignature - Unique ID/signature for this finished match
+ * @param {string} params.roomCode - Room code
  */
 export async function recordMultiplayerGameStats({
   gameType,
@@ -936,6 +941,8 @@ export async function recordMultiplayerGameStats({
   isMultiplayer = false,
   myPlayerId = null,
   isHost = false,
+  matchSignature = '',
+  roomCode = '',
 }) {
   if (!isMultiplayer) return; // Only multiplayer counts for Top Global
   if (!rankings || rankings.length < 2) return;
@@ -946,6 +953,33 @@ export async function recordMultiplayerGameStats({
     winnerId && typeof winnerId === 'object' && !Array.isArray(winnerId)
       ? winnerId.id || winnerId.player?.id
       : winnerId;
+
+  // Deduplication check: prevent multiple recordings of the exact same finished game
+  const uniqueSig =
+    matchSignature ||
+    `${gameType}_${roomCode || 'noroom'}_${resolvedWinnerId || 'nowin'}_${rankings.map((r) => r.id || r.name).sort().join('_')}`;
+
+  if (RECORDED_MATCH_CACHE.has(uniqueSig)) {
+    return;
+  }
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const storedKey = `poker_rec_match_${uniqueSig}`;
+      if (localStorage.getItem(storedKey)) {
+        RECORDED_MATCH_CACHE.add(uniqueSig);
+        return;
+      }
+      localStorage.setItem(storedKey, '1');
+    } catch {}
+  }
+  RECORDED_MATCH_CACHE.add(uniqueSig);
+
+  if (RECORDING_INFLIGHT_MAP.has(uniqueSig)) {
+    return RECORDING_INFLIGHT_MAP.get(uniqueSig);
+  }
+
+  const recordingPromise = (async () => {
+    try {
 
   // Normalize rankings from any game engine (Big Two, Game 41, Sevens)
   const normalizedRankings = rankings.map((r, idx) => {
@@ -1115,6 +1149,13 @@ export async function recordMultiplayerGameStats({
       console.warn('[Leaderboard] Failed to save player result:', player.name, e);
     }
   }
+  } finally {
+    RECORDING_INFLIGHT_MAP.delete(uniqueSig);
+  }
+  })();
+
+  RECORDING_INFLIGHT_MAP.set(uniqueSig, recordingPromise);
+  return recordingPromise;
 }
 
 /**
