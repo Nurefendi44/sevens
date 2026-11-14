@@ -438,17 +438,30 @@ export function canBeatCombo(newCombo, tableCombo) {
       return { canBeat: false, reason: 'Flush lawan memiliki kartu lebih tinggi.' };
     }
 
-    // C. FULL HOUSE VS FULL HOUSE (Ranked by triple rank)
+    // C. FULL HOUSE VS FULL HOUSE (Ranked by triple rank; jika angka Triple sama (Double Deck),
+    //    bandingkan lambang tertinggi dari Triple: ♦ < ♣ < ♥ < ♠. Pasangan (pair) tidak dihitung.)
     if (newCombo.type === HAND_TYPE_BIGTWO.FULL_HOUSE) {
       const rankDiff = newCombo.primaryRank - tableCombo.primaryRank;
       if (rankDiff > 0) return { canBeat: true };
+      if (rankDiff === 0) {
+        const suitDiff = getCardSuitValue(newCombo.highestCard) - getCardSuitValue(tableCombo.highestCard);
+        if (suitDiff > 0) return { canBeat: true };
+        return {
+          canBeat: false,
+          reason: 'Triple Full House sama, tetapi lambang tertinggi Triple lawan lebih tinggi.',
+        };
+      }
       return { canBeat: false, reason: 'Full House lawan memiliki Triple yang lebih tinggi.' };
     }
 
-    // D. FOUR OF A KIND VS FOUR OF A KIND (Ranked by quad rank)
+    // D. FOUR OF A KIND VS FOUR OF A KIND (Ranked by quad rank; jika sama, lambang tertinggi 4 kembar)
     if (newCombo.type === HAND_TYPE_BIGTWO.FOUR_OF_A_KIND) {
       const rankDiff = newCombo.primaryRank - tableCombo.primaryRank;
       if (rankDiff > 0) return { canBeat: true };
+      if (rankDiff === 0) {
+        const suitDiff = getCardSuitValue(newCombo.highestCard) - getCardSuitValue(tableCombo.highestCard);
+        if (suitDiff > 0) return { canBeat: true };
+      }
       return { canBeat: false, reason: 'Four of a Kind lawan memiliki angka 4 kembar yang lebih tinggi.' };
     }
 

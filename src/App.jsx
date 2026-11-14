@@ -25,7 +25,7 @@ import {
   MATCHMAKING_MIN_PLAYERS,
 } from './services/multiplayerAdapter.js';
 import { isSupabaseConfigured } from './services/supabaseClient.js';
-import { recordMultiplayerGameStats } from './services/leaderboardService.js';
+import { recordMultiplayerGameStats, getCachedPlayerAvatar } from './services/leaderboardService.js';
 import { syncLobbyChatHistory } from './services/lobbyChatService.js';
 
 import ErrorBoundary from './components/ErrorBoundary.jsx';

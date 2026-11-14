@@ -93,7 +93,7 @@ export default function RulesGuideBigTwoModal({ isOpen, onClose }) {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(255, 255, 255, 0.04)', borderRadius: '6px' }}>
                 <strong>4. FULL HOUSE</strong>
-                <span>3 kartu angka kembar + 1 Pair (misal As-As-As + 3-3)</span>
+                <span>3 kartu angka kembar + 1 Pair (misal As-As-As + 3-3). Jika angka Triple sama (Double Deck), yang menang adalah Triple dengan lambang tertinggi (♦ &lt; ♣ &lt; ♥ &lt; ♠)</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(255, 255, 255, 0.04)', borderRadius: '6px' }}>
                 <strong>5. FLUSH</strong>

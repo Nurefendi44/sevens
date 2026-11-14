@@ -396,4 +396,31 @@ console.log('=== MULTIPLAYER SYNC, REFRESH & BOT TURN SIMULATION TEST ===');
   console.log('✓ Test 5 passed: Room channel ops serialize cleanly, sanitize avatars, and recover/fallback broadcasts.');
 }
 
+// ---------------------------------------------------------------------------
+// 6. Big Two Full House with same Triple rank (Double Deck) -> highest Triple suit wins
+// ---------------------------------------------------------------------------
+{
+  const { evaluateCombo, canBeatCombo } = await import('../games/bigtwo/engine/handEvaluator.js');
+  const c = (rank, suit) => ({ rank, suit, label: String(rank) });
+
+  // Lawan: K♦ K♣ K♥ + 10♦ 10♣ (lambang tertinggi Triple = ♥)
+  const tableFH = evaluateCombo([c(13, 'diamonds'), c(13, 'clubs'), c(13, 'hearts'), c(10, 'diamonds'), c(10, 'clubs')]);
+  // Saya: K♦ K♣ K♠ + 4♦ 4♣ (lambang tertinggi Triple = ♠)
+  const myFH = evaluateCombo([c(13, 'diamonds'), c(13, 'clubs'), c(13, 'spades'), c(4, 'diamonds'), c(4, 'clubs')]);
+  // Saya (lemah): K♦ K♣ K♣ + A♦ A♣ (lambang tertinggi Triple = ♣)
+  const weakFH = evaluateCombo([c(13, 'diamonds'), c(13, 'clubs'), c(13, 'clubs'), c(1, 'diamonds'), c(1, 'clubs')]);
+
+  assert.equal(tableFH.type, 'FULL_HOUSE');
+  assert.equal(myFH.type, 'FULL_HOUSE');
+  assert.equal(canBeatCombo(myFH, tableFH).canBeat, true, 'Triple K♠ must beat Triple K♥ in Full House');
+  assert.equal(canBeatCombo(tableFH, myFH).canBeat, false, 'Triple K♥ must NOT beat Triple K♠');
+  assert.equal(canBeatCombo(weakFH, tableFH).canBeat, false, 'Triple K♣ must NOT beat Triple K♥ even with higher pair');
+
+  // Triple rank lebih tinggi tetap menang
+  const aceFH = evaluateCombo([c(1, 'diamonds'), c(1, 'clubs'), c(1, 'hearts'), c(3, 'diamonds'), c(3, 'clubs')]);
+  assert.equal(canBeatCombo(aceFH, myFH).canBeat, true);
+
+  console.log('✓ Test 6 passed: Big Two Full House same Triple rank resolved by highest Triple suit.');
+}
+
 console.log('\n🎉 ALL MULTIPLAYER SYNC & REFRESH TESTS PASSED!');
