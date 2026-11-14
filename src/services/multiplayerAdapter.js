@@ -1328,7 +1328,7 @@ export const multiplayerAdapter = {
   async broadcastRoomState(roomCode, roomRecord) {
     if (!supabase || !roomCode || !roomRecord) return;
     const code = roomCode.trim().toUpperCase();
-    const ch = this.getOrCreateRoomChannel(code);
+    const ch = await this.ensureRoomChannel(code);
     if (!ch) return;
     try {
       const compactPayload = roomRecord.game_state
@@ -1348,7 +1348,7 @@ export const multiplayerAdapter = {
   async sendGameActionDelta(roomCode, deltaPayload) {
     if (!supabase || !roomCode || !deltaPayload) return;
     const code = roomCode.trim().toUpperCase();
-    const ch = this.getOrCreateRoomChannel(code);
+    const ch = await this.ensureRoomChannel(code);
     if (!ch) return;
     try {
       await ch.send({
@@ -1371,7 +1371,7 @@ export const multiplayerAdapter = {
   async requestRoomStateSync(roomCode, requesterId) {
     if (!supabase || !roomCode) return;
     const code = roomCode.trim().toUpperCase();
-    const ch = this.getOrCreateRoomChannel(code);
+    const ch = await this.ensureRoomChannel(code);
     if (!ch) return;
     try {
       await ch.send({
@@ -1979,6 +1979,52 @@ export const multiplayerAdapter = {
   },
 
   activeChannels: {},
+  _channelChains: {},
+
+  /**
+   * Serializes channel create/teardown operations per room so Supabase's async
+   * `removeChannel()` teardown finishes before a new `channel()` with the same topic opens.
+   */
+  _enqueueRoomChannelOp(code, opFn) {
+    const prev = this._channelChains[code] || Promise.resolve();
+    const next = prev
+      .catch(() => {})
+      .then(() => opFn());
+    this._channelChains[code] = next.finally(() => {
+      if (this._channelChains[code] === next) {
+        delete this._channelChains[code];
+      }
+    });
+    return next;
+  },
+
+  async _cleanupExistingRoomChannel(code) {
+    if (!supabase || !code) return;
+    const channelName = `room_channel_${code}`;
+    const targetTopic = `realtime:${channelName}`;
+    const toRemove = new Set();
+
+    if (this.activeChannels[code]) {
+      toRemove.add(this.activeChannels[code]);
+      delete this.activeChannels[code];
+    }
+
+    if (typeof supabase.getChannels === 'function') {
+      try {
+        for (const ch of supabase.getChannels()) {
+          if (ch && (ch.topic === targetTopic || ch.subTopic === channelName)) {
+            toRemove.add(ch);
+          }
+        }
+      } catch {}
+    }
+
+    for (const ch of toRemove) {
+      try {
+        await supabase.removeChannel(ch);
+      } catch {}
+    }
+  },
 
   /**
    * Helper to get or create a room channel with self: false to avoid echo traffic
@@ -1986,8 +2032,16 @@ export const multiplayerAdapter = {
   getOrCreateRoomChannel(roomCode) {
     if (!supabase || !roomCode) return null;
     const code = roomCode.trim().toUpperCase();
-    if (this.activeChannels[code]) {
-      return this.activeChannels[code];
+    const existing = this.activeChannels[code];
+    if (existing) {
+      const st = existing.state;
+      if (st !== 'closed' && st !== 'errored' && st !== 'leaving') {
+        return existing;
+      }
+      delete this.activeChannels[code];
+      try {
+        supabase.removeChannel(existing);
+      } catch {}
     }
     const channelName = `room_channel_${code}`;
     const channel = supabase.channel(channelName, {
@@ -2000,120 +2054,122 @@ export const multiplayerAdapter = {
     return channel;
   },
 
+  async ensureRoomChannel(roomCode) {
+    if (!supabase || !roomCode) return null;
+    const code = roomCode.trim().toUpperCase();
+    if (this._channelChains[code]) {
+      try {
+        await this._channelChains[code];
+      } catch {}
+    }
+    return this.getOrCreateRoomChannel(code);
+  },
+
+  _sanitizeWireAvatar(avatar) {
+    return (typeof avatar === 'string' && avatar.startsWith('data:image/'))
+      ? '👤'
+      : (avatar || '👤');
+  },
+
+  async _sendRoomBroadcast(roomCode, event, payload, label = event) {
+    if (!supabase || !roomCode) return { success: false, error: 'Supabase offline' };
+    const code = roomCode.trim().toUpperCase();
+    let channel = await this.ensureRoomChannel(code);
+    if (!channel) return { success: false, error: 'Channel offline' };
+
+    try {
+      let status = await channel.send({
+        type: 'broadcast',
+        event,
+        payload,
+      });
+
+      // Fallback / recovery if socket push timed out or channel entered a closing state
+      if (status && status !== 'ok') {
+        const st = channel.state;
+        if (st === 'closed' || st === 'errored' || st === 'leaving') {
+          delete this.activeChannels[code];
+          channel = this.getOrCreateRoomChannel(code);
+          if (channel) {
+            status = await channel.send({
+              type: 'broadcast',
+              event,
+              payload,
+            });
+          }
+        }
+        if (status && status !== 'ok' && channel && typeof channel.httpSend === 'function') {
+          await channel.httpSend(event, payload);
+          return { success: true, status: 'http_fallback' };
+        }
+      }
+
+      if (status && status !== 'ok') {
+        return { success: false, error: `Broadcast ${label} gagal (${status})`, status };
+      }
+      return { success: true, status: status || 'ok' };
+    } catch (err) {
+      console.warn(`Gagal mengirim broadcast ${label}:`, err);
+      return { success: false, error: err.message };
+    }
+  },
+
   /**
    * Sends an ephemeral live chat / quick emote message via Realtime Broadcast
    */
   async sendRoomChat(roomCode, chatPayload) {
-    if (!supabase) return { success: false, error: 'Supabase offline' };
-    const code = roomCode.trim().toUpperCase();
-    const channel = this.getOrCreateRoomChannel(code);
-    if (!channel) return { success: false, error: 'Channel offline' };
-
-    // Strip heavy base64 photo from senderAvatar to save egress
-    const safeAvatar = (typeof chatPayload?.senderAvatar === 'string' && chatPayload.senderAvatar.startsWith('data:image/'))
-      ? '👤'
-      : (chatPayload?.senderAvatar || '👤');
-
-    try {
-      await channel.send({
-        type: 'broadcast',
-        event: 'room_chat',
-        payload: {
-          ...chatPayload,
-          senderAvatar: safeAvatar,
-          id: `chat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          timestamp: Date.now(),
-        },
-      });
-      return { success: true };
-    } catch (err) {
-      console.warn('Gagal mengirim broadcast chat:', err);
-      return { success: false, error: err.message };
-    }
+    return this._sendRoomBroadcast(
+      roomCode,
+      'room_chat',
+      {
+        ...chatPayload,
+        senderAvatar: this._sanitizeWireAvatar(chatPayload?.senderAvatar),
+        id: chatPayload?.id || `chat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        timestamp: chatPayload?.timestamp || Date.now(),
+      },
+      'chat'
+    );
   },
 
   /**
    * Sends a floating reaction emote (Google Meet style) via Realtime Broadcast
    */
   async sendRoomReaction(roomCode, reactionPayload) {
-    if (!supabase) return { success: false, error: 'Supabase offline' };
-    const code = roomCode.trim().toUpperCase();
-    const channel = this.getOrCreateRoomChannel(code);
-    if (!channel) return { success: false, error: 'Channel offline' };
-
-    const safeAvatar = (typeof reactionPayload?.senderAvatar === 'string' && reactionPayload.senderAvatar.startsWith('data:image/'))
-      ? '👤'
-      : (reactionPayload?.senderAvatar || '👤');
-
-    try {
-      await channel.send({
-        type: 'broadcast',
-        event: 'room_reaction',
-        payload: {
-          ...reactionPayload,
-          senderAvatar: safeAvatar,
-          id: `react_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          timestamp: Date.now(),
-        },
-      });
-      return { success: true };
-    } catch (err) {
-      console.warn('Gagal mengirim broadcast reaction:', err);
-      return { success: false, error: err.message };
-    }
+    return this._sendRoomBroadcast(
+      roomCode,
+      'room_reaction',
+      {
+        ...reactionPayload,
+        senderAvatar: this._sanitizeWireAvatar(reactionPayload?.senderAvatar),
+        id: reactionPayload?.id || `react_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        timestamp: reactionPayload?.timestamp || Date.now(),
+      },
+      'reaction'
+    );
   },
 
   /**
    * Sends a Soundboard audio trigger to all players in the room via Realtime Broadcast
    */
   async sendRoomSoundboard(roomCode, soundboardPayload) {
-    if (!supabase) return { success: false, error: 'Supabase offline' };
-    const code = roomCode.trim().toUpperCase();
-    const channel = this.getOrCreateRoomChannel(code);
-    if (!channel) return { success: false, error: 'Channel offline' };
-
-    const safeAvatar = (typeof soundboardPayload?.senderAvatar === 'string' && soundboardPayload.senderAvatar.startsWith('data:image/'))
-      ? '👤'
-      : (soundboardPayload?.senderAvatar || '👤');
-
-    try {
-      await channel.send({
-        type: 'broadcast',
-        event: 'room_soundboard',
-        payload: {
-          ...soundboardPayload,
-          senderAvatar: safeAvatar,
-          id: `sb_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          timestamp: Date.now(),
-        },
-      });
-      return { success: true };
-    } catch (err) {
-      console.warn('Gagal mengirim broadcast soundboard:', err);
-      return { success: false, error: err.message };
-    }
+    return this._sendRoomBroadcast(
+      roomCode,
+      'room_soundboard',
+      {
+        ...soundboardPayload,
+        senderAvatar: this._sanitizeWireAvatar(soundboardPayload?.senderAvatar),
+        id: soundboardPayload?.id || `sb_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        timestamp: soundboardPayload?.timestamp || Date.now(),
+      },
+      'soundboard'
+    );
   },
 
   /**
    * Broadcasts WebRTC Voice Chat signaling message (offer, answer, ICE, speaking)
    */
   async sendVoiceSignal(roomCode, signalPayload) {
-    if (!supabase) return { success: false };
-    const code = roomCode.trim().toUpperCase();
-    const channel = this.getOrCreateRoomChannel(code);
-    if (!channel) return { success: false };
-
-    try {
-      const res = await channel.send({
-        type: 'broadcast',
-        event: 'voice_signal',
-        payload: signalPayload,
-      });
-      return { success: res === 'ok' || !res, status: res };
-    } catch (err) {
-      console.warn('Gagal mengirim broadcast voice signal:', err);
-      return { success: false, error: err.message };
-    }
+    return this._sendRoomBroadcast(roomCode, 'voice_signal', signalPayload, 'voice signal');
   },
 
   /**
@@ -2130,119 +2186,129 @@ export const multiplayerAdapter = {
     onGameActionDelta = null,
     onRequestStateSync = null
   ) {
-    if (!supabase) return () => {};
+    if (!supabase || !roomCode) return () => {};
     const code = roomCode.trim().toUpperCase();
     const channelName = `room_channel_${code}`;
 
-    // Clean up any existing channel for this room code to prevent duplicate subscriptions
-    if (this.activeChannels[code]) {
-      try {
-        supabase.removeChannel(this.activeChannels[code]);
-      } catch {}
-      delete this.activeChannels[code];
-    }
-
     let lastBroadcastAt = 0;
     let cachedPlayers = [];
+    let cancelled = false;
+    let subscribedChannel = null;
 
-    const channel = supabase
-      .channel(channelName, {
-        config: {
-          broadcast: { self: false },
-        },
-      })
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'rooms',
-          filter: `code=eq.${code}`,
-        },
-        (payload) => {
-          if (payload.new) {
-            const incoming = payload.new;
-            if (Array.isArray(incoming.players) && incoming.players.length > 0) {
-              cachedPlayers = incoming.players;
-            }
-            // Use payload.new directly without re-fetching from PostgREST!
-            // If game_state was omitted by Postgres TOAST (>8KB), room_state_sync Broadcast already delivered it.
-            // Only fall back to getRoom if no Broadcast was received in the last 6 seconds.
-            if (
-              incoming.status !== 'lobby' &&
-              (!incoming.game_state || !incoming.game_state.players)
-            ) {
-              if (Date.now() - lastBroadcastAt < 6000) {
-                onRoomUpdate(hydrateRoomRecord(incoming));
-                return;
+    this._enqueueRoomChannelOp(code, async () => {
+      if (cancelled) return;
+      await this._cleanupExistingRoomChannel(code);
+      if (cancelled) return;
+
+      const channel = supabase
+        .channel(channelName, {
+          config: {
+            broadcast: { self: false },
+          },
+        })
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'rooms',
+            filter: `code=eq.${code}`,
+          },
+          (payload) => {
+            if (cancelled) return;
+            if (payload.new) {
+              const incoming = payload.new;
+              if (Array.isArray(incoming.players) && incoming.players.length > 0) {
+                cachedPlayers = incoming.players;
               }
-              this.getRoom(code)
-                .then(({ room }) => {
-                  onRoomUpdate(room || hydrateRoomRecord(incoming));
-                })
-                .catch(() => {
+              // Use payload.new directly without re-fetching from PostgREST!
+              // If game_state was omitted by Postgres TOAST (>8KB), room_state_sync Broadcast already delivered it.
+              // Only fall back to getRoom if no Broadcast was received in the last 6 seconds.
+              if (
+                incoming.status !== 'lobby' &&
+                (!incoming.game_state || !incoming.game_state.players)
+              ) {
+                if (Date.now() - lastBroadcastAt < 6000) {
                   onRoomUpdate(hydrateRoomRecord(incoming));
-                });
-            } else {
-              onRoomUpdate(hydrateRoomRecord(incoming));
+                  return;
+                }
+                this.getRoom(code)
+                  .then(({ room }) => {
+                    if (!cancelled) onRoomUpdate(room || hydrateRoomRecord(incoming));
+                  })
+                  .catch(() => {
+                    if (!cancelled) onRoomUpdate(hydrateRoomRecord(incoming));
+                  });
+              } else {
+                onRoomUpdate(hydrateRoomRecord(incoming));
+              }
             }
           }
-        }
-      )
-      .on('broadcast', { event: 'room_state_sync' }, ({ payload }) => {
-        if (payload && payload.game_state && onRoomUpdate) {
-          lastBroadcastAt = Date.now();
-          if (Array.isArray(payload.players) && payload.players.length > 0) {
-            cachedPlayers = payload.players;
+        )
+        .on('broadcast', { event: 'room_state_sync' }, ({ payload }) => {
+          if (!cancelled && payload && payload.game_state && onRoomUpdate) {
+            lastBroadcastAt = Date.now();
+            if (Array.isArray(payload.players) && payload.players.length > 0) {
+              cachedPlayers = payload.players;
+            }
+            const hydrated = hydrateRoomRecord({
+              ...payload,
+              players: payload.players || cachedPlayers,
+            });
+            onRoomUpdate(hydrated);
           }
-          const hydrated = hydrateRoomRecord({
-            ...payload,
-            players: payload.players || cachedPlayers,
-          });
-          onRoomUpdate(hydrated);
-        }
-      })
-      .on('broadcast', { event: 'game_action_delta' }, ({ payload }) => {
-        if (onGameActionDelta && payload) {
-          onGameActionDelta(payload);
-        }
-      })
-      .on('broadcast', { event: 'request_state_sync' }, ({ payload }) => {
-        if (onRequestStateSync && payload) {
-          onRequestStateSync(payload);
-        }
-      })
-      .on('broadcast', { event: 'room_chat' }, ({ payload }) => {
-        if (onChatMessage && payload) {
-          onChatMessage(payload);
-        }
-      })
-      .on('broadcast', { event: 'room_reaction' }, ({ payload }) => {
-        if (onReaction && payload) {
-          onReaction(payload);
-        }
-      })
-      .on('broadcast', { event: 'room_soundboard' }, ({ payload }) => {
-        if (onSoundboard && payload) {
-          onSoundboard(payload);
-        }
-      })
-      .on('broadcast', { event: 'voice_signal' }, ({ payload }) => {
-        if (onVoiceSignal && payload) {
-          onVoiceSignal(payload);
-        }
-      })
-      .subscribe((status) => {
-        if (onStatusChange) onStatusChange(status);
-      });
+        })
+        .on('broadcast', { event: 'game_action_delta' }, ({ payload }) => {
+          if (!cancelled && onGameActionDelta && payload) {
+            onGameActionDelta(payload);
+          }
+        })
+        .on('broadcast', { event: 'request_state_sync' }, ({ payload }) => {
+          if (!cancelled && onRequestStateSync && payload) {
+            onRequestStateSync(payload);
+          }
+        })
+        .on('broadcast', { event: 'room_chat' }, ({ payload }) => {
+          if (!cancelled && onChatMessage && payload) {
+            onChatMessage(payload);
+          }
+        })
+        .on('broadcast', { event: 'room_reaction' }, ({ payload }) => {
+          if (!cancelled && onReaction && payload) {
+            onReaction(payload);
+          }
+        })
+        .on('broadcast', { event: 'room_soundboard' }, ({ payload }) => {
+          if (!cancelled && onSoundboard && payload) {
+            onSoundboard(payload);
+          }
+        })
+        .on('broadcast', { event: 'voice_signal' }, ({ payload }) => {
+          if (!cancelled && onVoiceSignal && payload) {
+            onVoiceSignal(payload);
+          }
+        })
+        .subscribe((status) => {
+          if (!cancelled && onStatusChange) onStatusChange(status);
+        });
 
-    this.activeChannels[code] = channel;
+      subscribedChannel = channel;
+      this.activeChannels[code] = channel;
+    });
 
     return () => {
-      if (this.activeChannels[code] === channel) {
-        delete this.activeChannels[code];
-      }
-      supabase.removeChannel(channel);
+      cancelled = true;
+      this._enqueueRoomChannelOp(code, async () => {
+        if (subscribedChannel) {
+          if (this.activeChannels[code] === subscribedChannel) {
+            delete this.activeChannels[code];
+          }
+          try {
+            await supabase.removeChannel(subscribedChannel);
+          } catch {}
+          subscribedChannel = null;
+        }
+      });
     };
   },
 };

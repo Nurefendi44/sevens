@@ -4,6 +4,12 @@ import { initGame41, drawCard41, discardCard41 } from '../games/game41/engine/en
 import { initGame, playCard, closeCard, getValidMoves } from './gameEngine.js';
 import { chooseBigTwoBotMove, chooseGame41BotMove, chooseSevensBotMove, isBotPlayer } from './botAI.js';
 import { shouldApplyIncomingGameState } from '../utils/gameStateSync.js';
+import {
+  isBotRankingEntry,
+  hasRealHumanOpponent,
+  recordMultiplayerGameStats,
+} from '../services/leaderboardService.js';
+import { multiplayerAdapter } from '../services/multiplayerAdapter.js';
 
 console.log('=== MULTIPLAYER SYNC, REFRESH & BOT TURN SIMULATION TEST ===');
 
@@ -246,6 +252,101 @@ console.log('=== MULTIPLAYER SYNC, REFRESH & BOT TURN SIMULATION TEST ===');
   assert.equal(shouldApplyIncomingGameState(sev, sevRes.state), true);
 
   console.log('✓ Test 3 passed: Game 41 and Sevens stateVersion & stale-snapshot protection verified.');
+}
+
+// ---------------------------------------------------------------------------
+// 4. Verify Bot-Only Online Matches NEVER Enter Top Global Leaderboard
+// ---------------------------------------------------------------------------
+{
+  const soloOnlineVsBots = [
+    { id: 'human_1', name: 'Pardi', isBot: false, rank: 1, pointsEarned: 3 },
+    { id: 'bot_1', name: 'Bot 1', isBot: true, rank: 2, pointsEarned: 2 },
+    { id: 'bot_2', name: 'Bot 2', isBot: true, rank: 3, pointsEarned: 1 },
+    { id: 'bot_3', name: 'Bot 3', isBot: true, rank: 4, pointsEarned: 0 },
+  ];
+  // Even without explicit isBot flag (e.g., older serialized ranking snapshot)
+  const inferredBotsOnly = [
+    { id: 'human_1', name: 'Pardi', rank: 1, pointsEarned: 3 },
+    { id: 'bot_1', name: 'Bot 1', rank: 2, pointsEarned: 2 },
+    { id: 'bot-2', name: 'Bot 2', rank: 3, pointsEarned: 1 },
+  ];
+  const withHumanOpponent = [
+    { id: 'human_1', name: 'Pardi', isBot: false, rank: 1, pointsEarned: 3 },
+    { id: 'human_2', name: 'Lipia', isBot: false, rank: 2, pointsEarned: 2 },
+    { id: 'bot_1', name: 'Bot 1', isBot: true, rank: 3, pointsEarned: 1 },
+    { id: 'bot_2', name: 'Bot 2', isBot: true, rank: 4, pointsEarned: 0 },
+  ];
+
+  assert.equal(isBotRankingEntry(soloOnlineVsBots[0]), false);
+  assert.equal(isBotRankingEntry(soloOnlineVsBots[1]), true);
+  assert.equal(isBotRankingEntry(inferredBotsOnly[1]), true);
+  assert.equal(isBotRankingEntry(inferredBotsOnly[2]), true);
+
+  assert.equal(hasRealHumanOpponent(soloOnlineVsBots), false);
+  assert.equal(hasRealHumanOpponent(inferredBotsOnly), false);
+  assert.equal(hasRealHumanOpponent(withHumanOpponent), true);
+
+  const skipRes1 = await recordMultiplayerGameStats({
+    gameType: 'bigtwo',
+    rankings: soloOnlineVsBots,
+    winnerId: 'human_1',
+    isMultiplayer: true,
+    myPlayerId: 'human_1',
+    isHost: true,
+    roomCode: 'BOTONLY1',
+  });
+  assert.equal(skipRes1?.skipped, true);
+  assert.equal(skipRes1?.reason, 'bot_only_match');
+
+  const skipRes2 = await recordMultiplayerGameStats({
+    gameType: 'sevens',
+    rankings: inferredBotsOnly,
+    winnerId: 'human_1',
+    isMultiplayer: true,
+    myPlayerId: 'human_1',
+    isHost: true,
+    roomCode: 'BOTONLY2',
+  });
+  assert.equal(skipRes2?.skipped, true);
+  assert.equal(skipRes2?.reason, 'bot_only_match');
+
+  // With >= 2 humans, guard passes (in Node test without env vars it stops cleanly at supabase_offline)
+  const validRes = await recordMultiplayerGameStats({
+    gameType: 'bigtwo',
+    rankings: withHumanOpponent,
+    winnerId: 'human_1',
+    isMultiplayer: true,
+    myPlayerId: 'human_1',
+    isHost: true,
+    roomCode: 'REALPVP1',
+  });
+  assert.notEqual(validRes?.reason, 'bot_only_match');
+
+  console.log('✓ Test 4 passed: Bot-only online matches are excluded from Top Global Leaderboard.');
+}
+
+// ---------------------------------------------------------------------------
+// 5. Verify Room Channel Queue Serialization & Wire Avatar Sanitization
+// ---------------------------------------------------------------------------
+{
+  const order = [];
+  const p1 = multiplayerAdapter._enqueueRoomChannelOp('TESTROOM', async () => {
+    order.push('start_1');
+    await new Promise((r) => setTimeout(r, 20));
+    order.push('end_1');
+  });
+  const p2 = multiplayerAdapter._enqueueRoomChannelOp('TESTROOM', async () => {
+    order.push('start_2');
+    order.push('end_2');
+  });
+  await Promise.all([p1, p2]);
+  assert.deepEqual(order, ['start_1', 'end_1', 'start_2', 'end_2']);
+
+  assert.equal(multiplayerAdapter._sanitizeWireAvatar('data:image/png;base64,abc123'), '👤');
+  assert.equal(multiplayerAdapter._sanitizeWireAvatar('😎'), '😎');
+  assert.equal(multiplayerAdapter._sanitizeWireAvatar(''), '👤');
+
+  console.log('✓ Test 5 passed: Room channel ops serialize cleanly & sanitize avatars.');
 }
 
 console.log('\n🎉 ALL MULTIPLAYER SYNC & REFRESH TESTS PASSED!');

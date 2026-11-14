@@ -114,6 +114,7 @@ export default function App() {
   const [isSoundboardOpen, setIsSoundboardOpen] = useState(false);
   const [isSoundboardPlaying, setIsSoundboardPlaying] = useState(false);
   const [activeSoundboardToasts, setActiveSoundboardToasts] = useState([]);
+  const seenSocialEventIdsRef = useRef(new Set());
 
   // Sinkronkan riwayat chat global, ajakan mabar, & DM dengan server saat aplikasi dimuat
   useEffect(() => {
@@ -713,11 +714,26 @@ export default function App() {
     };
   }, [isMultiplayerMode, currentRoom?.status]);
 
+  const markSocialEventSeen = (eventId) => {
+    if (!eventId) return false;
+    const seen = seenSocialEventIdsRef.current;
+    if (seen.has(eventId)) return true;
+    seen.add(eventId);
+    if (seen.size > 250) {
+      const oldest = seen.values().next().value;
+      if (oldest) seen.delete(oldest);
+    }
+    return false;
+  };
+
   // ---------------------------------------------------------------------------
   // LIVE CHAT HANDLERS (Ephemeral popups & broadcast)
   // ---------------------------------------------------------------------------
   const handleIncomingChatMessage = (chat) => {
     if (!chat || !chat.message) return;
+    const msgId = chat.id || `chat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    if (markSocialEventSeen(msgId)) return;
+
     audio.playChatPopSound();
     const resolvedAvatar = (chat.senderAvatar && !chat.senderAvatar.startsWith('data:image/'))
       ? (getCachedPlayerAvatar(chat.senderName) || getCachedPlayerAvatar(chat.senderId) || chat.senderAvatar)
@@ -726,7 +742,7 @@ export default function App() {
     const newChat = {
       ...chat,
       senderAvatar: resolvedAvatar,
-      id: chat.id || `chat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: msgId,
       timestamp: chat.timestamp || Date.now(),
     };
 
@@ -747,19 +763,22 @@ export default function App() {
   const handleSendChatMessage = async (text) => {
     if (!text || !text.trim()) return;
 
+    const room = currentRoomRef.current || currentRoom;
     let senderName = getLocalPlayerName() || 'Anda';
     let senderAvatar = '👤';
     let senderId = myPlayerId || 'local_human';
 
-    if (isMultiplayerMode && currentRoom?.players) {
-      const myPlayer = (currentRoom.players || []).find((p) => p.id === myPlayerId);
+    if (isMultiplayerMode && room?.players) {
+      const myPlayer = (room.players || []).find((p) => p.id === myPlayerId);
       if (myPlayer) {
         senderName = myPlayer.name || senderName;
         senderAvatar = myPlayer.avatar || senderAvatar;
       }
     }
 
+    const msgId = `chat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const chatPayload = {
+      id: msgId,
       senderId,
       senderName,
       senderAvatar: (typeof senderAvatar === 'string' && senderAvatar.startsWith('data:image/')) ? '👤' : senderAvatar,
@@ -771,8 +790,11 @@ export default function App() {
     handleIncomingChatMessage({ ...chatPayload, senderAvatar });
 
     // Broadcast to other players in room (if online)
-    if (isMultiplayerMode && currentRoom?.code) {
-      await multiplayerAdapter.sendRoomChat(currentRoom.code, chatPayload);
+    if (isMultiplayerMode && room?.code) {
+      const res = await multiplayerAdapter.sendRoomChat(room.code, chatPayload);
+      if (res && res.success === false) {
+        showToast('Gagal mengirim chat ke meja. Periksa koneksi.');
+      }
     }
   };
 
@@ -781,6 +803,9 @@ export default function App() {
   // ---------------------------------------------------------------------------
   const handleIncomingReaction = (reaction) => {
     if (!reaction || !reaction.emoji) return;
+    const reactId = reaction.id || `react_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    if (markSocialEventSeen(reactId)) return;
+
     audio.playReactionSound();
     const resolvedAvatar = (reaction.senderAvatar && !reaction.senderAvatar.startsWith('data:image/'))
       ? (getCachedPlayerAvatar(reaction.senderName) || getCachedPlayerAvatar(reaction.senderId) || reaction.senderAvatar)
@@ -789,7 +814,7 @@ export default function App() {
     const newReact = {
       ...reaction,
       senderAvatar: resolvedAvatar,
-      id: reaction.id || `react_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: reactId,
       startX: reaction.startX || (40 + (Math.random() - 0.5) * 35),
       driftX: (Math.random() - 0.5) * 70,
       scale: 0.95 + Math.random() * 0.35,
@@ -802,17 +827,21 @@ export default function App() {
   };
 
   const handleSendReaction = async (emoji, startX) => {
+    if (!emoji) return;
+    const room = currentRoomRef.current || currentRoom;
     let senderName = getLocalPlayerName() || 'Anda';
     let senderAvatar = '👤';
     let senderId = myPlayerId || 'local_human';
-    if (isMultiplayerMode && currentRoom?.players) {
-      const myPlayer = (currentRoom.players || []).find((p) => p.id === myPlayerId);
+    if (isMultiplayerMode && room?.players) {
+      const myPlayer = (room.players || []).find((p) => p.id === myPlayerId);
       if (myPlayer) {
         senderName = myPlayer.name || senderName;
         senderAvatar = myPlayer.avatar || senderAvatar;
       }
     }
+    const reactId = `react_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const payload = {
+      id: reactId,
       senderId,
       senderName,
       senderAvatar: (typeof senderAvatar === 'string' && senderAvatar.startsWith('data:image/')) ? '👤' : senderAvatar,
@@ -821,8 +850,11 @@ export default function App() {
       timestamp: Date.now(),
     };
     handleIncomingReaction({ ...payload, senderAvatar });
-    if (isMultiplayerMode && currentRoom?.code) {
-      await multiplayerAdapter.sendRoomReaction(currentRoom.code, payload);
+    if (isMultiplayerMode && room?.code) {
+      const res = await multiplayerAdapter.sendRoomReaction(room.code, payload);
+      if (res && res.success === false) {
+        showToast('Gagal mengirim emot ke meja. Periksa koneksi.');
+      }
     }
   };
 
@@ -3791,8 +3823,14 @@ export default function App() {
 
           {/* Dedicated Reaction Button in Desktop Header (Google Meet style) */}
           <button
-            className="btn-header"
-            onClick={() => setIsReactionOpen((prev) => !prev)}
+            className="btn-header btn-header-reaction"
+            onClick={() => {
+              setIsReactionOpen((prev) => {
+                const next = !prev;
+                if (next) setIsSoundboardOpen(false);
+                return next;
+              });
+            }}
             title="Kirim Reaksi Emote Terbang (Google Meet)"
             style={{
               display: 'flex',
@@ -4453,9 +4491,21 @@ export default function App() {
           isSpeaking={speakingPlayers.has(myPlayerId)}
           onToggleVoice={handleToggleVoice}
           isReactionOpen={isReactionOpen}
-          onToggleReaction={() => setIsReactionOpen((prev) => !prev)}
+          onToggleReaction={() => {
+            setIsReactionOpen((prev) => {
+              const next = !prev;
+              if (next) setIsSoundboardOpen(false);
+              return next;
+            });
+          }}
           isSoundboardOpen={isSoundboardOpen}
-          onToggleSoundboard={() => setIsSoundboardOpen((prev) => !prev)}
+          onToggleSoundboard={() => {
+            setIsSoundboardOpen((prev) => {
+              const next = !prev;
+              if (next) setIsReactionOpen(false);
+              return next;
+            });
+          }}
           isSoundboardPlaying={isSoundboardPlaying}
           isChatOpen={isChatOpen}
           onToggleChat={() => setIsChatOpen((prev) => !prev)}

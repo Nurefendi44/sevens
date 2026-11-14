@@ -6,7 +6,7 @@
  * - Akumulasi berdasarkan Username yang sama (case-insensitive)
  */
 
-import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 
 const LOCAL_STORAGE_KEY_FALLBACK = 'poker_global_leaderboard_cache';
 const STORAGE_PLAYER_NAME = 'sevens_player_name';
@@ -917,13 +917,46 @@ const RECORDING_INFLIGHT_MAP = new Map();
 
 /**
  * Record player results from a finished multiplayer game
- * (Excludes solo vs bot games to keep global integrity)
+ * (Excludes solo vs bot games and all-bot online rooms to keep global integrity)
  *
  * Rules:
  * - MENANG (wins): Hanya bertambah (+1) jika pemain meraih Juara 1
  * - SKOR (score): Bertambah sesuai jumlah poin yang didapatkan dari permainan tersebut
  * - Menggunakan username yang sama (case-insensitive) akan merangkum statistik ke profil yang sama
- *
+ * - Pertandingan Online di mana seluruh lawan adalah Bot (kurang dari 2 pemain manusia) TIDAK masuk Top Global
+ */
+
+/**
+ * Checks whether a ranking entry represents an AI bot opponent.
+ */
+export function isBotRankingEntry(entry) {
+  if (!entry || typeof entry !== 'object') return false;
+  const pObj = entry.player || entry;
+  if (Boolean(entry.isBot || pObj?.isBot)) return true;
+  const id = String(entry.id || pObj?.id || '').trim().toLowerCase();
+  if (id.startsWith('bot_') || id.startsWith('bot-')) return true;
+  const name = String(entry.name || pObj?.name || '').trim();
+  if (/^bot(\s|$|\d)/i.test(name)) return true;
+  return false;
+}
+
+/**
+ * Returns true only when a match includes at least 2 real human participants
+ * (i.e. not a match where all opponents are bots).
+ */
+export function hasRealHumanOpponent(rankings = []) {
+  if (!Array.isArray(rankings) || rankings.length < 2) return false;
+  let humanCount = 0;
+  for (const r of rankings) {
+    if (!isBotRankingEntry(r)) {
+      humanCount += 1;
+      if (humanCount >= 2) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * @param {Object} params
  * @param {string} params.gameType - 'sevens' | 'bigtwo' | 'game41'
  * @param {Array} params.rankings - Array of player results
@@ -944,9 +977,12 @@ export async function recordMultiplayerGameStats({
   matchSignature = '',
   roomCode = '',
 }) {
-  if (!isMultiplayer) return; // Only multiplayer counts for Top Global
-  if (!rankings || rankings.length < 2) return;
-  if (!isSupabaseConfigured || !supabase) return;
+  if (!isMultiplayer) return { skipped: true, reason: 'not_multiplayer' }; // Only multiplayer counts for Top Global
+  if (!rankings || rankings.length < 2) return { skipped: true, reason: 'insufficient_players' };
+  if (!hasRealHumanOpponent(rankings)) {
+    return { skipped: true, reason: 'bot_only_match' };
+  }
+  if (!isSupabaseConfigured || !supabase) return { skipped: true, reason: 'supabase_offline' };
 
   const totalPlayers = rankings.length;
   const resolvedWinnerId =
@@ -987,7 +1023,7 @@ export async function recordMultiplayerGameStats({
     const id = r.id || pObj?.id;
     const name = String(r.name || pObj?.name || 'Pemain').trim();
     const avatar = r.avatar || pObj?.avatar || '👤';
-    const isBot = Boolean(r.isBot || pObj?.isBot || name.startsWith('Bot '));
+    const isBot = isBotRankingEntry(r);
     const isBotTakeover = Boolean(r.isBotTakeover || pObj?.isBotTakeover);
     const rank = r.rank !== undefined ? Number(r.rank) : idx + 1;
     const isDisqualified = Boolean(r.isDisqualified || r.isBusted);

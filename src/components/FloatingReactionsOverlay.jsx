@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { Smile, X } from 'lucide-react';
+import AvatarDisplay from './AvatarDisplay.jsx';
 import '../styles/reactions.css';
 import { audio } from '../services/audioService.js';
 
@@ -29,12 +30,13 @@ export default function FloatingReactionsOverlay({
   useEffect(() => {
     if (!isOpen) return;
     const handleClickOutside = (e) => {
-      if (
-        dockRef.current &&
-        !dockRef.current.contains(e.target) &&
-        triggerRef.current &&
-        !triggerRef.current.contains(e.target)
-      ) {
+      const target = e.target;
+      const clickedInsideDock = dockRef.current && dockRef.current.contains(target);
+      const clickedOwnTrigger = triggerRef.current && triggerRef.current.contains(target);
+      const clickedExternalTrigger =
+        typeof target?.closest === 'function' &&
+        Boolean(target.closest('.btn-social-reaction, .btn-header-reaction'));
+      if (!clickedInsideDock && !clickedOwnTrigger && !clickedExternalTrigger) {
         if (onToggleOpen) onToggleOpen(false);
       }
     };
@@ -79,7 +81,14 @@ export default function FloatingReactionsOverlay({
               <span className="floating-emoji-char">{item.emoji}</span>
               {item.senderName && (
                 <span className={`floating-sender-badge ${isMe ? 'is-me' : ''}`}>
-                  {item.senderAvatar || '👤'} {item.senderName}
+                  <AvatarDisplay
+                    avatar={item.senderAvatar}
+                    fallback="👤"
+                    size={14}
+                    playerName={item.senderName}
+                    clickable={false}
+                  />
+                  <span>{item.senderName}</span>
                 </span>
               )}
             </div>
