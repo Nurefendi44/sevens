@@ -346,7 +346,54 @@ console.log('=== MULTIPLAYER SYNC, REFRESH & BOT TURN SIMULATION TEST ===');
   assert.equal(multiplayerAdapter._sanitizeWireAvatar('😎'), '😎');
   assert.equal(multiplayerAdapter._sanitizeWireAvatar(''), '👤');
 
-  console.log('✓ Test 5 passed: Room channel ops serialize cleanly & sanitize avatars.');
+  // Verify _sendChannelBroadcastWithFallback delivers via httpSend when socket is not joined yet
+  let httpCalled = null;
+  const joiningChannel = {
+    state: 'joining',
+    channelAdapter: { canPush: () => false },
+    send: async () => 'timed out',
+    httpSend: async (event, payload) => {
+      httpCalled = { event, payload };
+      return { success: true };
+    },
+  };
+  const fbRes = await multiplayerAdapter._sendChannelBroadcastWithFallback(
+    joiningChannel,
+    'room_reaction',
+    { emoji: '🔥' },
+    'reaction'
+  );
+  assert.equal(fbRes.success, true);
+  assert.equal(fbRes.status, 'http_fallback');
+  assert.deepEqual(httpCalled, { event: 'room_reaction', payload: { emoji: '🔥' } });
+
+  // Verify closed channel recovers & sends cleanly
+  let recoveredUsed = false;
+  const closedChannel = {
+    state: 'closed',
+    channelAdapter: { canPush: () => false },
+    send: async () => 'error',
+  };
+  const healthyRecovered = {
+    state: 'joined',
+    channelAdapter: { canPush: () => true },
+    send: async () => 'ok',
+    httpSend: async () => {
+      recoveredUsed = true;
+      return { success: true };
+    },
+  };
+  const recRes = await multiplayerAdapter._sendChannelBroadcastWithFallback(
+    closedChannel,
+    'room_chat',
+    { message: 'tes' },
+    'chat',
+    () => healthyRecovered
+  );
+  assert.equal(recRes.success, true);
+  assert.equal(recoveredUsed, true);
+
+  console.log('✓ Test 5 passed: Room channel ops serialize cleanly, sanitize avatars, and recover/fallback broadcasts.');
 }
 
 console.log('\n🎉 ALL MULTIPLAYER SYNC & REFRESH TESTS PASSED!');

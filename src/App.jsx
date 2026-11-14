@@ -4494,7 +4494,10 @@ export default function App() {
           onToggleReaction={() => {
             setIsReactionOpen((prev) => {
               const next = !prev;
-              if (next) setIsSoundboardOpen(false);
+              if (next) {
+                setIsSoundboardOpen(false);
+                setIsChatOpen(false);
+              }
               return next;
             });
           }}
@@ -4502,13 +4505,25 @@ export default function App() {
           onToggleSoundboard={() => {
             setIsSoundboardOpen((prev) => {
               const next = !prev;
-              if (next) setIsReactionOpen(false);
+              if (next) {
+                setIsReactionOpen(false);
+                setIsChatOpen(false);
+              }
               return next;
             });
           }}
           isSoundboardPlaying={isSoundboardPlaying}
           isChatOpen={isChatOpen}
-          onToggleChat={() => setIsChatOpen((prev) => !prev)}
+          onToggleChat={() => {
+            setIsChatOpen((prev) => {
+              const next = !prev;
+              if (next) {
+                setIsReactionOpen(false);
+                setIsSoundboardOpen(false);
+              }
+              return next;
+            });
+          }}
           hasUnreadChat={activeChatMessages.length > 0}
         />
       )}

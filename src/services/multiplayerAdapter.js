@@ -1979,17 +1979,22 @@ export const multiplayerAdapter = {
   },
 
   activeChannels: {},
+  socialChannels: {},
+  socialHandlers: {},
   _channelChains: {},
 
   /**
-   * Serializes channel create/teardown operations per room so Supabase's async
+   * Serializes channel create/teardown operations per key so Supabase's async
    * `removeChannel()` teardown finishes before a new `channel()` with the same topic opens.
    */
   _enqueueRoomChannelOp(code, opFn) {
     const prev = this._channelChains[code] || Promise.resolve();
     const next = prev
       .catch(() => {})
-      .then(() => opFn());
+      .then(() => opFn())
+      .catch((err) => {
+        console.warn(`[multiplayerAdapter] Channel op error (${code}):`, err);
+      });
     this._channelChains[code] = next.finally(() => {
       if (this._channelChains[code] === next) {
         delete this._channelChains[code];
@@ -1998,15 +2003,35 @@ export const multiplayerAdapter = {
     return next;
   },
 
-  async _cleanupExistingRoomChannel(code) {
-    if (!supabase || !code) return;
-    const channelName = `room_channel_${code}`;
+  async _forceRemoveChannel(ch) {
+    if (!supabase || !ch) return;
+    try {
+      await Promise.race([
+        supabase.removeChannel(ch),
+        new Promise((resolve) => setTimeout(resolve, 800)),
+      ]);
+    } catch {}
+    // RealtimeClient.removeChannel skips ch.teardown() if unsubscribe() != 'ok'
+    try {
+      if (typeof ch.teardown === 'function') {
+        ch.teardown();
+      }
+    } catch {}
+    try {
+      if (typeof supabase.realtime?._remove === 'function') {
+        supabase.realtime._remove(ch);
+      }
+    } catch {}
+  },
+
+  async _cleanupChannelsByTopic(channelName, registry, key) {
+    if (!supabase || !channelName) return;
     const targetTopic = `realtime:${channelName}`;
     const toRemove = new Set();
 
-    if (this.activeChannels[code]) {
-      toRemove.add(this.activeChannels[code]);
-      delete this.activeChannels[code];
+    if (registry && key && registry[key]) {
+      toRemove.add(registry[key]);
+      delete registry[key];
     }
 
     if (typeof supabase.getChannels === 'function') {
@@ -2020,14 +2045,20 @@ export const multiplayerAdapter = {
     }
 
     for (const ch of toRemove) {
-      try {
-        await supabase.removeChannel(ch);
-      } catch {}
+      await this._forceRemoveChannel(ch);
     }
   },
 
+  async _cleanupExistingRoomChannel(code) {
+    await this._cleanupChannelsByTopic(`room_channel_${code}`, this.activeChannels, code);
+  },
+
+  async _cleanupExistingSocialChannel(code) {
+    await this._cleanupChannelsByTopic(`room_social_${code}`, this.socialChannels, code);
+  },
+
   /**
-   * Helper to get or create a room channel with self: false to avoid echo traffic
+   * Helper to get or create the room state/delta channel with self: false
    */
   getOrCreateRoomChannel(roomCode) {
     if (!supabase || !roomCode) return null;
@@ -2039,9 +2070,7 @@ export const multiplayerAdapter = {
         return existing;
       }
       delete this.activeChannels[code];
-      try {
-        supabase.removeChannel(existing);
-      } catch {}
+      this._forceRemoveChannel(existing);
     }
     const channelName = `room_channel_${code}`;
     const channel = supabase.channel(channelName, {
@@ -2065,60 +2094,144 @@ export const multiplayerAdapter = {
     return this.getOrCreateRoomChannel(code);
   },
 
+  /**
+   * Dedicated pure-broadcast channel for room chat, reactions, and soundboard (`room_social_${code}`).
+   * Isolated from `postgres_changes` and heavy state syncs, with `ack: true` + `httpSend` fallback.
+   */
+  getOrCreateSocialChannel(roomCode) {
+    if (!supabase || !roomCode) return null;
+    const code = roomCode.trim().toUpperCase();
+    const existing = this.socialChannels[code];
+    if (existing) {
+      const st = existing.state;
+      if (st !== 'closed' && st !== 'errored' && st !== 'leaving') {
+        return existing;
+      }
+      delete this.socialChannels[code];
+      this._forceRemoveChannel(existing);
+    }
+
+    const channelName = `room_social_${code}`;
+    const channel = supabase
+      .channel(channelName, {
+        config: {
+          broadcast: { ack: true, self: false },
+        },
+      })
+      .on('broadcast', { event: 'room_chat' }, ({ payload }) => {
+        const h = this.socialHandlers[code];
+        if (h?.onChatMessage && payload) {
+          h.onChatMessage(payload);
+        }
+      })
+      .on('broadcast', { event: 'room_reaction' }, ({ payload }) => {
+        const h = this.socialHandlers[code];
+        if (h?.onReaction && payload) {
+          h.onReaction(payload);
+        }
+      })
+      .on('broadcast', { event: 'room_soundboard' }, ({ payload }) => {
+        const h = this.socialHandlers[code];
+        if (h?.onSoundboard && payload) {
+          h.onSoundboard(payload);
+        }
+      });
+
+    this.socialChannels[code] = channel;
+    channel.subscribe();
+    return channel;
+  },
+
+  async ensureSocialChannel(roomCode) {
+    if (!supabase || !roomCode) return null;
+    const code = roomCode.trim().toUpperCase();
+    const chainKey = `social_${code}`;
+    if (this._channelChains[chainKey]) {
+      try {
+        await this._channelChains[chainKey];
+      } catch {}
+    }
+    return this.getOrCreateSocialChannel(code);
+  },
+
   _sanitizeWireAvatar(avatar) {
     return (typeof avatar === 'string' && avatar.startsWith('data:image/'))
       ? '👤'
       : (avatar || '👤');
   },
 
-  async _sendRoomBroadcast(roomCode, event, payload, label = event) {
-    if (!supabase || !roomCode) return { success: false, error: 'Supabase offline' };
-    const code = roomCode.trim().toUpperCase();
-    let channel = await this.ensureRoomChannel(code);
+  async _sendChannelBroadcastWithFallback(channel, event, payload, label = event, onRecoverChannel = null) {
     if (!channel) return { success: false, error: 'Channel offline' };
-
     try {
-      let status = await channel.send({
+      const canPushWs =
+        typeof channel.channelAdapter?.canPush === 'function'
+          ? channel.channelAdapter.canPush()
+          : channel.state === 'joined';
+
+      if (canPushWs) {
+        const status = await channel.send({
+          type: 'broadcast',
+          event,
+          payload,
+        });
+        if (!status || status === 'ok') {
+          return { success: true, status: status || 'ok' };
+        }
+      }
+
+      // If WebSocket isn't joined yet or WS push returned 'error'/'timed out',
+      // recover closed channels and deliver reliably via REST `httpSend`.
+      const st = channel.state;
+      if ((st === 'closed' || st === 'errored' || st === 'leaving') && onRecoverChannel) {
+        const recovered = onRecoverChannel();
+        if (recovered) channel = recovered;
+      }
+
+      if (typeof channel.httpSend === 'function') {
+        await channel.httpSend(event, payload);
+        return { success: true, status: 'http_fallback' };
+      }
+
+      const fallbackStatus = await channel.send({
         type: 'broadcast',
         event,
         payload,
       });
-
-      // Fallback / recovery if socket push timed out or channel entered a closing state
-      if (status && status !== 'ok') {
-        const st = channel.state;
-        if (st === 'closed' || st === 'errored' || st === 'leaving') {
-          delete this.activeChannels[code];
-          channel = this.getOrCreateRoomChannel(code);
-          if (channel) {
-            status = await channel.send({
-              type: 'broadcast',
-              event,
-              payload,
-            });
-          }
-        }
-        if (status && status !== 'ok' && channel && typeof channel.httpSend === 'function') {
-          await channel.httpSend(event, payload);
-          return { success: true, status: 'http_fallback' };
-        }
+      if (fallbackStatus && fallbackStatus !== 'ok') {
+        return { success: false, error: `Broadcast ${label} gagal (${fallbackStatus})`, status: fallbackStatus };
       }
-
-      if (status && status !== 'ok') {
-        return { success: false, error: `Broadcast ${label} gagal (${status})`, status };
-      }
-      return { success: true, status: status || 'ok' };
+      return { success: true, status: fallbackStatus || 'ok' };
     } catch (err) {
       console.warn(`Gagal mengirim broadcast ${label}:`, err);
       return { success: false, error: err.message };
     }
   },
 
+  async _sendSocialBroadcast(roomCode, event, payload, label = event) {
+    if (!supabase || !roomCode) return { success: false, error: 'Supabase offline' };
+    const code = roomCode.trim().toUpperCase();
+    const channel = await this.ensureSocialChannel(code);
+    return this._sendChannelBroadcastWithFallback(channel, event, payload, label, () => {
+      delete this.socialChannels[code];
+      return this.getOrCreateSocialChannel(code);
+    });
+  },
+
+  async _sendRoomBroadcast(roomCode, event, payload, label = event) {
+    if (!supabase || !roomCode) return { success: false, error: 'Supabase offline' };
+    const code = roomCode.trim().toUpperCase();
+    const channel = await this.ensureRoomChannel(code);
+    return this._sendChannelBroadcastWithFallback(channel, event, payload, label, () => {
+      delete this.activeChannels[code];
+      return this.getOrCreateRoomChannel(code);
+    });
+  },
+
   /**
    * Sends an ephemeral live chat / quick emote message via Realtime Broadcast
    */
   async sendRoomChat(roomCode, chatPayload) {
-    return this._sendRoomBroadcast(
+    return this._sendSocialBroadcast(
       roomCode,
       'room_chat',
       {
@@ -2135,7 +2248,7 @@ export const multiplayerAdapter = {
    * Sends a floating reaction emote (Google Meet style) via Realtime Broadcast
    */
   async sendRoomReaction(roomCode, reactionPayload) {
-    return this._sendRoomBroadcast(
+    return this._sendSocialBroadcast(
       roomCode,
       'room_reaction',
       {
@@ -2152,7 +2265,7 @@ export const multiplayerAdapter = {
    * Sends a Soundboard audio trigger to all players in the room via Realtime Broadcast
    */
   async sendRoomSoundboard(roomCode, soundboardPayload) {
-    return this._sendRoomBroadcast(
+    return this._sendSocialBroadcast(
       roomCode,
       'room_soundboard',
       {
@@ -2189,11 +2302,26 @@ export const multiplayerAdapter = {
     if (!supabase || !roomCode) return () => {};
     const code = roomCode.trim().toUpperCase();
     const channelName = `room_channel_${code}`;
+    const socialChainKey = `social_${code}`;
 
     let lastBroadcastAt = 0;
     let cachedPlayers = [];
     let cancelled = false;
     let subscribedChannel = null;
+    let subscribedSocialChannel = null;
+
+    this.socialHandlers[code] = {
+      onChatMessage,
+      onReaction,
+      onSoundboard,
+    };
+
+    this._enqueueRoomChannelOp(socialChainKey, async () => {
+      if (cancelled) return;
+      await this._cleanupExistingSocialChannel(code);
+      if (cancelled) return;
+      subscribedSocialChannel = this.getOrCreateSocialChannel(code);
+    });
 
     this._enqueueRoomChannelOp(code, async () => {
       if (cancelled) return;
@@ -2268,21 +2396,6 @@ export const multiplayerAdapter = {
             onRequestStateSync(payload);
           }
         })
-        .on('broadcast', { event: 'room_chat' }, ({ payload }) => {
-          if (!cancelled && onChatMessage && payload) {
-            onChatMessage(payload);
-          }
-        })
-        .on('broadcast', { event: 'room_reaction' }, ({ payload }) => {
-          if (!cancelled && onReaction && payload) {
-            onReaction(payload);
-          }
-        })
-        .on('broadcast', { event: 'room_soundboard' }, ({ payload }) => {
-          if (!cancelled && onSoundboard && payload) {
-            onSoundboard(payload);
-          }
-        })
         .on('broadcast', { event: 'voice_signal' }, ({ payload }) => {
           if (!cancelled && onVoiceSignal && payload) {
             onVoiceSignal(payload);
@@ -2298,14 +2411,22 @@ export const multiplayerAdapter = {
 
     return () => {
       cancelled = true;
+      delete this.socialHandlers[code];
+      this._enqueueRoomChannelOp(socialChainKey, async () => {
+        if (subscribedSocialChannel) {
+          if (this.socialChannels[code] === subscribedSocialChannel) {
+            delete this.socialChannels[code];
+          }
+          await this._forceRemoveChannel(subscribedSocialChannel);
+          subscribedSocialChannel = null;
+        }
+      });
       this._enqueueRoomChannelOp(code, async () => {
         if (subscribedChannel) {
           if (this.activeChannels[code] === subscribedChannel) {
             delete this.activeChannels[code];
           }
-          try {
-            await supabase.removeChannel(subscribedChannel);
-          } catch {}
+          await this._forceRemoveChannel(subscribedChannel);
           subscribedChannel = null;
         }
       });
